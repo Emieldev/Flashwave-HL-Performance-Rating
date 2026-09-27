@@ -1262,3 +1262,13 @@
 .km-zoom-n { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.82rem; }
 .km-zoom-hint { margin: -2px 0 0; font-size: 0.78rem; }
 .km-stage { overflow: hidden; border-radius: 4px; }
+
+/* Editing handles (Q28) */
+.co-handles .co-corner { fill: var(--accent); stroke: #111; stroke-width: 1.5; cursor: move; }
+.co-handles .co-corner:hover { r: 8; }
+.co-handles .co-mid { fill: rgba(255, 255, 255, 0.85); stroke: #111; stroke-width: 1; cursor: copy; }
+.co-handles .co-mid:hover { r: 6; }
+.co-selected { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.co-selected input { flex: 1; min-width: 120px; }
+.co-list li { cursor: pointer; font-size: 0.85rem; }
+.co-list li:hover { background: rgba(var(--muted-rgb), 0.12); }

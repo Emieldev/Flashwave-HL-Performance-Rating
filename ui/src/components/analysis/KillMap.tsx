@@ -9,7 +9,8 @@ import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { useMeasuredWidth } from "../../lib/measure";
 import type { StvInfo } from "./AnalysisPanel";
 import { t as tr, tx } from "../../lib/i18n";
-import { CalloutEditor, useCallouts, zoneAt, ZoneShapes } from "./Callouts";
+import { CalloutEditor, useCallouts, zoneAt, ZoneShapes, type HandleDrag } from "./Callouts";
+import type { CalloutFile, CalloutZone } from "../../api/types";
 
 /**
  * Where the player's kills and deaths happened, top-down.
@@ -103,12 +104,21 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
   const overview = overviewQ.data ?? null;
   // Q28: callouts, drawn as zones over the map, and the editor for them.
   const calloutQ = useCallouts(mapName);
+  const qcCallouts = useQueryClient();
   const callouts = calloutQ.data ?? null;
   const [showZones, setShowZones] = useState(true);
   const [editing, setEditing] = useState(false);
   const [drawing, setDrawing] = useState<Array<[number, number]>>([]);
   const [zoneSel, setZoneSel] = useState<number | null>(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const zones = callouts && (showZones || editing) ? callouts.zones : [];
+  // Every edit -- a dragged corner, a new zone, a rename -- goes to the
+  // copy the map draws from, and waits there for Save.
+  const liveEdit = (next: CalloutZone[], names?: string[]) => {
+    qcCallouts.setQueryData<CalloutFile>(["callouts", mapName], (f) => (f ? { ...f, zones: next, names: names ?? f.names } : f));
+    setDirty(true);
+  };
   // How see-through the zones are, and whether they carry names: a busy
   // map reads better with faint zones, and a zoomed-in one with labels.
   const [zoneOpacity, setZoneOpacity] = useState(() => storedNumber("hl.km.zoneOpacity", 0.5));
@@ -417,7 +427,15 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             zoneCounts={layer === "dots" && zones.length > 0 && !editing ? countZones(zones, marks) : undefined}
             drawing={editing ? drawing : undefined}
             selectedZone={editing ? zoneSel : null}
-            onMapClick={editing ? (p) => setDrawing((d) => [...d, p]) : undefined}
+            onMapClick={
+              editing
+                ? (p) => {
+                    if (drawMode) setDrawing((d) => [...d, p]);
+                    else setZoneSel(zoneAt(zones, p));
+                  }
+                : undefined
+            }
+            onEditZones={editing && !drawMode ? liveEdit : undefined}
             frame={frame}
             display={overview ? overviewFrame(overview) : frame}
             image={overview?.image ?? null}
@@ -437,13 +455,19 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
               key={mapName}
               map={mapName}
               file={callouts}
+              dirty={dirty}
+              onChange={liveEdit}
+              onSaved={() => setDirty(false)}
               drawing={drawing}
               onDrawing={setDrawing}
+              drawMode={drawMode}
+              onDrawMode={setDrawMode}
               selected={zoneSel}
               onSelect={setZoneSel}
               onClose={() => {
                 setEditing(false);
                 setZoneSel(null);
+                setDrawMode(false);
               }}
             />
           )}
@@ -507,8 +531,10 @@ function Canvas(props: {
   zoneCounts?: Map<number, number>;
   drawing?: Array<[number, number]>;
   selectedZone: number | null;
-  /** Editing callouts: a click on the map is a corner, in game units. */
+  /** Editing callouts: a click on the map, in game units. */
   onMapClick?: (p: [number, number]) => void;
+  /** Editing callouts: the selected zone's corners and body can be dragged. */
+  onEditZones?: (zones: CalloutZone[]) => void;
   /** The grid the heat and outline are counted on. */
   frame: Frame;
   /** What the canvas shows: the image's square when there is one. */
@@ -528,7 +554,7 @@ function Canvas(props: {
   onHover: (m: Mark | null) => void;
   a: Analysis;
 }) {
-  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick, zoom, onZoom, onStage, zoneOpacity, zoneLabels } = props;
+  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick, onEditZones, zoom, onZoom, onStage, zoneOpacity, zoneLabels } = props;
   // The three colours the canvas draws with, resolved from the theme.
   const killColour = themeColour("--kill", "#5791c8");
   const deathColour = themeColour("--death", "#d6763a");
@@ -695,6 +721,39 @@ function Canvas(props: {
   // A drag pans; a press that barely moves is still a click.
   const drag = useRef<{ x: number; y: number; zx: number; zy: number; moved: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
+  // Editing: a corner being moved, or a whole zone.
+  // Each drag works on its own copy of the zone's corners: the zones prop
+  // only catches up on the next render, and a move can come before that.
+  const edit = useRef<
+    | { zone: number; index: number; pts: Array<[number, number]>; moved: boolean }
+    | { zone: number; start: [number, number]; orig: Array<[number, number]>; moved: boolean }
+    | null
+  >(null);
+  const zonesRef = useRef(zones);
+  zonesRef.current = zones;
+  const putZone = (zone: number, pts: Array<[number, number]>) =>
+    onEditZones?.(zonesRef.current.map((z, i) => (i === zone ? { ...z, points: pts } : z)));
+  const onHandle = (h: HandleDrag) => {
+    if (!onEditZones) return;
+    if (h.kind === "mid") {
+      // A new corner halfway along the edge, dragged from there.
+      const pts = zones[h.zone].points;
+      const a = pts[h.index];
+      const b = pts[(h.index + 1) % pts.length];
+      const mid: [number, number] = [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2)];
+      const next = [...pts.slice(0, h.index + 1), mid, ...pts.slice(h.index + 1)];
+      putZone(h.zone, next);
+      edit.current = { zone: h.zone, index: h.index + 1, pts: next, moved: true };
+    } else {
+      edit.current = { zone: h.zone, index: h.index, pts: [...zones[h.zone].points], moved: true };
+    }
+    setDragging(true);
+  };
+  const deleteCorner = (zone: number, index: number) => {
+    const pts = zones[zone].points;
+    if (!onEditZones || pts.length <= 3) return;
+    onEditZones(zones.map((z, i) => (i === zone ? { ...z, points: pts.filter((_, j) => j !== index) } : z)));
+  };
 
   return (
     <div className="km-canvas" ref={wrap}>
@@ -708,10 +767,42 @@ function Canvas(props: {
           aria-label={tr("{marks} kills and deaths on the map", { marks: marks.length })}
           ref={svgRef}
           onMouseDown={(e) => {
-            if (e.button !== 0 || zoom.z <= 1) return;
+            if (e.button !== 0) return;
+            // Inside the selected zone while editing: move the whole zone.
+            if (onEditZones && selectedZone !== null && zones[selectedZone]) {
+              const r = e.currentTarget.getBoundingClientRect();
+              const at = game(e.clientX - r.left, e.clientY - r.top);
+              // Only where the selected zone is what wins the spot: a smaller
+              // zone inside it is still there to be clicked.
+              if (zoneAt(zones, at) === selectedZone) {
+                edit.current = { zone: selectedZone, start: at, orig: zones[selectedZone].points, moved: false };
+                return;
+              }
+            }
+            if (zoom.z <= 1) return;
             drag.current = { x: e.clientX, y: e.clientY, zx: zoom.x, zy: zoom.y, moved: false };
           }}
           onMouseMove={(e) => {
+            const ed = edit.current;
+            if (ed && (e.buttons & 1) === 1) {
+              const r = e.currentTarget.getBoundingClientRect();
+              const at = game(e.clientX - r.left, e.clientY - r.top);
+              if ("index" in ed) {
+                ed.pts[ed.index] = at;
+                putZone(ed.zone, [...ed.pts]);
+              } else {
+                const dx = at[0] - ed.start[0];
+                const dy = at[1] - ed.start[1];
+                // A few units of wobble is a click, not a move.
+                if (!ed.moved && Math.hypot(dx, dy) < 12) return;
+                if (!ed.moved) {
+                  ed.moved = true;
+                  setDragging(true);
+                }
+                putZone(ed.zone, ed.orig.map(([x, y]) => [x + dx, y + dy] as [number, number]));
+              }
+              return;
+            }
             const d = drag.current;
             if (d && (e.buttons & 1) === 1) {
               const dx = e.clientX - d.x;
@@ -729,13 +820,17 @@ function Canvas(props: {
           }}
           onMouseUp={() => {
             // Cleared after the click that follows, so a drag is not a click.
+            const wasEdit = edit.current?.moved === true;
             setTimeout(() => {
               drag.current = null;
+              edit.current = null;
               setDragging(false);
             }, 0);
+            if (wasEdit) drag.current = { x: 0, y: 0, zx: 0, zy: 0, moved: true };
           }}
           onMouseLeave={() => {
             drag.current = null;
+            edit.current = null;
             setDragging(false);
             onHover(null);
           }}
@@ -752,7 +847,17 @@ function Canvas(props: {
           style={{ cursor: dragging ? "grabbing" : onMapClick ? "crosshair" : hover?.k.jump ? "pointer" : zoom.z > 1 ? "grab" : "default" }}
         >
           {zones.length > 0 || drawing ? (
-            <ZoneShapes zones={zones} px={px} selected={selectedZone} counts={zoneCounts} drawing={drawing} opacity={zoneOpacity} labels={zoneLabels} />
+            <ZoneShapes
+              zones={zones}
+              px={px}
+              selected={selectedZone}
+              counts={zoneCounts}
+              drawing={drawing}
+              opacity={zoneOpacity}
+              labels={zoneLabels}
+              onHandle={onEditZones ? onHandle : undefined}
+              onDeleteCorner={onEditZones ? deleteCorner : undefined}
+            />
           ) : null}
           {marks.map((m, i) => {
             const [x, y] = px(m.at);

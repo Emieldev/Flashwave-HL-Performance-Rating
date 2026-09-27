@@ -112,10 +112,26 @@ fn inside(x: f64, y: f64, poly: &[[f64; 2]]) -> bool {
     c
 }
 
+fn area(poly: &[[f64; 2]]) -> f64 {
+    let n = poly.len();
+    let twice: f64 = (0..n).map(|i| {
+        let ([x1, y1], [x2, y2]) = (poly[i], poly[(i + 1) % n]);
+        x1 * y2 - x2 * y1
+    }).sum();
+    (twice / 2.0).abs()
+}
+
 impl CalloutFile {
-    /// The zone holding `(x, y)`, if any.
+    /// The zone holding `(x, y)`, if any. Where zones overlap the smallest
+    /// wins -- Shack inside Flank is Shack -- whatever order they are in, so
+    /// an edited file cannot shadow a zone by where it put it.
     pub fn zone_at(&self, x: f64, y: f64) -> Option<usize> {
-        self.zones.iter().position(|z| z.points.len() >= 3 && inside(x, y, &z.points))
+        self.zones
+            .iter()
+            .enumerate()
+            .filter(|(_, z)| z.points.len() >= 3 && inside(x, y, &z.points))
+            .min_by(|(_, a), (_, b)| area(&a.points).total_cmp(&area(&b.points)))
+            .map(|(i, _)| i)
     }
 }
 
@@ -251,16 +267,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_first_zone_holding_a_point_is_its_zone() {
+    fn where_zones_overlap_the_smaller_one_wins_whatever_the_order() {
         let f = CalloutFile {
             zones: vec![
-                Zone { name: "small".into(), points: vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]] },
-                Zone { name: "big".into(), points: vec![[-50.0, -50.0], [50.0, -50.0], [50.0, 50.0], [-50.0, 50.0]] },
+                Zone { name: "flank".into(), points: vec![[-50.0, -50.0], [50.0, -50.0], [50.0, 50.0], [-50.0, 50.0]] },
+                Zone { name: "shack".into(), points: vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]] },
             ],
             ..Default::default()
         };
-        assert_eq!(f.zone_at(5.0, 5.0), Some(0));
-        assert_eq!(f.zone_at(-20.0, 30.0), Some(1));
+        assert_eq!(f.zone_at(5.0, 5.0), Some(1), "inside the shack is the shack, though flank comes first");
+        assert_eq!(f.zone_at(-20.0, 30.0), Some(0));
         assert_eq!(f.zone_at(99.0, 0.0), None);
     }
 

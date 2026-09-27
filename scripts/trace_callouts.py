@@ -404,6 +404,17 @@ def inside(p, poly):
     return c
 
 
+def area(poly):
+    n = len(poly)
+    return abs(sum(poly[i][0] * poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * poly[i][1] for i in range(n)) / 2)
+
+
+def zone_of(p, zones):
+    """The smallest zone holding p, as the app decides it."""
+    best = [z for z in zones if inside(p, z["points"])]
+    return min(best, key=lambda z: area(z["points"]))["name"] if best else None
+
+
 def check(db, base, zones):
     rows = db.execute(
         "SELECT k.kx, k.ky, k.vx, k.vy, k.victim_team FROM kill_event k JOIN match m ON m.log_id = k.log_id WHERE m.map LIKE ? AND k.kx IS NOT NULL",
@@ -415,10 +426,9 @@ def check(db, base, zones):
     for kx, ky, vx, vy, vteam in rows:
         for p in [(kx, ky), (vx, vy)]:
             tot += 1
-            z = next((z["name"] for z in zones if inside(p, z["points"])), None)
-            cnt[z] += 1
+            cnt[zone_of(p, zones)] += 1
         # Where victims fell, by the side a zone is named for.
-        z = next((z["name"] for z in zones if inside((vx, vy), z["points"])), None)
+        z = zone_of((vx, vy), zones)
         if z and z.split(" ")[0] in ("RED", "BLU") and z.endswith(("Spawn", "Base")):
             sides[(z.split(" ")[0], vteam)] += 1
     return tot, cnt, sides
