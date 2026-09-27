@@ -41,7 +41,10 @@ Write-Host "Building Flashwave.tf $version (signed)" -ForegroundColor Cyan
 # nothing on screen. ProcessStartInfo keeps an empty value, so the build is
 # started through it.
 if (-not $SkipBuild) {
-    $psi = New-Object System.Diagnostics.ProcessStartInfo "npm.cmd", "run build"
+    # By its full path: started by bare name, npm.cmd works out its own
+    # folder as the working directory and looks for npm there (0.6.0).
+    $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+    $psi = New-Object System.Diagnostics.ProcessStartInfo $npm, "run build"
     $psi.WorkingDirectory = $root
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables["TAURI_SIGNING_PRIVATE_KEY"] = $key
