@@ -982,6 +982,34 @@ pub async fn import_log(state: State<'_, AppState>, text: String) -> CmdResult<h
     Ok(hl_ingest::import_log(&state.db, &state.sources, &weights, log_id).await?)
 }
 
+fn data_folder(state: &AppState) -> std::path::PathBuf {
+    state.db_path.parent().map(|p| p.to_path_buf()).unwrap_or_default()
+}
+
+/// Q28: a map's callouts -- the owner's copy, else the built-in seed.
+#[tauri::command]
+pub async fn get_callouts(state: State<'_, AppState>, map: String) -> CmdResult<hl_ingest::callouts::CalloutFile> {
+    Ok(hl_ingest::callouts::load(&data_folder(&state), &map)?)
+}
+
+/// Q28: save the owner's copy of a map's callouts.
+#[tauri::command]
+pub async fn save_callouts(state: State<'_, AppState>, map: String, file: hl_ingest::callouts::CalloutFile) -> CmdResult<hl_ingest::callouts::CalloutFile> {
+    Ok(hl_ingest::callouts::save(&data_folder(&state), &map, &file)?)
+}
+
+/// Q28: drop the owner's copy and go back to the built-in callouts.
+#[tauri::command]
+pub async fn reset_callouts(state: State<'_, AppState>, map: String) -> CmdResult<hl_ingest::callouts::CalloutFile> {
+    Ok(hl_ingest::callouts::reset(&data_folder(&state), &map)?)
+}
+
+/// Q28: where each player spent their time, by callout, from the STV.
+#[tauri::command]
+pub async fn get_positions(state: State<'_, AppState>, log_id: i64, map: String) -> CmdResult<Option<hl_ingest::callouts::PositionsView>> {
+    Ok(hl_ingest::callouts::positions(&state.db, &data_folder(&state), log_id, &map).await?)
+}
+
 /// Q29: one ETF2L Highlander season's division tables; the newest when
 /// `season` is not given.
 #[tauri::command]

@@ -1093,6 +1093,26 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["positions", log_id] => {
+            // Q28: where each player spent their live time, by callout.
+            let db = Db::connect(&db_path).await?;
+            let log_id: i64 = log_id.parse()?;
+            let data = db_path.parent().context("no data folder")?.to_path_buf();
+            let json: serde_json::Value = serde_json::from_str(&db.raw_log(log_id).await?.context("no such match")?)?;
+            let map = json.pointer("/info/map").and_then(|m| m.as_str()).unwrap_or_default().to_string();
+            let Some(v) = hl_ingest::callouts::positions(&db, &data, log_id, &map).await? else {
+                println!("{map}: no STV timeline, or no zones drawn for this map");
+                return Ok(());
+            };
+            const CLASSES: [&str; 10] = ["?", "scout", "sniper", "soldier", "demoman", "medic", "heavy", "pyro", "spy", "engineer"];
+            println!("{} · {} zones{}", v.map, v.zones, if v.draft { " (draft)" } else { "" });
+            for p in &v.players {
+                let top: Vec<String> = p.zones.iter().take(4).map(|z| format!("{} {:.0}%", z.zone, 100.0 * f64::from(z.seconds) / f64::from(p.alive_s.max(1)))).collect();
+                println!("  {:<4} {:<9} {:<20} {}", if p.team == 2 { "RED" } else { "BLU" }, CLASSES[usize::from(p.class)], p.name.chars().take(20).collect::<String>(), top.join(", "));
+            }
+            Ok(())
+        }
+
         ["spychecks", path, rest @ ..] => {
             // Q27's spike: hits on fully cloaked Spies in one demo, listed
             // with the demo's own tick so each can be checked in game with

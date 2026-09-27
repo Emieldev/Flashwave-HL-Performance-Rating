@@ -1424,3 +1424,17 @@
 .cart-after { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
 .cart-after-cell { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 6px; background: var(--panel-2); }
 .cart-after-cell strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+
+/* Positions (Q28) */
+.pos-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px 28px; margin-top: 12px; }
+.pos-team h3 { margin: 0 0 6px; }
+.pos-row { display: grid; grid-template-columns: minmax(0, 150px) 1fr; gap: 10px; align-items: center; padding: 3px 0; }
+.pos-who { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-bar { display: flex; gap: 2px; height: 20px; border-radius: 4px; overflow: hidden; }
+.pos-seg { min-width: 0; display: flex; align-items: center; padding: 0 5px; font-size: 0.72rem; color: var(--text-hi); overflow: hidden; }
+.pos-seg span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-seg-0 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.75); }
+.pos-seg-1 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.5); }
+.pos-seg-2 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.32); }
+.pos-seg-3 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.2); }
+.pos-seg-rest { background: rgba(var(--muted-rgb), 0.1); }

@@ -1155,3 +1155,49 @@
   margin: 20px 0 8px;
   font-size: 0.95rem;
 }
+
+/* Callouts (Q28) */
+.co-layer .co-zone path { transition: stroke-width 0.1s; }
+.co-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  fill: var(--text-hi);
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+.co-zone.selected .co-label { font-size: 13px; }
+.co-drawing polyline { stroke: var(--accent); }
+.co-drawing circle { fill: var(--accent); }
+.co-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 250px;
+  max-width: 320px;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.co-editor h3 { margin: 0; }
+.co-draw { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.co-draw input { flex: 1; min-width: 120px; }
+.co-names { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.co-chip {
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.co-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.co-list li { display: flex; gap: 4px; align-items: center; padding: 2px 4px; border-radius: 4px; }
+.co-list li.selected { background: rgba(var(--muted-rgb), 0.18); }
+.co-list input { flex: 1; min-width: 0; padding: 2px 6px; }
+.co-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.co-where { font-size: 0.78rem; }

@@ -23,6 +23,8 @@ import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
   SpyReport,
+  CalloutFile,
+  PositionsView,
   LeagueView,
   TeamView,
   DemoImported,
@@ -58,6 +60,32 @@ const state: AppConfig = startInSetup
 
 const delay = <T,>(value: T, ms = 120): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), ms));
+
+// The repo's callout seeds, as the app ships them; a saved copy lives in
+// localStorage so the editor can be worked on in a browser.
+const CALLOUT_SEEDS = import.meta.glob("../../../callouts/*.json", { eager: true, import: "default" }) as Record<string, CalloutFile>;
+
+function mapBase(map: string): string {
+  const m = map.toLowerCase().replace(/^(koth|pl|cp|ctf|pass)_/, "");
+  return m.split("_")[0];
+}
+
+function mockCallouts(map: string, saved?: CalloutFile): CalloutFile {
+  const base = mapBase(map);
+  let mine = saved ?? null;
+  if (!mine) {
+    try {
+      const raw = localStorage.getItem(`hl.mock.callouts.${base}`);
+      mine = raw ? (JSON.parse(raw) as CalloutFile) : null;
+    } catch {
+      mine = null;
+    }
+  }
+  if (mine) return { ...mine, map: base, origin: "yours" };
+  const seed = Object.entries(CALLOUT_SEEDS).find(([path]) => path.endsWith(`/${base}.json`))?.[1];
+  if (seed) return { ...seed, origin: "built in" };
+  return { map: base, draft: false, source: "", zones: [], names: [], origin: "none" };
+}
 
 // Numbers taken from a real install, so browser-mode layout matches reality.
 function fakeTfPath(path: string, valid: boolean): TfPathInfo {
@@ -816,6 +844,43 @@ export const mockApi: Api = {
     const row = (leagues as unknown as LeagueView).divisions.flatMap((d) => d.teams).find((x) => x.teamId === teamId);
     const base = team37805 as unknown as TeamView;
     return delay<TeamView | null>(teamId === base.teamId ? base : row ? { ...base, teamId, name: row.name, avatar: row.avatar, record: row.record } : null);
+  },
+
+  getCallouts: (map: string) => delay(mockCallouts(map)),
+  saveCallouts: (map: string, file: CalloutFile) => {
+    try {
+      localStorage.setItem(`hl.mock.callouts.${mapBase(map)}`, JSON.stringify(file));
+    } catch {
+      // Storage can be blocked; the save only lasts the page then.
+    }
+    return delay(mockCallouts(map, file));
+  },
+  resetCallouts: (map: string) => {
+    try {
+      localStorage.removeItem(`hl.mock.callouts.${mapBase(map)}`);
+    } catch {
+      // As above.
+    }
+    return delay(mockCallouts(map));
+  },
+  getPositions: (logId: number, map: string) => {
+    const f = mockCallouts(map);
+    if (f.zones.length === 0) return delay<PositionsView | null>(null);
+    const m = FIXTURES.find((x) => x.logId === logId) ?? FIXTURES[0];
+    const r = rng(logId + 28);
+    const classes: Record<string, number> = { scout: 1, sniper: 2, soldier: 3, demoman: 4, medic: 5, heavyweapons: 6, pyro: 7, spy: 8, engineer: 9 };
+    const players = (m.players as Array<{ accountId: number; name: string; team: string; mainClass: string | null }>).map((p) => {
+      const aliveS = 900 + Math.round(r() * 300);
+      const picks = [...f.zones].sort(() => r() - 0.5).slice(0, 5);
+      let left = aliveS * 0.7;
+      const zones = picks.map((z) => {
+        const s = Math.round(left * (0.25 + r() * 0.35));
+        left -= s;
+        return { zone: z.name, seconds: s };
+      });
+      return { accountId: p.accountId, name: p.name, class: classes[p.mainClass ?? ""] ?? 0, team: p.team === "Red" ? 2 : 3, aliveS, zones };
+    });
+    return delay<PositionsView | null>({ map: f.map, zones: f.zones.length, draft: f.draft, players });
   },
 
   getMatchAnalysis: (logId: number) =>

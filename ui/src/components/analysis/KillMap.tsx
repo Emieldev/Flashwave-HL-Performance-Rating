@@ -9,6 +9,7 @@ import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { useMeasuredWidth } from "../../lib/measure";
 import type { StvInfo } from "./AnalysisPanel";
 import { t as tr, tx } from "../../lib/i18n";
+import { CalloutEditor, useCallouts, zoneAt, ZoneShapes } from "./Callouts";
 
 /**
  * Where the player's kills and deaths happened, top-down.
@@ -100,6 +101,14 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
     staleTime: Infinity,
   });
   const overview = overviewQ.data ?? null;
+  // Q28: callouts, drawn as zones over the map, and the editor for them.
+  const calloutQ = useCallouts(mapName);
+  const callouts = calloutQ.data ?? null;
+  const [showZones, setShowZones] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [drawing, setDrawing] = useState<Array<[number, number]>>([]);
+  const [zoneSel, setZoneSel] = useState<number | null>(null);
+  const zones = callouts && (showZones || editing) ? callouts.zones : [];
   const players = useMemo(() => playerMap(a), [a]);
   const me = players.get(player);
   const enemies = a.players.filter((p) => me && p.team !== me.team);
@@ -314,6 +323,18 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             )}
           </>
         )}
+        {callouts && (callouts.zones.length > 0 || callouts.names.length > 0 || editing) && (
+          <label className="check" title={callouts.draft ? tr("Draft callouts: drawn from the TF2 wiki's descriptions, not yet checked by someone who plays the map") : undefined}>
+            <input type="checkbox" checked={showZones || editing} onChange={(e) => setShowZones(e.target.checked)} />
+            {tr("Callouts")}
+            {callouts.draft && <span className="badge">{tr("draft")}</span>}
+          </label>
+        )}
+        {mapName && !asTable && (
+          <button className="linkish" onClick={() => setEditing((e) => !e)} aria-pressed={editing}>
+            {editing ? tr("Stop editing callouts") : tr("Edit callouts")}
+          </button>
+        )}
         <button className="linkish km-table-toggle" onClick={() => setAsTable((t) => !t)}>
           {asTable ? tr("Show map") : tr("Show as table")}
         </button>
@@ -330,8 +351,13 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
         <MarkTable marks={marks} a={a} />
       ) : (
         <>
-          <div className={layer === "paths" ? "km-split" : undefined}>
+          <div className={layer === "paths" || editing ? "km-split" : undefined}>
           <Canvas
+            zones={zones}
+            zoneCounts={layer === "dots" && zones.length > 0 && !editing ? countZones(zones, marks) : undefined}
+            drawing={editing ? drawing : undefined}
+            selectedZone={editing ? zoneSel : null}
+            onMapClick={editing ? (p) => setDrawing((d) => [...d, p]) : undefined}
             frame={frame}
             display={overview ? overviewFrame(overview) : frame}
             image={overview?.image ?? null}
@@ -346,7 +372,22 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             onHover={setHover}
             a={a}
           />
-          {layer === "paths" && (
+          {editing && callouts && mapName && (
+            <CalloutEditor
+              key={mapName}
+              map={mapName}
+              file={callouts}
+              drawing={drawing}
+              onDrawing={setDrawing}
+              selected={zoneSel}
+              onSelect={setZoneSel}
+              onClose={() => {
+                setEditing(false);
+                setZoneSel(null);
+              }}
+            />
+          )}
+          {layer === "paths" && !editing && (
             <LifeList
               rows={routes}
               tickRate={tickRate}
@@ -395,6 +436,13 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
 
 /** The map, a heat layer or the kill marks, and the hover card. */
 function Canvas(props: {
+  /** Q28: callout zones to draw, how many marks fell in each, a zone being drawn. */
+  zones: import("../../api/types").CalloutZone[];
+  zoneCounts?: Map<number, number>;
+  drawing?: Array<[number, number]>;
+  selectedZone: number | null;
+  /** Editing callouts: a click on the map is a corner, in game units. */
+  onMapClick?: (p: [number, number]) => void;
   /** The grid the heat and outline are counted on. */
   frame: Frame;
   /** What the canvas shows: the image's square when there is one. */
@@ -414,7 +462,7 @@ function Canvas(props: {
   onHover: (m: Mark | null) => void;
   a: Analysis;
 }) {
-  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a } = props;
+  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick } = props;
   // The three colours the canvas draws with, resolved from the theme.
   const killColour = themeColour("--kill", "#5791c8");
   const deathColour = themeColour("--death", "#d6763a");
@@ -439,6 +487,11 @@ function Canvas(props: {
   const px = ([x, y]: [number, number]): [number, number] => [
     ((x - display.minX) / display.cell) * scale,
     ((display.maxY - y) / display.cell) * scale,
+  ];
+  // Back from the canvas to game units, for drawing callouts.
+  const game = (cx: number, cy: number): [number, number] => [
+    Math.round(display.minX + (cx / scale) * display.cell),
+    Math.round(display.maxY - (cy / scale) * display.cell),
   ];
   // A cell of the counting grid, in canvas pixels.
   const cellRect = (i: number): [number, number, number] => {
@@ -565,14 +618,20 @@ function Canvas(props: {
           className="km-svg"
           role="img"
           aria-label={tr("{marks} kills and deaths on the map", { marks: marks.length })}
-          onMouseMove={(e) => onHover(nearest(e))}
+          onMouseMove={(e) => (onMapClick ? undefined : onHover(nearest(e)))}
           onMouseLeave={() => onHover(null)}
           onClick={(e) => {
+            if (onMapClick) {
+              const r = e.currentTarget.getBoundingClientRect();
+              onMapClick(game(e.clientX - r.left, e.clientY - r.top));
+              return;
+            }
             const m = nearest(e);
             if (m?.k.jump) jumpTo(m.k.jump, `${m.kind} at ${roundClock(m.k.t, a.rounds)}`);
           }}
-          style={{ cursor: hover?.k.jump ? "pointer" : "default" }}
+          style={{ cursor: onMapClick ? "crosshair" : hover?.k.jump ? "pointer" : "default" }}
         >
+          {zones.length > 0 || drawing ? <ZoneShapes zones={zones} px={px} selected={selectedZone} counts={zoneCounts} drawing={drawing} /> : null}
           {marks.map((m, i) => {
             const [x, y] = px(m.at);
             const from = m.from ? px(m.from) : null;
@@ -815,4 +874,14 @@ function blur(g: number[], w: number, h: number): number[] {
 /** An overview image's square, as a drawing frame of 1024 units a side. */
 function overviewFrame(o: Overview): Frame {
   return { minX: o.minX, maxY: o.maxY, cell: o.size / 1024, width: 1024, height: 1024 };
+}
+
+/** Marks per callout zone, by where each landed (Q28). */
+function countZones(zones: import("../../api/types").CalloutZone[], marks: Mark[]): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const m of marks) {
+    const z = zoneAt(zones, m.at);
+    if (z !== null) out.set(z, (out.get(z) ?? 0) + 1);
+  }
+  return out;
 }

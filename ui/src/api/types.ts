@@ -1341,3 +1341,37 @@ export interface TeamView {
   results: TeamResult[];
   roster: TeamRosterRow[];
 }
+
+/** Q28: one named zone on a map, in game units. */
+export interface CalloutZone {
+  name: string;
+  points: Array<[number, number]>;
+}
+
+export interface CalloutFile {
+  map: string;
+  /** Not yet checked by someone who plays the map. */
+  draft: boolean;
+  source: string;
+  /** Most specific first: a position counts for the first zone holding it. */
+  zones: CalloutZone[];
+  /** Callouts known by name and not yet drawn. */
+  names: string[];
+  /** "yours", "built in" or "none". */
+  origin: string;
+}
+
+export interface PositionsView {
+  map: string;
+  zones: number;
+  draft: boolean;
+  players: Array<{
+    accountId: number;
+    name: string;
+    /** 1 Scout ... 9 Engineer. */
+    class: number;
+    team: number;
+    aliveS: number;
+    zones: Array<{ zone: string; seconds: number }>;
+  }>;
+}

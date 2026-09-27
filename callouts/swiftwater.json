@@ -1,0 +1,32 @@
+{
+ "map": "swiftwater",
+ "draft": true,
+ "source": "Names: the Official TF2 Wiki, Swiftwater, locations by checkpoint. Not drawn yet: place them in the editor.",
+ "zones": [],
+ "names": [
+  "First BLU Spawn",
+  "Meadow",
+  "Ditch",
+  "Shack",
+  "Main House",
+  "Basement",
+  "Front Yard",
+  "Tunnels",
+  "Courtyard",
+  "Catwalks",
+  "Sawmill",
+  "Barn",
+  "Silos",
+  "Perches",
+  "Second BLU Spawn",
+  "Wall",
+  "Garage",
+  "Railway Courtyard",
+  "Corner House",
+  "Steep Descent",
+  "Battlements",
+  "Pit",
+  "Cliffs",
+  "RED Spawn"
+ ]
+}

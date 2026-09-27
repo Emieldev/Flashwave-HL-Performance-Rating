@@ -236,6 +236,10 @@ pub fn run() {
             sync_commands::import_demo,
             sync_commands::get_leagues,
             sync_commands::get_team,
+            sync_commands::get_callouts,
+            sync_commands::save_callouts,
+            sync_commands::reset_callouts,
+            sync_commands::get_positions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");

@@ -1450,7 +1450,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q25~~ | ~~**Penalize delaying your own team's spawn**~~ (ivg, boSe) | medium | **Applied, measured the §18b way.** The head count (`caps_mates_dead`) still reads as rewarding; the *delay* reads the other way. A KOTH cap that cost a dead teammate 8 s+ over their usual wait won 16 points less often than the numbers predicted (715 caps), one costing under 3 s won 11 points more. `caps_spawn_delay` (seconds of those long delays, per capper) is in the fights pass (v7): the player with less of it was on the winning side in all nine classes (54.7-60.3%). Weighted where never worse, full and held out: Scout 0.10, Soldier, Pyro, Medic 0.05, Sniper 0.10. See §18b. |
 | ~~Q26~~ | ~~**Demo and Sniper valued by mode and side**~~ (ivg) | medium | **Closed: measured, half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, ivg is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
-| Q28 | **Callouts, positions and tendencies** (Flashy) | large | Named zones per map, stored like `.lang` files (seeded, user-editable, never overwritten), drawn as a jigsaw on the fullscreen overview. Then kills per zone for every match, and time per zone (anchors, rotators) from STV timelines. See §21. |
+| Q28 | **Callouts, positions and tendencies** (Flashy) | large | **Built; the callouts are drafts.** Zones in game units, one JSON file a map: seeds in `callouts/`, the owner's copy in `<data>/callouts/` always wins. Product is drawn (27 zones from the TF2 wiki's descriptions; 69% of 65,266 kill positions land in one, RED/BLU mirror to within 3%); Upward, Steel and Swiftwater ship their wiki names unplaced; Vigil, Ashville and Proot have no written source. The kill map draws the jigsaw, counts kills per zone, and has an editor (click corners, name, save). A Positions panel shows each player's time per zone from the STV. Still to come: tendencies across matches. See §21. |
 | Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
 
 ### Reported by testers, and fixed
@@ -2161,6 +2161,24 @@ disagree at the edges. So they are stored the way translations are (Q13):
   as the share of alive time per zone and the common paths between zones.
   STV only, so a match-page stat and a profile note where enough STVs
   exist, not a rating component (the same coverage rule as Q27).
+
+**Built (27 Sept 2026).** `hl_ingest::callouts`, `callouts/*.json`.
+
+- **Sources.** The Official TF2 Wiki describes each callout for Product,
+  Upward, Steel and Swiftwater in words. comp.tf (which answers automated
+  requests with a 404) has Vigil's only as labelled in-game screenshots, and
+  callouts.tf was unreachable; nothing written was found for Ashville or
+  Proot. So: Product drawn in full from the wiki's descriptions (RED half
+  drawn, BLU mirrored across the viaduct); Upward, Steel and Swiftwater ship
+  their names as a list to place; the rest start empty.
+- **Checked against data.** Of 65,266 kill and death positions on Product,
+  69% fall inside a seeded zone, and each RED zone holds within 3% of its
+  BLU mirror (Cliff 1,121 / 1,121, Concrete 4,227 / 4,099): the geometry
+  and the mirror are right; the 31% outside are gaps to draw.
+- **Positions on one match** (product STV): both Spies live in the other
+  side's House, both Heavies on their Concrete, Demos and Pyros on the Point.
+- **Next:** tendencies across matches (a player's zone shares over every
+  STV they are in), and a Product player checking the seed.
 
 **What could go wrong.** Seed callouts that are wrong look authoritative.
 Every seeded file says it is a draft until someone who plays the map has

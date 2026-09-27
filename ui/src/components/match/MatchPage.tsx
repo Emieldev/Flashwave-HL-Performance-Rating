@@ -8,6 +8,7 @@ import { BoxScore } from "./BoxScore";
 import { Fold } from "../Fold";
 import { DemoPanel } from "./DemoPanel";
 import { CartPanel } from "./CartPanel";
+import { PositionsPanel } from "./PositionsPanel";
 import { Spychecks } from "./Spychecks";
 import { StvPrompt } from "./StvPrompt";
 import { AnalysisPanel } from "../analysis/AnalysisPanel";
@@ -95,6 +96,9 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
           </Fold>
           <Fold id="cart">
             <CartPanel d={q.data} />
+          </Fold>
+          <Fold id="positions">
+            <PositionsPanel d={shown} />
           </Fold>
           <Fold id="rounds">
             <RoundTimeline d={shown} />

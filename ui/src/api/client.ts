@@ -36,6 +36,8 @@ import type {
   SeasonsView,
   AimResponse,
   SpyReport,
+  CalloutFile,
+  PositionsView,
   LeagueView,
   TeamView,
   DemoImported,
@@ -153,6 +155,11 @@ const realApi = {
   /** Q29: one season's division tables; the newest when no season is given. */
   getLeagues: (season?: number) => invoke<LeagueView>("get_leagues", { season: season ?? null }),
   getTeam: (teamId: number) => invoke<TeamView | null>("get_team", { teamId }),
+  /** Q28: a map's callouts; the owner's copy wins over the built-in one. */
+  getCallouts: (map: string) => invoke<CalloutFile>("get_callouts", { map }),
+  saveCallouts: (map: string, file: CalloutFile) => invoke<CalloutFile>("save_callouts", { map, file }),
+  resetCallouts: (map: string) => invoke<CalloutFile>("reset_callouts", { map }),
+  getPositions: (logId: number, map: string) => invoke<PositionsView | null>("get_positions", { logId, map }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */
