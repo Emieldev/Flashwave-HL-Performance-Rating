@@ -469,7 +469,11 @@ export const mockApi: Api = {
     });
   },
 
-  getOwner: () => delay({ steamid64: "76561198099396919", name: "Flashy", avatar: null }),
+  getOwner: () => {
+    // Whoever the SteamID was last set to; only the fixtures' owner has a name.
+    const id = state.steamid ?? "76561198099396919";
+    return delay({ steamid64: id, name: id === "76561198099396919" ? "Flashy" : null, avatar: null });
+  },
 
   // From `hl seasons sniper --json`.
   listSeasons: () => delay((seasonsSniper as unknown as SeasonsView).seasons.map((r) => r.season)),
