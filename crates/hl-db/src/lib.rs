@@ -321,3 +321,62 @@ mod tests {
         assert!(db.get_config().await.unwrap().steamid.is_none());
     }
 }
+
+/// Migrations already shipped must never change, not even a comment: the
+/// database keeps each one's checksum and refuses to open when a file it has
+/// applied differs -- every installed copy would fail to start after the
+/// update. (A comment rename in 0026 did exactly that to the dev database.)
+/// A new migration is a new file, added to the end of this list.
+#[cfg(test)]
+mod frozen_migrations {
+    const SHIPPED: &[(&str, u64)] = &[
+        ("0001_init.sql", 0xd211cab677938a73),
+        ("0002_matches.sql", 0xaa48f1a4ae68df57),
+        ("0003_round_colours.sql", 0x96569b3c03bd54f8),
+        ("0004_ratings.sql", 0xe4f0d6c25901cdc4),
+        ("0005_demos.sql", 0x84a6b035324ade7a),
+        ("0006_context.sql", 0xfbca8c1bb46dab22),
+        ("0007_rawlog.sql", 0x914b4e0bea20a11c),
+        ("0008_round_maps.sql", 0xed4cc9023cec9582),
+        ("0009_fights.sql", 0x5a5763ad08ff1d4f),
+        ("0010_death_context.sql", 0xe71636ac3689a789),
+        ("0011_fight_kast.sql", 0xc48f9ac4e95fc7c0),
+        ("0012_kill_situation.sql", 0xff6ddbf406060350),
+        ("0013_demo_aim.sql", 0x22e619691f063175),
+        ("0014_demo_death.sql", 0x5cf60f3c21242af4),
+        ("0015_aim_offsets.sql", 0xb0f4fab2b08cba1f),
+        ("0016_death_angle.sql", 0xe206130cc02b46b1),
+        ("0017_aim_path.sql", 0xfa01dd7f0917445c),
+        ("0018_demo_path.sql", 0x054417dd800de8d8),
+        ("0019_path_players.sql", 0x919bcfb8c91959cd),
+        ("0020_path_caps.sql", 0xa5805e6f5c0524ea),
+        ("0021_official_guess.sql", 0xea134882562f52dd),
+        ("0022_rating_scale.sql", 0x7777c8ec7d351f04),
+        ("0023_baseline_per_map.sql", 0xd6762d394c13905d),
+        ("0024_aim_per_player.sql", 0x12945ef387c8d83e),
+        ("0025_demo_deleted.sql", 0x7f8db42d678cb7c5),
+        ("0026_cap_costs.sql", 0xb07dfd12d17d7a52),
+        ("0027_kill_credit.sql", 0x795e229217b08f1d),
+        ("0028_demo_timeline.sql", 0xac25a93f8002f17d),
+        ("0029_cap_spawn_delay.sql", 0x35e56160a46ca344),
+    ];
+
+    fn fnv1a(bytes: &[u8]) -> u64 {
+        bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3))
+    }
+
+    #[test]
+    fn no_shipped_migration_has_changed() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        files.sort();
+        let names: Vec<&str> = SHIPPED.iter().map(|(n, _)| *n).collect();
+        assert_eq!(files, names, "a migration was added or removed: add a new one to the end of SHIPPED, never rename");
+        for (name, hash) in SHIPPED {
+            // Line endings are normalised: a checkout with CRLF is the same file.
+            let text = std::fs::read(dir.join(name)).unwrap();
+            let lf: Vec<u8> = text.into_iter().filter(|b| *b != b'\r').collect();
+            assert_eq!(fnv1a(&lf), *hash, "{name} has been edited after it shipped");
+        }
+    }
+}
