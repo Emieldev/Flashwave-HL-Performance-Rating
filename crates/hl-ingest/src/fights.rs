@@ -119,15 +119,15 @@ pub struct FightStats {
     /// The same, except that surviving only counts when they fired a shot
     /// during the fight: sitting a fight out is not a contribution.
     pub fights_kast_engaged: u32,
-    /// Q17 (zaag): each point this player was credited with, weighted by
+    /// Q17 (ivg): each point this player was credited with, weighted by
     /// how many enemies were alive to stop it. A cap onto a wiped point
     /// adds nothing; one into a full defence adds nine. The flat `cpc`
     /// from logs.tf pays the same for both, which is the complaint.
     pub caps_contested: u32,
-    /// Q25 (zaag): each point this player was credited with, weighted by
+    /// Q25 (ivg): each point this player was credited with, weighted by
     /// how many of their own team were dead when it went in. Stored as a
     /// count, not a penalty -- which way it should push the rating is a
-    /// question for the data (and for zaag's reading of the respawn rule),
+    /// question for the data (and for ivg's reading of the respawn rule),
     /// not something to assume here.
     pub caps_mates_dead: u32,
     /// Q25 reopened (§18b): seconds of missed waves this player's caps

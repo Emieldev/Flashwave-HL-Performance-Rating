@@ -414,7 +414,7 @@ impl Worth {
 #[serde(rename_all = "camelCase")]
 pub struct VictimWorth {
     pub by: HashMap<(hl_core::TfClass, Mode), Worth>,
-    /// Q26 (zaag): stopwatch only, split by whether the *killer* was
+    /// Q26 (ivg): stopwatch only, split by whether the *killer* was
     /// attacking. On every stopwatch map here BLU attacks, so the killer's
     /// colour is the side. Measured against the same stopwatch baseline.
     pub by_side: HashMap<(hl_core::TfClass, bool), Worth>,
@@ -573,7 +573,7 @@ impl Defence {
     pub const ALL: [Defence; 4] = [Defence::Empty, Defence::Remnant, Defence::Half, Defence::Live];
 }
 
-/// Q17 (zaag): what a capture was worth, by how much was left to stop it and
+/// Q17 (ivg): what a capture was worth, by how much was left to stop it and
 /// by who took it.
 ///
 /// The rating counts captures flat: `cpc` from logs.tf, per ten minutes. The

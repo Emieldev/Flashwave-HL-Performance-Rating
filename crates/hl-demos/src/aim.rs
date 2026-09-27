@@ -155,10 +155,10 @@ pub struct LifePath {
 
 /// One hit two seconds after another by the same player on the same Spy is
 /// the same spycheck: a minigun held on a cloaked Spy is one read, not
-/// thirty (zaag's own correction to his suggestion).
+/// thirty (ivg's own correction to their suggestion).
 pub const SPYCHECK_COOLDOWN_S: f64 = 2.0;
 
-/// A spycheck (Q27, zaag): damage on an enemy Spy who, the tick *before*
+/// A spycheck (Q27, ivg): damage on an enemy Spy who, the tick *before*
 /// the hit, was fully cloaked -- not flickering, not on fire. That is a hit
 /// on someone the shooter could not see, which is what checking means.
 ///

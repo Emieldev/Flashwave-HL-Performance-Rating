@@ -41,14 +41,14 @@ saying so.
 
 ## Fixed
 
-- **Custom dates broke the page and a reload would not clear it** (zaag).
+- **Custom dates broke the page and a reload would not clear it** (ivg).
   The period is saved across restarts and was never checked when read back,
   so a bad one broke every render, F5 included. The dates also no longer
   overlap the controls beside them.
 - **Picking a season shoved the filter row out of line.** The date range now
   sits in the bottom-right corner with its space always reserved, so
   choosing a season changes nothing else.
-- **The Aim tab showed your aim under someone else's name** (zaag). Picking
+- **The Aim tab showed your aim under someone else's name** (ivg). Picking
   another player changed every tab but that one, so you were reading your
   own numbers as theirs. It now says whose aim it is — yours, on any class —
   and offers a button back. Aim for *other* players needs the demo pass to

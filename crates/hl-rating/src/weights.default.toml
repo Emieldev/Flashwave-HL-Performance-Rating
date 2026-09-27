@@ -249,7 +249,7 @@ caps_spawn_delay = 0.10
 impact_kills    = 0.20
 impact_assists  = 0.20
 medic_picks     = 0.05
-# Q17 (zaag): captures weighed by the enemies alive to stop them, not
+# Q17 (ivg): captures weighed by the enemies alive to stop them, not
 # counted flat. Swapped in at the same weight the flat count had, and
 # never worse in any of the four models that use caps, on the full
 # sample or the held-out one (scout +0.1/+0.5, pyro +0.1/+2.0,

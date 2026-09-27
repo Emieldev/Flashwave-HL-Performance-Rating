@@ -132,10 +132,10 @@ pub enum Component {
     /// the state's value, measured and unnormalised: a kill at even numbers
     /// is worth 0.19 and a clean-up at four up 0.05.
     FightSwing,
-    /// Captures weighted by the enemies alive to stop them (Q17, zaag).
+    /// Captures weighted by the enemies alive to stop them (Q17, ivg).
     CapsContested,
     /// Captures weighted by the capper's own team dead at the time (Q25,
-    /// zaag). Lower is taken as better, which is zaag's reading of the
+    /// ivg). Lower is taken as better, which is ivg's reading of the
     /// respawn rule; `hl validate` says whether the data agrees.
     CapsMatesDead,
     /// Fight swing with each kill shared among whoever damaged the victim in

@@ -1,4 +1,4 @@
--- PLAN Q17 and Q25 (zaag): what each capture cost.
+-- PLAN Q17 and Q25 (ivg): what each capture cost.
 --
 -- logs.tf's `cpc` counts captures flat, so walking onto a point nobody is
 -- alive to defend pays the same as taking one into a full defence. Both

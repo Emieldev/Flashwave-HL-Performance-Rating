@@ -55,7 +55,7 @@ is read too), keeping it, and saving.
 
 ## The rating
 
-**Captures are weighed by what they cost** (zaag). A point taken against
+**Captures are weighed by what they cost** (ivg). A point taken against
 defenders counts for more than one walked onto, for Scout, Pyro, Engineer
 and Medic. **Demoman's fight swing is shared** with everyone who damaged the
 victim in the five seconds before, HLTV-style, instead of all going to the
