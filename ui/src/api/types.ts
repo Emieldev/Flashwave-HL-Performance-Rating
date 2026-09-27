@@ -1174,3 +1174,39 @@ export type LanguageFiles = { dir: string; files: Array<{ id: string; text: stri
 
 /** Where a language was saved for editing; `created` is false when a file of that name was already there and was left alone. */
 export type SavedLanguageFile = { path: string; created: boolean };
+
+/** Q27: hits on fully cloaked Spies, read off a match's kept STV timelines. */
+export interface SpyReport {
+  /** STV demos with a timeline: the ones this could be read from. */
+  demos: number;
+  players: SpyPlayer[];
+  /** Oldest first. */
+  checks: SpyCheck[];
+  /** Hits on a cloaked Spy that did not count, and why. */
+  fading: number;
+  blinking: number;
+  marked: number;
+  cooldown: number;
+}
+
+export interface SpyPlayer {
+  accountId: number;
+  /** The name the demo carried, for anyone the log does not. */
+  name: string;
+  /** Spychecks this player made. */
+  checks: number;
+  /** Times this player was found while fully cloaked. */
+  found: number;
+}
+
+export interface SpyCheck {
+  demoId: number;
+  /** Seconds into the demo. */
+  atS: number;
+  /** The demo tick to jump to: a few seconds before the hit. */
+  jumpTick: number;
+  attacker: number;
+  spy: number;
+  damage: number;
+  killed: boolean;
+}

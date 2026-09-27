@@ -1449,7 +1449,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 
 | Q25 | **Penalize delaying your own team's spawn** (zaag) | medium | **Measured, and the data says the opposite -- not applied.** `caps_mates_dead` counts, for every capture a player is credited with, their own teammates who were dead when it went in; it rides in the same fights pass as Q17. If capping with your people dead were costly, the player who did less of it should be on the winning side. In **eight of nine classes it is the other way round**: the team whose player capped *more* while teammates were dead won 53-60% of the time (Engineer 59.7%, Pyro 58.5%, Scout 55.2%), and in the Soldier fit the effect is clear of zero *in the rewarding direction* (-0.70 [-1.12, -0.20] on the flipped scale). A penalty would push the rating against the result. **A guess at why, to put to zaag rather than to assume:** on attack/defence a capture moves the attacking team's spawn forward, so capping while your team is dead brings them back into the fight sooner -- which would make it one of the more valuable caps, not a cost. The column stays stored and in `hl validate`; nothing is weighted by it. **Reopened 27 Sept** (boSe, ivg): count the *delay* each dead mate actually suffered, from the log's spawn lines, not the head count; only long delays are the capper's; cappers on point and the clock can make the cap worth it. Next: `hl situation --spawn-delay`, then decide. See §18b. |
 | Q26 | **Demo and Sniper valued by mode and side** (zaag) | medium | **Measured: half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, zaag is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
-| Q27 | **Spychecking as a component** (zaag) | large | Hits on a fully cloaked Spy. **Not in any log** -- cloak is a demo-only condition, and STV coverage is 4 matches of 749. See §20. |
+| ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
 
 ### Reported by testers, and fixed
 
@@ -1990,7 +1990,7 @@ down, and probably not worth applying.
 
 ---
 
-## 20. Spychecking (Q27, zaag)
+## 20. Spychecking (Q27, ivg)
 
 > "number of spy hits when he is fully cloaked and not blinking / on fire...
 > This should also have a slight cooldown to prevent repetitive hits (like
@@ -2028,3 +2028,22 @@ fire (`PlayerCondition::OnFire`, already the same enum). Cooldown per
 attacker per Spy, about two seconds, so a minigun held on a cloaked Spy is
 one spycheck and not thirty -- zaag's own correction, and the difference
 between measuring a read and measuring a fire rate.
+
+**Built (2026-09-27).** The timeline (Q3) made the spike a few lines: it
+already records every player's condition bits and every hurt event, so
+`hl_demos::spy::spychecks` is a pure function over it. The rules, as built:
+
+- the victim is a live Spy with `Stealthed` on the tick *before* the hit
+  (the blink a hit causes lands on its own tick);
+- he has been cloaked for a second without a break (`tf_spy_invis_time`),
+  so a Spy still fading in is not a blind read;
+- not `StealthedBlink`, `Burning`, `Urine`, `MadMilk` or `Bleeding`;
+- one per attacker per Spy per 2 seconds, measured from that attacker's
+  latest hit, so a held minigun is one check for as long as it is held.
+
+`hl spychecks <demo> [--list]` over the five STVs on disk: 17, 20, 10, 20
+and 36 checks; the hits left out were mostly Spies still fading in (19-62 a
+match), then blinking, cooldown and marked. The list carries the demo tick,
+so any check can be confirmed in game with `demo_gototick`. The match page
+shows who checked and who was found, and every check copies its jump.
+

@@ -26,6 +26,22 @@ but "was this built by whoever holds the key". Which is the question that
 matters when the download comes from a GitHub release page anyone can open
 a PR against.
 
+## Picking the number
+
+Versions follow [Semantic Versioning 2.0.0](https://semver.org/): `MAJOR.MINOR.PATCH`,
+no leading zeroes, and a published version is never changed -- a fix is a new
+version. What counts as the "public API" here is what other people and older
+installs depend on: the database (migrations must keep upgrading every older
+one), `config.json` and `weights.toml`, the `.lang` format, backups, and the
+updater's `latest.json`.
+
+- **PATCH** (0.5.0 → 0.5.1): only fixes and speed-ups, nothing new to see.
+- **MINOR** (0.5.1 → 0.6.0, patch back to 0): anything new -- a panel, a stat,
+  a setting. While the app is 0.y.z (SemVer's initial development), a release
+  that removes or breaks something is a minor bump too, and its notes say so.
+- **MAJOR**: from 1.0.0 on, anything that breaks the list above.
+- Test builds are pre-releases: `0.6.0-beta.1`, which sorts before `0.6.0`.
+
 ## Cutting a release
 
 1. **Bump the version in three places** — the workspace `Cargo.toml`,

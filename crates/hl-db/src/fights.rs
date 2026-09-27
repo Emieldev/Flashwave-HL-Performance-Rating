@@ -1,6 +1,6 @@
 //! Kills in context per player and match (PLAN §11 B and D).
 
-use crate::Db;
+use crate::{Db, BATCH_ROWS};
 use anyhow::Result;
 use serde::Serialize;
 use sqlx::Row;
@@ -96,52 +96,18 @@ impl Db {
         Ok(rows.into_iter().map(|r| r.get("log_id")).collect())
     }
 
-    /// One log's fights pass: each player's counts, and each counted kill's
-    /// situation as `(seq, diff, adv)`.
-    pub async fn replace_fight_stats(&self, log_id: i64, version: i64, rows: &[FightRow], situations: &[(i64, i8, i8)]) -> Result<()> {
+    /// Replace several logs' fights-pass output -- each player's counts, each
+    /// kill's situation, each kill's credit shares -- in one transaction.
+    ///
+    /// It was two transactions a log with a statement per row: 363,000 credit
+    /// rows and 194,000 situations on a rebuild, each its own round trip, and
+    /// a commit per log that on its own cost more than the writing (see
+    /// `replace_kill_events_many`). Callers pass a group at a time, so a
+    /// failure loses one group's work and a rerun redoes it.
+    pub async fn replace_fights_many(&self, version: i64, logs: &[FightsWrite]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
-        sqlx::query("DELETE FROM fight_stat WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM kill_situation WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
-        for &(seq, diff, adv) in situations {
-            sqlx::query("INSERT INTO kill_situation (log_id, seq, diff, adv) VALUES (?1, ?2, ?3, ?4)")
-                .bind(log_id)
-                .bind(seq)
-                .bind(i64::from(diff))
-                .bind(i64::from(adv))
-                .execute(&mut *tx)
-                .await?;
-        }
-        let cols = FIGHT_COLUMNS.join(", ");
-        let marks = (3..3 + FIGHT_COLUMNS.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
-        let sql = format!("INSERT INTO fight_stat (log_id, account_id, {cols}) VALUES (?1, ?2, {marks})");
-        for r in rows {
-            let mut q = sqlx::query(&sql).bind(log_id).bind(r.account_id as i64);
-            for v in r.values {
-                q = q.bind(v);
-            }
-            q.execute(&mut *tx).await?;
-        }
-        sqlx::query("INSERT OR REPLACE INTO fight_log (log_id, version) VALUES (?1, ?2)")
-            .bind(log_id)
-            .bind(version)
-            .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
-        Ok(())
-    }
-
-    /// Replace one log's kill credits (Q6b): `(seq, account, share)`.
-    pub async fn replace_kill_credits(&self, log_id: i64, rows: &[(i64, u32, f64)]) -> Result<()> {
-        let mut tx = self.pool().begin().await?;
-        sqlx::query("DELETE FROM kill_credit WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
-        for &(seq, account, share) in rows {
-            sqlx::query("INSERT OR REPLACE INTO kill_credit (log_id, seq, account_id, share) VALUES (?1, ?2, ?3, ?4)")
-                .bind(log_id)
-                .bind(seq)
-                .bind(i64::from(account))
-                .bind(share)
-                .execute(&mut *tx)
-                .await?;
+        for w in logs {
+            write_fights(&mut tx, version, w).await?;
         }
         tx.commit().await?;
         Ok(())
@@ -338,4 +304,58 @@ impl Db {
             })
             .collect())
     }
+}
+
+/// One log's fights-pass output, for [`Db::replace_fights_many`].
+#[derive(Default)]
+pub struct FightsWrite {
+    pub log_id: i64,
+    pub rows: Vec<FightRow>,
+    /// `(seq, diff, adv)` per kill.
+    pub situations: Vec<(i64, i8, i8)>,
+    /// `(seq, account, share)` per contributor per kill (Q6b).
+    pub credits: Vec<(i64, u32, f64)>,
+}
+
+/// Replace one log's fights-pass output inside an open transaction.
+async fn write_fights(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, version: i64, w: &FightsWrite) -> Result<()> {
+    let log_id = w.log_id;
+    for table in ["fight_stat", "kill_situation", "kill_credit"] {
+        sqlx::query(&format!("DELETE FROM {table} WHERE log_id = ?1")).bind(log_id).execute(&mut **tx).await?;
+    }
+    for batch in w.situations.chunks(BATCH_ROWS) {
+        let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new("INSERT INTO kill_situation (log_id, seq, diff, adv) ");
+        q.push_values(batch, |mut b, &(seq, diff, adv)| {
+            b.push_bind(log_id).push_bind(seq).push_bind(i64::from(diff)).push_bind(i64::from(adv));
+        });
+        q.build().execute(&mut **tx).await?;
+    }
+    for batch in w.rows.chunks(BATCH_ROWS) {
+        let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+            "INSERT INTO fight_stat (log_id, account_id, {}) ",
+            FIGHT_COLUMNS.join(", ")
+        ));
+        q.push_values(batch, |mut b, r| {
+            b.push_bind(log_id).push_bind(r.account_id as i64);
+            for v in r.values {
+                b.push_bind(v);
+            }
+        });
+        q.build().execute(&mut **tx).await?;
+    }
+    for batch in w.credits.chunks(BATCH_ROWS) {
+        // OR REPLACE as before: a contributor can be credited twice for one
+        // kill, and the later share is the one kept.
+        let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new("INSERT OR REPLACE INTO kill_credit (log_id, seq, account_id, share) ");
+        q.push_values(batch, |mut b, &(seq, account, share)| {
+            b.push_bind(log_id).push_bind(seq).push_bind(i64::from(account)).push_bind(share);
+        });
+        q.build().execute(&mut **tx).await?;
+    }
+    sqlx::query("INSERT OR REPLACE INTO fight_log (log_id, version) VALUES (?1, ?2)")
+        .bind(log_id)
+        .bind(version)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }

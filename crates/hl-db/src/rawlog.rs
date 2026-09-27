@@ -1,6 +1,6 @@
 //! Raw server logs, and the kills and chat derived from them.
 
-use crate::Db;
+use crate::{Db, BATCH_ROWS};
 use anyhow::Result;
 use serde::Serialize;
 use sqlx::Row;
@@ -118,52 +118,22 @@ impl Db {
 
     pub async fn replace_kill_events(&self, log_id: i64, kills: &[KillRow<'_>], chat: &[ChatRow<'_>]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
-        sqlx::query("DELETE FROM kill_event WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM chat_event WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
-        for (seq, k) in kills.iter().enumerate() {
-            let kp = k.killer_pos;
-            let vp = k.victim_pos;
-            sqlx::query(
-                "INSERT INTO kill_event (log_id, seq, at_raw, round_num, live, killer, killer_team, killer_class,
-                    victim, victim_team, victim_class, weapon, custom, assister, kx, ky, kz, vx, vy, vz)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
-            )
-            .bind(log_id)
-            .bind(seq as i64)
-            .bind(k.at_raw)
-            .bind(k.round_num)
-            .bind(k.live)
-            .bind(k.killer as i64)
-            .bind(k.killer_team)
-            .bind(k.killer_class)
-            .bind(k.victim as i64)
-            .bind(k.victim_team)
-            .bind(k.victim_class)
-            .bind(k.weapon)
-            .bind(k.custom)
-            .bind(k.assister.map(i64::from))
-            .bind(kp.map(|p| p[0]))
-            .bind(kp.map(|p| p[1]))
-            .bind(kp.map(|p| p[2]))
-            .bind(vp.map(|p| p[0]))
-            .bind(vp.map(|p| p[1]))
-            .bind(vp.map(|p| p[2]))
-            .execute(&mut *tx)
-            .await?;
-        }
-        for (seq, c) in chat.iter().enumerate() {
-            sqlx::query(
-                "INSERT INTO chat_event (log_id, seq, at_raw, account, team_chat, message)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )
-            .bind(log_id)
-            .bind(seq as i64)
-            .bind(c.at_raw)
-            .bind(c.account.map(i64::from))
-            .bind(c.team_chat)
-            .bind(c.message)
-            .execute(&mut *tx)
-            .await?;
+        write_kill_events(&mut tx, log_id, kills, chat).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Several logs' kills and chat replaced in one transaction.
+    ///
+    /// For a rebuild, which rewrites every log at once. A commit per log cost
+    /// more than the writing did: on 738 logs, 13 s one transaction each
+    /// against 3.9 s for all of them in one (measured in SQLite directly, so
+    /// none of it is this code). Callers pass a group at a time, so a failure
+    /// loses one group's work and a rerun redoes it.
+    pub async fn replace_kill_events_many(&self, logs: &[(i64, Vec<KillRow<'_>>, Vec<ChatRow<'_>>)]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        for (log_id, kills, chat) in logs {
+            write_kill_events(&mut tx, *log_id, kills, chat).await?;
         }
         tx.commit().await?;
         Ok(())
@@ -318,4 +288,65 @@ fn stored_kill(r: &sqlx::sqlite::SqliteRow) -> StoredKill {
         custom: r.get("custom"),
         assister: r.get::<Option<i64>, _>("assister").map(|a| a as u32),
     }
+}
+
+/// Replace one log's kills and chat inside an open transaction.
+async fn write_kill_events(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    log_id: i64,
+    kills: &[KillRow<'_>],
+    chat: &[ChatRow<'_>],
+) -> Result<()> {
+    sqlx::query("DELETE FROM kill_event WHERE log_id = ?1").bind(log_id).execute(&mut **tx).await?;
+    sqlx::query("DELETE FROM chat_event WHERE log_id = ?1").bind(log_id).execute(&mut **tx).await?;
+    // Many rows per statement rather than one: each statement is a round
+    // trip to SQLite's worker thread, and a rebuild writes 225,000 kills.
+    // A row per statement spent most of the rebuild waiting on those hops.
+    let rows: Vec<(usize, &KillRow)> = kills.iter().enumerate().collect();
+    for batch in rows.chunks(BATCH_ROWS) {
+        let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "INSERT INTO kill_event (log_id, seq, at_raw, round_num, live, killer, killer_team, killer_class,
+                victim, victim_team, victim_class, weapon, custom, assister, kx, ky, kz, vx, vy, vz) ",
+        );
+        q.push_values(batch, |mut b, &(seq, k)| {
+            let (kp, vp) = (k.killer_pos, k.victim_pos);
+            b.push_bind(log_id)
+                .push_bind(seq as i64)
+                .push_bind(k.at_raw)
+                .push_bind(k.round_num)
+                .push_bind(k.live)
+                .push_bind(k.killer as i64)
+                .push_bind(k.killer_team)
+                .push_bind(k.killer_class)
+                .push_bind(k.victim as i64)
+                .push_bind(k.victim_team)
+                .push_bind(k.victim_class)
+                .push_bind(k.weapon)
+                .push_bind(k.custom)
+                .push_bind(k.assister.map(i64::from))
+                .push_bind(kp.map(|p| p[0]))
+                .push_bind(kp.map(|p| p[1]))
+                .push_bind(kp.map(|p| p[2]))
+                .push_bind(vp.map(|p| p[0]))
+                .push_bind(vp.map(|p| p[1]))
+                .push_bind(vp.map(|p| p[2]));
+        });
+        q.build().execute(&mut **tx).await?;
+    }
+    let rows: Vec<(usize, &ChatRow)> = chat.iter().enumerate().collect();
+    for batch in rows.chunks(BATCH_ROWS) {
+        let mut q = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "INSERT INTO chat_event (log_id, seq, at_raw, account, team_chat, message) ",
+        );
+        q.push_values(batch, |mut b, &(seq, c)| {
+            b.push_bind(log_id)
+                .push_bind(seq as i64)
+                .push_bind(c.at_raw)
+                .push_bind(c.account.map(i64::from))
+                .push_bind(c.team_chat)
+                .push_bind(c.message);
+        });
+        q.build().execute(&mut **tx).await?;
+    }
+    Ok(())
 }

@@ -235,9 +235,8 @@ pub async fn for_log_with(db: &Db, log_id: i64, me: SteamId, progress: &mut (dyn
             },
         )?;
         out.demos_read += 1;
-        if let Some(tl) = timeline {
+        if let Some(s) = timeline {
             progress(ReadStep::Keeping { demo, of });
-            let s = tl.encode()?;
             let row = hl_db::TimelineRow {
                 version: s.version,
                 tick_rate: s.tick_rate,
@@ -377,7 +376,7 @@ enum Scope {
 /// The account id behind a demo's SteamID, where it parses to a real one.
 /// Zero is what an unparsed id would become, and a row belonging to nobody is
 /// worse than no row at all.
-fn account_of(steamid: &str) -> Option<u32> {
+pub(crate) fn account_of(steamid: &str) -> Option<u32> {
     SteamId::parse(steamid).ok().map(|s| s.account_id()).filter(|a| *a != 0)
 }
 

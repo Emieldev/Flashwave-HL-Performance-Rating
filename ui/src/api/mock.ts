@@ -20,6 +20,7 @@ import teammatesAll from "./fixtures/teammates_all.json";
 import seasonsSniper from "./fixtures/seasons_sniper.json";
 import fightsSniper from "./fixtures/fights_sniper.json";
 import type {
+  SpyReport,
   Analysis,
   AppConfig,
   AppStatus,
@@ -726,6 +727,35 @@ export const mockApi: Api = {
     delay({ path: "…\hl-now.sqlite3", bytes: 183_900_000, madeAt: Math.floor(Date.now() / 1000) }),
   saveBackupAs: async (suggested: string) =>
     delay({ path: "D:/backups/" + suggested, bytes: 183_900_000, madeAt: Math.floor(Date.now() / 1000) }),
+
+  // Spies found now and then, by whoever is not a Spy on the other team.
+  getSpychecks: (logId: number) => {
+    const m = FIXTURES.find((f) => f.logId === logId) ?? FIXTURES[0];
+    const players = m.players as Array<{ accountId: number; name: string; team: string; mainClass: string | null }>;
+    const spies = players.filter((p) => p.mainClass === "spy");
+    if (spies.length === 0) return delay<SpyReport | null>(null);
+    const r = rng(logId + 27);
+    const checks: SpyReport["checks"] = [];
+    for (let i = 0; i < 24; i++) {
+      const spy = spies[Math.floor(r() * spies.length)];
+      const foes = players.filter((p) => p.team !== spy.team && p.mainClass !== "spy");
+      const by = foes[Math.floor(Math.pow(r(), 1.8) * foes.length)];
+      const atS = 60 + i * 70 + r() * 50;
+      checks.push({ demoId: 1, atS, jumpTick: Math.round((atS - 5) * 66.67), attacker: by.accountId, spy: spy.accountId, damage: Math.round(10 + r() * 80), killed: r() < 0.2 });
+    }
+    const tally = new Map<number, { accountId: number; name: string; checks: number; found: number }>();
+    for (const c of checks) {
+      for (const [id, made] of [[c.attacker, true], [c.spy, false]] as const) {
+        const p = players.find((x) => x.accountId === id)!;
+        const row = tally.get(id) ?? { accountId: id, name: p.name, checks: 0, found: 0 };
+        if (made) row.checks++;
+        else row.found++;
+        tally.set(id, row);
+      }
+    }
+    const rows = [...tally.values()].sort((a, b) => b.checks - a.checks || b.found - a.found);
+    return delay<SpyReport | null>({ demos: 1, players: rows, checks, fading: 31, blinking: 22, marked: 6, cooldown: 14 });
+  },
 
   getMatchAnalysis: (logId: number) =>
     delay(

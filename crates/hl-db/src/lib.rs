@@ -20,7 +20,7 @@ pub use context::{
     OfficialRow, OwnGameRow,
 };
 pub use aim::{AimFilter, AimRow, AimTotals, DeathRow, LifeTotals, PathRow};
-pub use fights::{ClassGame, FightFilter, FightRow, FightTotals, SeasonOfficial, FIGHT_COLUMNS};
+pub use fights::{ClassGame, FightFilter, FightRow, FightTotals, FightsWrite, SeasonOfficial, FIGHT_COLUMNS};
 pub use demos::{ClockInput, ClockRow, DemoRow, DemoStats, DownloadedDemo, LinkedDemo};
 pub use rawlog::{ChatRow, KillRow, RawlogStats, StoredKill};
 pub use roundmap::{
@@ -48,6 +48,11 @@ use std::path::Path;
 /// **Never edit a migration once it has been applied anywhere** — not even a
 /// comment. sqlx stores each migration's checksum and refuses to open a
 /// database whose applied migrations no longer match. Changes go in a new file.
+/// Rows per multi-row INSERT. SQLite allows 32,766 bound values per
+/// statement; the widest table written this way has 20 columns, so 500 rows
+/// stays well inside it while cutting round trips by that factor.
+pub(crate) const BATCH_ROWS: usize = 500;
+
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Clone)]

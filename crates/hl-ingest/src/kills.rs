@@ -66,7 +66,7 @@ pub async fn fetch(
                 Ok(text) => {
                     unreachable_run = 0;
                     db.store_rawlog(log_id, &zip).await?;
-                    s.kills += store(db, log_id, &rawlog::parse(&text)).await?;
+                    s.kills += store(db, log_id, rawlog::parse(&text)).await?;
                     s.fetched += 1;
                 }
                 Err(e) => {
@@ -95,30 +95,65 @@ pub async fn fetch(
     Ok(s)
 }
 
+
 /// Re-derive every stored raw log's kills. No network; part of a rebuild.
 pub async fn rederive_all(db: &Db, mut progress: impl FnMut(Progress)) -> Result<usize> {
     let ids = db.rawlog_ids().await?;
     let total = ids.len();
     let mut kills = 0;
+    // Parsed and shifted logs waiting to be written, a group at a time.
+    let mut group: Vec<(i64, RawLog)> = Vec::with_capacity(REBUILD_GROUP);
     for (i, log_id) in ids.into_iter().enumerate() {
         if i % 25 == 0 {
             progress(Progress::RawLogs { done: i, total });
         }
         let Some(zip) = db.rawlog(log_id).await? else { continue };
         match rawlog::unzip(&zip) {
-            Ok(text) => kills += store(db, log_id, &rawlog::parse(&text)).await?,
+            Ok(text) => group.push((log_id, shifted(db, log_id, rawlog::parse(&text)).await?)),
             Err(e) => tracing::warn!(log_id, error = %format!("{e:#}"), "stored raw log unreadable"),
         }
+        if group.len() == REBUILD_GROUP {
+            kills += write_group(db, &group).await?;
+            group.clear();
+        }
     }
+    kills += write_group(db, &group).await?;
     progress(Progress::RawLogs { done: total, total });
     Ok(kills)
 }
 
+/// Write a group of logs' kills and chat in one transaction.
+async fn write_group(db: &Db, group: &[(i64, RawLog)]) -> Result<usize> {
+    if group.is_empty() {
+        return Ok(0);
+    }
+    let batch: Vec<(i64, Vec<KillRow>, Vec<ChatRow>)> = group
+        .iter()
+        .map(|(log_id, log)| {
+            let (k, c) = rows(log);
+            (*log_id, k, c)
+        })
+        .collect();
+    db.replace_kill_events_many(&batch).await.context("storing a group of re-derived kills")?;
+    Ok(batch.iter().map(|(_, k, _)| k.len()).sum())
+}
+
 /// Store a parsed raw log's kills and chat, shifted into logs.tf's round-time
 /// frame (see [`rawlog::frame_offset`]).
-async fn store(db: &Db, log_id: i64, raw: &RawLog) -> Result<usize> {
+///
+/// Takes the log by value and shifts it in place. It used to borrow it and
+/// clone the whole thing -- every kill, chat line and event -- only to shift
+/// the copy, 755 times a rebuild, while the caller dropped the original.
+async fn store(db: &Db, log_id: i64, log: RawLog) -> Result<usize> {
+    let log = shifted(db, log_id, log).await?;
+    let (kills, chat) = rows(&log);
+    db.replace_kill_events(log_id, &kills, &chat).await.with_context(|| format!("storing kills of {log_id}"))?;
+    Ok(kills.len())
+}
+
+/// A parsed raw log moved into logs.tf's round-time frame, in place.
+async fn shifted(db: &Db, log_id: i64, mut log: RawLog) -> Result<RawLog> {
     let logstf_starts = logstf_round_starts(db, log_id).await?;
-    let mut log = raw.clone();
     match rawlog::frame_offset(&log.round_starts, &logstf_starts) {
         Some(shift) => log.shift(shift),
         None if !logstf_starts.is_empty() => {
@@ -126,16 +161,22 @@ async fn store(db: &Db, log_id: i64, raw: &RawLog) -> Result<usize> {
         }
         None => {}
     }
-    let log = &log;
-    let kills: Vec<KillRow> = log.kills.iter().map(kill_row).collect();
-    let chat: Vec<ChatRow> = log
+    Ok(log)
+}
+
+/// The rows a log's kills and chat are stored as, borrowing from it.
+fn rows(log: &RawLog) -> (Vec<KillRow<'_>>, Vec<ChatRow<'_>>) {
+    let kills = log.kills.iter().map(kill_row).collect();
+    let chat = log
         .chat
         .iter()
         .map(|c| ChatRow { at_raw: c.at, account: c.account, team_chat: c.team_chat, message: &c.message })
         .collect();
-    db.replace_kill_events(log_id, &kills, &chat).await.with_context(|| format!("storing kills of {log_id}"))?;
-    Ok(kills.len())
+    (kills, chat)
 }
+
+/// Logs a rebuild writes per transaction: see `replace_kill_events_many`.
+const REBUILD_GROUP: usize = 100;
 
 /// logs.tf's round start times for a stored log.
 async fn logstf_round_starts(db: &Db, log_id: i64) -> Result<Vec<i64>> {

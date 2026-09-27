@@ -34,10 +34,11 @@
 
 use crate::deep::{has, DeepAnalyser};
 use crate::parse::view_dir;
-use crate::timeline::{Recorder, Timeline};
+use crate::timeline::{Recorder, Stored, Timeline};
 use anyhow::{Context, Result};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 use std::path::Path;
 use tf_demo_parser::demo::data::game_state::{PlayerCondition, PlayerState};
 use tf_demo_parser::demo::gamevent::GameEvent;
@@ -225,9 +226,10 @@ pub fn pass(path: &Path, owner: &str, tick_rate: f64) -> Result<Pass> {
 /// of play, which is plenty for a progress bar and costs nothing.
 pub const PROGRESS_EVERY: u32 = 256;
 
-/// [`pass`], and in the same walk through the demo, a [`Timeline`] of it
-/// sampled every `stride` ticks when one is asked for. Reading a demo is the
-/// slow part, so keeping it costs one walk, not two.
+/// [`pass`], and in the same walk through the demo, its timeline sampled
+/// every `stride` ticks when one is asked for -- already in its stored form,
+/// written as the walk goes rather than held and encoded at the end. Reading
+/// a demo is the slow part, so keeping it costs one walk, not two.
 ///
 /// `on_tick` is told the demo tick every [`PROGRESS_EVERY`] ticks, for a
 /// progress bar.
@@ -237,7 +239,7 @@ pub fn pass_recording(
     tick_rate: f64,
     stride: Option<u32>,
     on_tick: &mut dyn FnMut(u32),
-) -> Result<(Pass, Option<Timeline>)> {
+) -> Result<(Pass, Option<Stored>)> {
     let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
     let demo = Demo::new(&bytes);
     let mut recorder = stride.map(|s| Recorder::new(s, tick_rate));
@@ -264,6 +266,9 @@ pub fn pass_recording(
     // A route per player, still being walked: the points so far, and the tick
     // the demo last carried them.
     let mut routes: HashMap<String, OpenRoute> = HashMap::new();
+    // Each player's SteamID, once, by user id: handed out to every tick's
+    // frame as a shared reference instead of copied per player per tick.
+    let mut ids: HashMap<u16, Rc<str>> = HashMap::new();
 
     while ticker.tick().with_context(|| format!("parsing {}", path.display()))? {
         let deep = ticker.state();
@@ -299,10 +304,29 @@ pub fn pass_recording(
         }
         last = tick;
 
-        // This tick: every player the demo named, by user id.
-        let mut frame = Frame { tick, players: HashMap::new() };
+        // This tick: every player the demo named, by user id. The frame
+        // falling out of the window lends its map, so a demo's hundreds of
+        // thousands of ticks do not each allocate one.
+        let mut players = if recent.len() == depth {
+            recent.pop_front().map(|f| f.players).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+        players.clear();
+        let mut frame = Frame { tick, players };
         for p in &state.players {
             let Some(info) = &p.info else { continue };
+            let user_id = u16::from(info.user_id);
+            // One shared copy of each SteamID for the whole walk, rather than
+            // a fresh String per player per tick.
+            let id = match ids.get(&user_id) {
+                Some(id) if **id == *info.steam_id => id.clone(),
+                _ => {
+                    let id: Rc<str> = Rc::from(info.steam_id.as_str());
+                    ids.insert(user_id, id.clone());
+                    id
+                }
+            };
             // The recorder is always there, whatever `in_pvs` reports of the
             // entity carrying them.
             let here = p.in_pvs || info.steam_id == owner;
@@ -311,7 +335,7 @@ pub fn pass_recording(
             // is set (see `deep`).
             let bits = deep.conds_of(p.entity);
             let seen = Seen {
-                steamid: info.steam_id.clone(),
+                steamid: id,
                 pos: [p.position.x, p.position.y, p.position.z],
                 yaw: p.view_angle,
                 pitch: p.pitch_angle,
@@ -325,11 +349,16 @@ pub fn pass_recording(
                     && !has(&bits, PlayerCondition::Burning),
             };
             if seen.alive && here {
-                let t = out.time.entry(info.steam_id.clone()).or_default();
+                // Looked up by reference; the key is only copied the first
+                // time a player is seen alive.
+                let t = match out.time.get_mut(&*seen.steamid) {
+                    Some(t) => t,
+                    None => out.time.entry(seen.steamid.to_string()).or_default(),
+                };
                 t.alive_ticks += 1;
                 t.scoped_ticks += u32::from(seen.scoped);
             }
-            frame.players.insert(u16::from(info.user_id), seen);
+            frame.players.insert(user_id, seen);
         }
         // Everyone's route. A player the demo is not carrying this tick, or
         // who is dead, has their route closed rather than extended.
@@ -337,7 +366,7 @@ pub fn pass_recording(
             for p in frame.players.values() {
                 let walking = p.alive && p.here;
                 let step = (tick, p.pos[0] as i32, p.pos[1] as i32, p.pos[2] as i32);
-                match routes.get_mut(&p.steamid) {
+                match routes.get_mut(&*p.steamid) {
                     Some((points, last_seen)) => {
                         if !walking || tick.saturating_sub(*last_seen) > PATH_GAP_TICKS {
                             if let Some(done) = close(&p.steamid, points, false) {
@@ -350,16 +379,13 @@ pub fn pass_recording(
                         }
                     }
                     None if walking => {
-                        routes.insert(p.steamid.clone(), (vec![step], tick));
+                        routes.insert(p.steamid.to_string(), (vec![step], tick));
                     }
                     None => {}
                 }
             }
         }
 
-        if recent.len() == depth {
-            recent.pop_front();
-        }
         recent.push_back(frame);
 
         // Kills are appended to the state as they happen, so anything new
@@ -410,7 +436,7 @@ pub fn pass_recording(
                 }
             }
             last_check.insert((by, spy_id), tick);
-            out.spychecks.push(Spycheck { tick, attacker: attacker.steamid.clone(), spy: before.steamid.clone() });
+            out.spychecks.push(Spycheck { tick, attacker: attacker.steamid.to_string(), spy: before.steamid.to_string() });
         }
         events_done = state.events.len();
     }
@@ -424,7 +450,8 @@ pub fn pass_recording(
     // route: it draws as a speck and there are thousands of them.
     out.lives.retain(|l| l.points.len() >= 4);
     out.lives.sort_by_key(|l| (l.from_tick, l.steamid.clone()));
-    Ok((out, recorder.map(Recorder::finish)))
+    let stored = recorder.map(Recorder::finish).transpose()?;
+    Ok((out, stored))
 }
 
 /// Take the points walked so far as a finished route. `None` when there is
@@ -445,7 +472,7 @@ fn close(steamid: &str, points: &mut Vec<Step>, died: bool) -> Option<LifePath> 
 
 /// The SteamID behind a user id, as of the latest tick.
 fn now_id(recent: &VecDeque<Frame>, user_id: u16) -> Option<String> {
-    Some(recent.back()?.players.get(&user_id)?.steamid.clone())
+    Some(recent.back()?.players.get(&user_id)?.steamid.to_string())
 }
 
 /// One death, from the tick it happened on.
@@ -477,8 +504,8 @@ fn death_for(recent: &VecDeque<Frame>, attacker: u16, victim: u16) -> Option<Dea
     let scoped = recent.iter().any(|f| f.players.get(&victim).is_some_and(|p| p.scoped));
     Some(Death {
         tick: now.tick,
-        who: died.steamid.clone(),
-        killer: killer.map(|k| k.steamid.clone()).unwrap_or_default(),
+        who: died.steamid.to_string(),
+        killer: killer.map(|k| k.steamid.to_string()).unwrap_or_default(),
         killer_range,
         killer_dx_deg: killer_offset.map(|(x, _)| x),
         killer_dy_deg: killer_offset.map(|(_, y)| y),
@@ -507,7 +534,8 @@ struct Frame {
 
 /// One player at one tick.
 struct Seen {
-    steamid: String,
+    /// Shared across ticks: see `ids` in `pass_recording`.
+    steamid: Rc<str>,
     pos: Pos,
     yaw: f32,
     pitch: f32,
@@ -580,8 +608,8 @@ fn shot_for(recent: &VecDeque<Frame>, attacker: u16, victim: u16, weapon: &str, 
     Some(Shot {
         tick: now.tick,
         before_tick: then.tick,
-        shooter: shooter.steamid.clone(),
-        victim: victim_now.steamid.clone(),
+        shooter: shooter.steamid.to_string(),
+        victim: victim_now.steamid.to_string(),
         weapon: weapon.to_string(),
         error_deg: error,
         error_before_deg: before,
@@ -738,7 +766,7 @@ mod tests {
         for &(uid, steamid, pos, yaw, team, alive, here) in players {
             map.insert(
                 uid,
-                Seen { steamid: steamid.to_string(), pos, yaw, pitch: 0.0, team, alive, here, scoped: false, invisible: false },
+                Seen { steamid: steamid.into(), pos, yaw, pitch: 0.0, team, alive, here, scoped: false, invisible: false },
             );
         }
         Frame { tick, players: map }

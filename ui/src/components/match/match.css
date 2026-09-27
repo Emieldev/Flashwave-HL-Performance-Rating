@@ -1351,3 +1351,55 @@
   width: 250px;
   z-index: 5;
 }
+
+/* Spychecks (Q27) */
+.spy-panel .hint { margin-top: 4px; }
+.spy-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px 28px;
+  margin: 14px 0 10px;
+}
+.spy-list h3 { margin: 0 0 8px; }
+.spy-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) 2.5ch;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.spy-line .num { text-align: right; font-variant-numeric: tabular-nums; }
+.spy-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spy-team {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: var(--text-hi);
+}
+.spy-team-red { background: var(--red-deep); }
+.spy-team-blue { background: var(--blu-deep); }
+.spy-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.spy-fill { height: 100%; border-radius: 3px; background: var(--faint); }
+.spy-fill-red { background: var(--red); }
+.spy-fill-blue { background: var(--blu); }
+.spy-skipped { font-size: 0.85rem; }
+.spy-table { margin-top: 8px; }
+.spy-row { cursor: pointer; }
+.spy-row:hover td { background: rgba(255, 255, 255, 0.04); }

@@ -9,6 +9,7 @@ pub mod header;
 pub mod link;
 pub mod parse;
 pub mod scan;
+pub mod spy;
 pub mod timeline;
 
 pub use header::DemoHeader;

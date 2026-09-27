@@ -35,6 +35,7 @@ import type {
   Season,
   SeasonsView,
   AimResponse,
+  SpyReport,
   Backup,
   Backups,
   PathRow,
@@ -141,6 +142,8 @@ const realApi = {
   /** What the demo says about one player's aim in one match (PLAN §14).
    *  Without a player it answers for the owner, as it always did. */
   getAim: (logId: number, player?: number) => invoke<AimResponse>("get_aim", { logId, player }),
+  /** Null when the match has no STV timeline to read (Q27). */
+  getSpychecks: (logId: number) => invoke<SpyReport | null>("get_spychecks", { logId }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */

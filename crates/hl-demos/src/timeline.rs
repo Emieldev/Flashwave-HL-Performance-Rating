@@ -31,6 +31,7 @@ use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use tf_demo_parser::demo::data::game_state::{Building, PlayerClassData, PlayerState};
@@ -135,8 +136,9 @@ pub struct ObjectRow {
     pub t: u32,
     /// The demo's entity index: the same object across rows.
     pub entity: u32,
-    /// "cart", "sentry", "dispenser", "teleporter", or "gone".
-    pub kind: String,
+    /// "cart", "sentry", "dispenser", "teleporter", or "gone". Borrowed
+    /// while recording, so a row per object per tick allocates nothing.
+    pub kind: Cow<'static, str>,
     pub pos: [i32; 3],
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builder: Option<u16>,
@@ -150,6 +152,21 @@ pub struct ObjectRow {
     pub building: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sapped: bool,
+}
+
+impl ObjectRow {
+    /// Everything but the time matches: the object has not changed.
+    fn same_as(&self, other: &ObjectRow) -> bool {
+        self.entity == other.entity
+            && self.kind == other.kind
+            && self.pos == other.pos
+            && self.builder == other.builder
+            && self.team == other.team
+            && self.level == other.level
+            && self.health == other.health
+            && self.building == other.building
+            && self.sapped == other.sapped
+    }
 }
 
 /// A demo, decoded from what was stored.
@@ -252,8 +269,94 @@ struct Head {
 
 // ---- Recording ------------------------------------------------------------
 
-/// Builds a [`Timeline`] one tick at a time, from inside a pass that is
-/// already walking the demo.
+/// One player's samples as delta-encoded bytes, written as they arrive.
+///
+/// The recorder used to keep every sample as floats -- 2.4 million of them in
+/// an hour-long demo, 60 MB -- and encode them all at the end, holding both at
+/// once. Writing the deltas as they come keeps a fifth of that, and
+/// [`Timeline::encode`] uses this same writer, so recording and re-encoding
+/// produce the same bytes by construction.
+#[derive(Default)]
+struct SampleWriter {
+    buf: Vec<u8>,
+    count: u64,
+    t: i64,
+    p: [i64; 3],
+    yaw: i64,
+    pitch: i64,
+}
+
+impl SampleWriter {
+    fn push(&mut self, x: &Sample) {
+        put_var(&mut self.buf, (i64::from(x.t) - self.t) as u64);
+        self.t = i64::from(x.t);
+        for (last, pos) in self.p.iter_mut().zip(x.pos) {
+            let v = pos.round() as i64;
+            put_zig(&mut self.buf, v - *last);
+            *last = v;
+        }
+        let y = yaw_step(x.yaw);
+        // The short way round, so turning through 0 is a small step.
+        let mut dy = y - self.yaw;
+        if dy > 32768 {
+            dy -= 65536;
+        } else if dy < -32768 {
+            dy += 65536;
+        }
+        put_zig(&mut self.buf, dy);
+        self.yaw = y;
+        let pi = (x.pitch * PITCH_STEPS).round() as i64;
+        put_zig(&mut self.buf, pi - self.pitch);
+        self.pitch = pi;
+        self.count += 1;
+    }
+}
+
+/// One player's changes as `(dt, kind, value)` bytes, written as they arrive.
+#[derive(Default)]
+struct ChangeWriter {
+    buf: Vec<u8>,
+    count: u64,
+    t: u32,
+}
+
+impl ChangeWriter {
+    fn push(&mut self, ch: &Change) {
+        let c = &mut self.buf;
+        put_var(c, u64::from(ch.t - self.t));
+        self.t = ch.t;
+        c.push(ch.field.kind());
+        match ch.field {
+            Field::Health(v) | Field::MaxHealth(v) => put_var(c, u64::from(v)),
+            Field::Class(v)
+            | Field::Team(v)
+            | Field::Charge(v)
+            | Field::Medigun(v)
+            | Field::Cloak(v)
+            | Field::DisguiseClass(v)
+            | Field::DisguiseTeam(v) => c.push(v),
+            Field::Alive(v) | Field::Here(v) => c.push(u8::from(v)),
+            Field::Conds(bits) => c.extend_from_slice(&bits),
+            Field::HealTarget(v) => put_var(c, v.map_or(0, |s| u64::from(s) + 1)),
+        }
+        self.count += 1;
+    }
+}
+
+/// The sample or change blob: how many players, then each one's count and
+/// bytes.
+fn assemble<'a>(n: usize, tracks: impl Iterator<Item = (u64, &'a [u8])>) -> Vec<u8> {
+    let mut out = Vec::new();
+    put_var(&mut out, n as u64);
+    for (count, bytes) in tracks {
+        put_var(&mut out, count);
+        out.extend_from_slice(bytes);
+    }
+    out
+}
+
+/// Builds a timeline one tick at a time, from inside a pass that is already
+/// walking the demo, writing the stored form as it goes.
 pub struct Recorder {
     stride: u32,
     tick_rate: f64,
@@ -264,13 +367,25 @@ pub struct Recorder {
     people: Vec<Person>,
     slots: HashMap<String, u16>,
     user_ids: HashMap<u16, u16>,
-    tracks: Vec<Track>,
+    samples: Vec<SampleWriter>,
+    changes: Vec<ChangeWriter>,
     /// The last value of each field kind per slot, to record only changes.
     last: Vec<[Option<Field>; 13]>,
     events_done: usize,
-    events: Vec<(u32, GameEvent)>,
-    objects: Vec<ObjectRow>,
+    /// Events as JSON lines, written straight from the parser's copy: no
+    /// clone of each event is kept.
+    events: Vec<u8>,
+    event_count: usize,
+    events_unwritten: usize,
+    objects: Vec<u8>,
+    object_count: usize,
     object_last: HashMap<u32, ObjectRow>,
+    // Scratch reused every tick instead of allocated: the players this tick
+    // as (slot, index into the parser's list), entity -> slot for heal
+    // targets, and which objects were seen.
+    rows: Vec<(u16, usize)>,
+    by_entity: HashMap<u32, u16>,
+    seen: Vec<u32>,
 }
 
 impl Recorder {
@@ -284,24 +399,44 @@ impl Recorder {
             people: Vec::new(),
             slots: HashMap::new(),
             user_ids: HashMap::new(),
-            tracks: Vec::new(),
+            samples: Vec::new(),
+            changes: Vec::new(),
             last: Vec::new(),
             events_done: 0,
             events: Vec::new(),
+            event_count: 0,
+            events_unwritten: 0,
             objects: Vec::new(),
+            object_count: 0,
             object_last: HashMap::new(),
+            rows: Vec::new(),
+            by_entity: HashMap::new(),
+            seen: Vec::new(),
         }
     }
 
-    fn slot(&mut self, steamid: &str, name: &str) -> u16 {
-        if let Some(&s) = self.slots.get(steamid) {
-            return s;
+    /// The slot for this player. Almost always answered from their user id
+    /// with one string compare, not a hash of the SteamID per player per
+    /// tick.
+    fn slot(&mut self, user_id: u16, steamid: &str, name: &str) -> u16 {
+        if let Some(&s) = self.user_ids.get(&user_id) {
+            if self.people[usize::from(s)].steamid == steamid {
+                return s;
+            }
         }
-        let s = self.people.len() as u16;
-        self.people.push(Person { steamid: steamid.to_string(), name: name.to_string() });
-        self.slots.insert(steamid.to_string(), s);
-        self.tracks.push(Track::default());
-        self.last.push([None; 13]);
+        let s = match self.slots.get(steamid) {
+            Some(&s) => s,
+            None => {
+                let s = self.people.len() as u16;
+                self.people.push(Person { steamid: steamid.to_string(), name: name.to_string() });
+                self.slots.insert(steamid.to_string(), s);
+                self.samples.push(SampleWriter::default());
+                self.changes.push(ChangeWriter::default());
+                self.last.push([None; 13]);
+                s
+            }
+        };
+        self.user_ids.insert(user_id, s);
         s
     }
 
@@ -310,7 +445,7 @@ impl Recorder {
         let k = usize::from(field.kind());
         if self.last[i][k] != Some(field) {
             self.last[i][k] = Some(field);
-            self.tracks[i].changes.push(Change { t: self.t, field });
+            self.changes[i].push(&Change { t: self.t, field });
         }
     }
 
@@ -340,20 +475,21 @@ impl Recorder {
         self.last_tick = Some(tick);
 
         // Everyone this tick, by entity, to resolve heal targets to slots.
-        let mut by_entity: HashMap<u32, u16> = HashMap::new();
-        let mut rows = Vec::with_capacity(state.players.len());
-        for p in &state.players {
+        let mut rows = std::mem::take(&mut self.rows);
+        rows.clear();
+        self.by_entity.clear();
+        for (i, p) in state.players.iter().enumerate() {
             let Some(info) = &p.info else { continue };
             if info.steam_id.is_empty() || info.steam_id == "BOT" {
                 continue;
             }
-            let slot = self.slot(&info.steam_id, &info.name);
-            self.user_ids.insert(u16::from(info.user_id), slot);
-            by_entity.insert(u32::from(p.entity), slot);
-            rows.push((slot, p));
+            let slot = self.slot(u16::from(info.user_id), &info.steam_id, &info.name);
+            self.by_entity.insert(u32::from(p.entity), slot);
+            rows.push((slot, i));
         }
         let sample_now = self.t.is_multiple_of(self.stride);
-        for (slot, p) in rows {
+        for &(slot, i) in &rows {
+            let p = &state.players[i];
             let here = p.in_pvs || p.info.as_ref().is_some_and(|i| i.steam_id == owner);
             let alive = p.state == PlayerState::Alive;
             self.set(slot, Field::Here(here));
@@ -372,7 +508,7 @@ impl Recorder {
                 PlayerClassData::Medic { charge, medigun, target, .. } => {
                     self.set(slot, Field::Charge(*charge));
                     self.set(slot, Field::Medigun(*medigun as u8));
-                    let t = target.and_then(|e| by_entity.get(&u32::from(e)).copied());
+                    let t = target.and_then(|e| self.by_entity.get(&u32::from(e)).copied());
                     self.set(slot, Field::HealTarget(t));
                 }
                 PlayerClassData::Spy { disguise_team, disguise_class, cloak } => {
@@ -383,7 +519,7 @@ impl Recorder {
                 PlayerClassData::None => {}
             }
             if sample_now && alive {
-                self.tracks[usize::from(slot)].samples.push(Sample {
+                self.samples[usize::from(slot)].push(&Sample {
                     t: self.t,
                     pos: [p.position.x, p.position.y, p.position.z],
                     yaw: p.view_angle,
@@ -391,21 +527,32 @@ impl Recorder {
                 });
             }
         }
+        self.rows = rows;
 
         for (_, event) in state.events.iter().skip(self.events_done) {
-            self.events.push((self.t, event.clone()));
+            let at = self.events.len();
+            let written = write!(self.events, "{}\t", self.t).is_ok()
+                && serde_json::to_writer(&mut self.events, event).is_ok();
+            if written {
+                self.events.push(b'\n');
+                self.event_count += 1;
+            } else {
+                // Never expected; counted and reported rather than lost quietly.
+                self.events.truncate(at);
+                self.events_unwritten += 1;
+            }
         }
         self.events_done = state.events.len();
 
         if sample_now {
-            let mut seen = Vec::new();
+            self.seen.clear();
             for (entity, objective) in &state.objectives {
                 // The cart is the only objective the parser tracks.
                 let Some(cart) = objective.as_cart() else { continue };
                 let row = ObjectRow {
                     t: self.t,
                     entity: u32::from(*entity),
-                    kind: "cart".into(),
+                    kind: Cow::Borrowed("cart"),
                     pos: round3([cart.position.x, cart.position.y, cart.position.z]),
                     builder: None,
                     team: None,
@@ -414,12 +561,12 @@ impl Recorder {
                     building: false,
                     sapped: false,
                 };
-                seen.push(row.entity);
+                self.seen.push(row.entity);
                 self.object(row);
             }
             for (entity, b) in &state.buildings {
                 let Some(row) = building_row(self.t, u32::from(*entity), b) else { continue };
-                seen.push(row.entity);
+                self.seen.push(row.entity);
                 self.object(row);
             }
             // Anything that was here and is not any more: destroyed, or a
@@ -427,44 +574,52 @@ impl Recorder {
             let gone: Vec<u32> = self
                 .object_last
                 .iter()
-                .filter(|(e, r)| r.kind != "gone" && !seen.contains(e))
+                .filter(|(e, r)| r.kind != "gone" && !self.seen.contains(e))
                 .map(|(e, _)| *e)
                 .collect();
             for e in gone {
                 let mut row = self.object_last[&e].clone();
                 row.t = self.t;
-                row.kind = "gone".into();
+                row.kind = Cow::Borrowed("gone");
                 self.object(row);
             }
         }
     }
 
+    /// Record an object's row if anything but its time differs from its last.
     fn object(&mut self, row: ObjectRow) {
-        let same = self.object_last.get(&row.entity).is_some_and(|last| {
-            let mut a = last.clone();
-            a.t = row.t;
-            a == row
-        });
-        if !same {
-            self.object_last.insert(row.entity, row.clone());
-            self.objects.push(row);
+        if self.object_last.get(&row.entity).is_some_and(|last| last.same_as(&row)) {
+            return;
         }
+        if serde_json::to_writer(&mut self.objects, &row).is_ok() {
+            self.objects.push(b'\n');
+            self.object_count += 1;
+        }
+        self.object_last.insert(row.entity, row);
     }
 
-    pub fn finish(self) -> Timeline {
+    /// The stored form, ready for the database.
+    pub fn finish(self) -> Result<Stored> {
+        if self.events_unwritten > 0 {
+            tracing::warn!(unwritten = self.events_unwritten, "some demo events could not be written to the timeline");
+        }
         let mut user_ids: Vec<(u16, u16)> = self.user_ids.into_iter().collect();
         user_ids.sort_unstable();
-        Timeline {
+        let n = self.people.len();
+        let s = assemble(n, self.samples.iter().map(|w| (w.count, w.buf.as_slice())));
+        let c = assemble(n, self.changes.iter().map(|w| (w.count, w.buf.as_slice())));
+        let head = serde_json::to_string(&Head { people: self.people, user_ids, seams: self.seams })?;
+        Ok(Stored {
             version: TIMELINE_VERSION,
             tick_rate: self.tick_rate,
             stride: self.stride,
-            seams: self.seams,
-            people: self.people,
-            tracks: self.tracks,
-            user_ids,
-            objects: self.objects,
-            events: self.events,
-        }
+            raw_bytes: s.len() + c.len() + self.objects.len() + self.events.len(),
+            head,
+            samples: deflate(&s)?,
+            changes: deflate(&c)?,
+            objects: deflate(&self.objects)?,
+            events: deflate(&self.events)?,
+        })
     }
 }
 
@@ -483,7 +638,7 @@ fn building_row(t: u32, entity: u32, b: &Building) -> Option<ObjectRow> {
     Some(ObjectRow {
         t,
         entity,
-        kind: kind.into(),
+        kind: Cow::Borrowed(kind),
         pos: round3([pos.x, pos.y, pos.z]),
         builder: Some(u16::from(builder)),
         team: Some(team as u8),
@@ -681,61 +836,28 @@ fn inflate(z: &[u8]) -> Result<Vec<u8>> {
 
 impl Timeline {
     pub fn encode(&self) -> Result<Stored> {
-        // Samples: per player, a count and then deltas from the one before.
-        let mut s = Vec::new();
-        put_var(&mut s, self.tracks.len() as u64);
-        for track in &self.tracks {
-            put_var(&mut s, track.samples.len() as u64);
-            let (mut t, mut p, mut yaw, mut pitch) = (0i64, [0i64; 3], 0i64, 0i64);
-            for x in &track.samples {
-                put_var(&mut s, (i64::from(x.t) - t) as u64);
-                t = i64::from(x.t);
-                for (last, pos) in p.iter_mut().zip(x.pos) {
-                    let v = pos.round() as i64;
-                    put_zig(&mut s, v - *last);
-                    *last = v;
-                }
-                let y = yaw_step(x.yaw);
-                // The short way round, so turning through 0 is a small step.
-                let mut dy = y - yaw;
-                if dy > 32768 {
-                    dy -= 65536;
-                } else if dy < -32768 {
-                    dy += 65536;
-                }
-                put_zig(&mut s, dy);
-                yaw = y;
-                let pi = (x.pitch * PITCH_STEPS).round() as i64;
-                put_zig(&mut s, pi - pitch);
-                pitch = pi;
-            }
-        }
-
-        // Changes: per player, (dt, kind, value).
-        let mut c = Vec::new();
-        put_var(&mut c, self.tracks.len() as u64);
-        for track in &self.tracks {
-            put_var(&mut c, track.changes.len() as u64);
-            let mut t = 0u32;
-            for ch in &track.changes {
-                put_var(&mut c, u64::from(ch.t - t));
-                t = ch.t;
-                c.push(ch.field.kind());
-                match ch.field {
-                    Field::Health(v) | Field::MaxHealth(v) => put_var(&mut c, u64::from(v)),
-                    Field::Class(v)
-                    | Field::Team(v)
-                    | Field::Charge(v)
-                    | Field::Medigun(v)
-                    | Field::Cloak(v)
-                    | Field::DisguiseClass(v)
-                    | Field::DisguiseTeam(v) => c.push(v),
-                    Field::Alive(v) | Field::Here(v) => c.push(u8::from(v)),
-                    Field::Conds(bits) => c.extend_from_slice(&bits),
-                    Field::HealTarget(v) => put_var(&mut c, v.map_or(0, |s| u64::from(s) + 1)),
-                }
-            }
-        }
+        // The same writers the recorder uses, so the two cannot disagree.
+        let n = self.tracks.len();
+        let samples: Vec<SampleWriter> = self
+            .tracks
+            .iter()
+            .map(|tr| {
+                let mut w = SampleWriter::default();
+                tr.samples.iter().for_each(|x| w.push(x));
+                w
+            })
+            .collect();
+        let changes: Vec<ChangeWriter> = self
+            .tracks
+            .iter()
+            .map(|tr| {
+                let mut w = ChangeWriter::default();
+                tr.changes.iter().for_each(|c| w.push(c));
+                w
+            })
+            .collect();
+        let s = assemble(n, samples.iter().map(|w| (w.count, w.buf.as_slice())));
+        let c = assemble(n, changes.iter().map(|w| (w.count, w.buf.as_slice())));
 
         let mut o = Vec::new();
         for row in &self.objects {

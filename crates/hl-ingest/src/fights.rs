@@ -394,6 +394,9 @@ pub fn kill_credits(raw: &RawLog) -> Vec<(i64, u32, f64)> {
 /// 6: each kill's credit, shared with whoever damaged the victim (Q6b).
 pub const VERSION: i64 = 6;
 
+/// Logs written per transaction by [`derive_all`].
+const GROUP: usize = 100;
+
 #[derive(Debug, Clone, Copy, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeriveSummary {
@@ -412,6 +415,9 @@ pub async fn derive_all(
     let done: HashSet<i64> = if all { HashSet::new() } else { db.fight_logs(VERSION).await?.into_iter().collect() };
     let todo: Vec<i64> = ids.iter().copied().filter(|id| !done.contains(id)).collect();
     let mut derived = 0;
+    // Written a group at a time, in one transaction each (see
+    // `replace_fights_many`): a commit per log cost more than the work.
+    let mut group: Vec<hl_db::FightsWrite> = Vec::with_capacity(GROUP);
     for (i, log_id) in todo.iter().copied().enumerate() {
         progress(i, todo.len());
         let Some(zip) = db.rawlog(log_id).await? else { continue };
@@ -424,9 +430,15 @@ pub async fn derive_all(
             .enumerate()
             .filter_map(|(seq, s)| s.map(|(k, _)| (seq as i64, k.diff, k.adv)))
             .collect();
-        db.replace_fight_stats(log_id, VERSION, &rows, &situations).await?;
-        db.replace_kill_credits(log_id, &kill_credits(&raw)).await?;
+        group.push(hl_db::FightsWrite { log_id, rows, situations, credits: kill_credits(&raw) });
         derived += 1;
+        if group.len() == GROUP {
+            db.replace_fights_many(VERSION, &group).await?;
+            group.clear();
+        }
+    }
+    if !group.is_empty() {
+        db.replace_fights_many(VERSION, &group).await?;
     }
     progress(todo.len(), todo.len());
     Ok(DeriveSummary { derived, total: ids.len() })

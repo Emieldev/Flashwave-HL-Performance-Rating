@@ -7,6 +7,7 @@ import { ContextBadge, kindReason } from "../ContextBadge";
 import { BoxScore } from "./BoxScore";
 import { Fold } from "../Fold";
 import { DemoPanel } from "./DemoPanel";
+import { Spychecks } from "./Spychecks";
 import { StvPrompt } from "./StvPrompt";
 import { AnalysisPanel } from "../analysis/AnalysisPanel";
 import { Matchups } from "./Matchups";
@@ -87,6 +88,9 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
           <Fold id="demos">
             <DemoPanel d={q.data} />
             <StvPrompt d={q.data} />
+          </Fold>
+          <Fold id="spychecks">
+            <Spychecks d={q.data} />
           </Fold>
           <Fold id="rounds">
             <RoundTimeline d={shown} />

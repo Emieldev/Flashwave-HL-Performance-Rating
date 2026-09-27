@@ -585,6 +585,13 @@ pub struct AimResponse {
     pub career_life: Option<hl_db::LifeTotals>,
 }
 
+/// Q27: hits on fully cloaked Spies, from the match's kept STV timelines.
+/// `None` when it has none to read.
+#[tauri::command]
+pub async fn get_spychecks(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_ingest::spy::SpyReport>> {
+    Ok(hl_ingest::spy::for_log(&state.db, log_id).await?)
+}
+
 #[tauri::command]
 pub async fn get_aim(
     state: State<'_, AppState>,

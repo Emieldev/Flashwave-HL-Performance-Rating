@@ -339,9 +339,13 @@ async fn main() -> Result<()> {
             let db = Db::connect(&db_path).await?;
             let started = std::time::Instant::now();
             let stats = hl_ingest::reprocess(&db, print_progress).await?;
+            let derived = started.elapsed().as_secs_f64();
             let kills = hl_ingest::kills::rederive_all(&db, print_progress).await?;
             println!();
-            println!("{kills} kills re-derived from stored raw logs");
+            println!(
+                "{kills} kills re-derived from stored raw logs in {:.1}s (the rest took {derived:.1}s)",
+                started.elapsed().as_secs_f64() - derived
+            );
             println!("rebuilt in {:.1}s", started.elapsed().as_secs_f64());
             if let Some(me) = db.get_me().await? {
                 classify(&db, me).await?;
@@ -868,21 +872,23 @@ async fn main() -> Result<()> {
             // An unreadable rate means a broken header; TF2 servers run at 66.67.
             let rate = header.tick_rate().unwrap_or(66.67);
             let started = std::time::Instant::now();
-            let (pass, tl) = hl_demos::aim::pass_recording(file, &owner, rate, Some(stride), &mut |_| {})?;
+            let (pass, stored) = hl_demos::aim::pass_recording(file, &owner, rate, Some(stride), &mut |_| {})?;
+            // The timeline is written during the walk, so this is both.
             let walked = started.elapsed().as_secs_f64();
-            let tl = tl.context("the pass was asked for a timeline and gave none")?;
-            let started = std::time::Instant::now();
-            let stored = tl.encode()?;
-            let encoded = started.elapsed().as_secs_f64();
+            let stored = stored.context("the pass was asked for a timeline and gave none")?;
             let started = std::time::Instant::now();
             let back = hl_demos::timeline::Timeline::decode(&stored)?;
             let decoded = started.elapsed().as_secs_f64();
+            // Stored and read back, then stored again: the same bytes, or
+            // recording and re-encoding have drifted apart.
+            let again = back.encode()?;
+            let tl = &back;
 
             let samples: usize = tl.tracks.iter().map(|t| t.samples.len()).sum();
             let changes: usize = tl.tracks.iter().map(|t| t.changes.len()).sum();
             let mb = |b: usize| b as f64 / 1e6;
             println!(
-                "{} · {} ticks at {rate:.1}/s · stride {stride} · walked in {walked:.1}s, encoded in {encoded:.2}s, decoded in {decoded:.2}s",
+                "{} · {} ticks at {rate:.1}/s · stride {stride} · walked and recorded in {walked:.1}s, decoded in {decoded:.2}s",
                 header.map, header.ticks
             );
             println!("{} people · {} stretch(es) · {samples} samples · {changes} changes · {} objects · {} events", tl.people.len(), tl.seams.len(), tl.objects.len(), tl.events.len());
@@ -897,12 +903,12 @@ async fn main() -> Result<()> {
                 mb(stored.head.len())
             );
 
-            // Stored and read back, nothing may have moved beyond rounding.
-            let same = back.people == tl.people
-                && back.objects == tl.objects
-                && back.events.len() == tl.events.len()
-                && back.tracks.iter().zip(&tl.tracks).all(|(a, b)| a.changes == b.changes && a.samples.len() == b.samples.len());
-            println!("round trip: {}", if same { "identical" } else { "DIFFERS" });
+            let same = again.samples == stored.samples
+                && again.changes == stored.changes
+                && again.objects == stored.objects
+                && again.events == stored.events
+                && again.head == stored.head;
+            println!("round trip: {}", if same { "identical, byte for byte" } else { "DIFFERS" });
             // How the demo was written: a server records every tick, a
             // client only as often as it was sent updates.
             if let Some(track) = tl.tracks.iter().max_by_key(|t| t.samples.len()) {
@@ -924,6 +930,54 @@ async fn main() -> Result<()> {
             println!("scoped share, pass against timeline: {} players, worst difference {:.4}", agree.scoped.len(), worst);
             for (who, a, b) in snipers {
                 println!("  {who:<22} {:>6.1}% {:>6.1}%", a * 100.0, b * 100.0);
+            }
+            Ok(())
+        }
+
+        ["spychecks", path, rest @ ..] => {
+            // Q27's spike: hits on fully cloaked Spies in one demo, listed
+            // with the demo's own tick so each can be checked in game with
+            // `demo_gototick`. A file on disk only; no database.
+            let file = std::path::Path::new(path);
+            let bytes = std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+            let header = hl_demos::DemoHeader::parse(&bytes)?;
+            drop(bytes);
+            let rate = header.tick_rate().unwrap_or(66.67);
+            let (_, stored) = hl_demos::aim::pass_recording(file, "", rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+            let tl = hl_demos::timeline::Timeline::decode(&stored.context("no timeline")?)?;
+            let found = hl_demos::spy::spychecks(&tl);
+            let s = found.skipped;
+            println!(
+                "{} · {} spychecks · not counted: {} fading in, {} blinking, {} marked (fire, jarate, milk, bleed), {} within the cooldown",
+                header.map,
+                found.checks.len(),
+                s.fading,
+                s.blinking,
+                s.marked,
+                s.cooldown
+            );
+            let name = |slot: usize| tl.people[slot].name.chars().take(20).collect::<String>();
+            let mut rows: Vec<(usize, usize, usize)> = (0..tl.people.len()).map(|p| (p, found.by(p), found.on(p))).filter(|r| r.1 + r.2 > 0).collect();
+            rows.sort_by_key(|r| std::cmp::Reverse((r.1, r.2)));
+            println!("\n{:<21} {:>6} {:>6}", "player", "checks", "found");
+            for (p, by, on) in rows {
+                println!("{:<21} {by:>6} {on:>6}", name(p));
+            }
+            if rest.contains(&"--list") {
+                println!("\n{:>8} {:>7}  {:<21} {:<21} {:>4}", "tick", "time", "by", "spy", "dmg");
+                for c in &found.checks {
+                    let secs = tl.seconds(c.t) as u32;
+                    println!(
+                        "{:>8} {:>4}:{:02}  {:<21} {:<21} {:>4}{}",
+                        tl.tick_of(c.t),
+                        secs / 60,
+                        secs % 60,
+                        name(c.attacker),
+                        name(c.spy),
+                        c.damage,
+                        if c.killed { "  killed" } else { "" }
+                    );
+                }
             }
             Ok(())
         }
