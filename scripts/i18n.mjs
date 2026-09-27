@@ -29,6 +29,10 @@ const write = process.argv.includes("--write");
 const LITERALS = [
   // App.tsx nav
   "Matches", "Profile", "Teammates", "Teams", "Players",
+  // StvGate.tsx: what each STV-only panel would show
+  "Whether a Spy was cloaked is only in a demo: every hit on an invisible Spy, who found them, and when.",
+  "Where the cart was is only in a demo: every second BLU was up players and the cart stood still, and how far it moved after each won fight.",
+  "Where all eighteen players stood, second by second, is only in the STV demo: who anchors, who rotates, which callouts each player lives in.",
   // AnalysisPanel.tsx tabs
   "Kill map", "Play-by-play", "Fights", "Damage and kills by class", "Aim", "Timeline",
   // ProfilePage.tsx kind filter, and ContextBadge's KIND_PLURAL

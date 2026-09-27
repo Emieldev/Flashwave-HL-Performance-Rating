@@ -1013,6 +1013,17 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["link-demo", log_id, path] => {
+            // A demo linked to a match by hand, as dropping it on the match
+            // page does. On a copy, with --db.
+            let db = Db::connect(&db_path).await?;
+            let tf = db.get_config().await?.tf_path.context("set the TF2 folder first")?;
+            let me = db.get_me().await?;
+            let got = hl_ingest::demo_import::link_to_log(&db, std::path::Path::new(&tf), std::path::Path::new(path), log_id.parse()?, me, |s| eprintln!("  {s}")).await?;
+            println!("linked {} (demo {}): {} of {} log kills line up, {} players in both", got.file_name, got.demo_id, got.kills_matched, got.log_kills, got.players_shared);
+            Ok(())
+        }
+
         ["import-demo", path] => {
             // Q18: a match from a demo alone, into the database -- a copy,
             // with --db, like every write here.

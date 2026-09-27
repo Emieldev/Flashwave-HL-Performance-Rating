@@ -1375,3 +1375,15 @@ export interface PositionsView {
     zones: Array<{ zone: string; seconds: number }>;
   }>;
 }
+
+/** A demo dropped on a match page and linked to it. */
+export interface DemoLinked {
+  demoId: number;
+  fileName: string;
+  stv: boolean;
+  /** The log's kills the demo holds, lined up at one offset. */
+  killsMatched: number;
+  logKills: number;
+  playersShared: number;
+  path: string;
+}

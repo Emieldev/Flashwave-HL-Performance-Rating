@@ -1512,3 +1512,36 @@
 .stv-banner-icon { color: var(--accent); font-size: 0.8rem; }
 .stv-fetch-btn { flex: none; }
 @media (max-width: 620px) { .stv-banner { flex-wrap: wrap; } }
+
+/* Demo linking: download on the left, drop on the right (Flashy) */
+.demo-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.demo-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.demo-source .hint { margin: 0; }
+.demo-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  min-height: 130px;
+  padding: 14px 16px;
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.demo-drop:hover, .demo-drop:focus-visible { border-color: var(--line-2); background: rgba(var(--muted-rgb), 0.06); outline: none; }
+.demo-drop.over { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+.demo-drop.busy { cursor: progress; }
+.demo-drop-icon { font-size: 1.6rem; color: var(--accent); line-height: 1; }
+.demo-drop .hint { max-width: 360px; margin: 0; }
+.demo-drop-ok { margin: 4px 0 0; font-size: 0.85rem; color: var(--ok); }

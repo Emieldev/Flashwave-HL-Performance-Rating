@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 
 /// How imported logs are linked to their demo: kept through every rescan.
 pub const METHOD: &str = "import";
+/// How a demo dropped onto a match page is linked to it: also kept.
+pub const MANUAL: &str = "manual";
 
 /// The log id an imported demo is stored under.
 pub fn log_id_for(file_name: &str) -> i64 {
@@ -213,9 +215,183 @@ pub async fn derive(db: &Db, w: &hl_rating::Weights, me: Option<SteamId>, mut pr
     Ok(())
 }
 
+/// What linking a demo to a match found.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DemoLinked {
+    pub demo_id: i64,
+    pub file_name: String,
+    pub stv: bool,
+    /// The log's kills the demo holds, found at one offset.
+    pub kills_matched: usize,
+    pub log_kills: usize,
+    /// Players in both.
+    pub players_shared: usize,
+    pub path: String,
+}
+
+/// The demo belongs to another match, or no match at all.
+#[derive(Debug)]
+pub struct WrongDemo(pub String);
+
+impl std::fmt::Display for WrongDemo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for WrongDemo {}
+
+/// The shift from demo seconds to the log's own clock that lines up the
+/// most kills, by the same killer on the same victim: `(shift, matched)`.
+/// Each log kill counts once.
+pub fn best_shift(demo: &[(f64, u32, u32)], log: &[(i64, u32, u32)]) -> Option<(i64, usize)> {
+    let mut votes: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for &(s, killer, victim) in demo {
+        for &(at, k, v) in log {
+            if k == killer && v == victim {
+                *votes.entry((at as f64 - s).round() as i64).or_default() += 1;
+            }
+        }
+    }
+    // A shift and its neighbours: the two clocks tick in whole seconds, so
+    // the true shift splits its votes across adjacent values.
+    let score = |c: i64| (c - 1..=c + 1).map(|x| votes.get(&x).copied().unwrap_or(0)).sum::<usize>();
+    let best = votes.keys().copied().max_by_key(|c| (score(*c), votes[c]))?;
+    let matched = log
+        .iter()
+        .filter(|&&(at, k, v)| demo.iter().any(|&(s, dk, dv)| dk == k && dv == v && ((at as f64 - s) - best as f64).abs() <= 2.0))
+        .count();
+    Some((best, matched))
+}
+
+/// Link a demo the owner picked (dropped on a match page) to that match.
+///
+/// Checked before anything is stored: the demo's map is the log's, it
+/// shares most of its players, and at least a handful of its kills line up
+/// with the log's at one shift -- which is also what places the demo on the
+/// log's clock, so aim and every demo panel line up exactly.
+pub async fn link_to_log(
+    db: &Db,
+    tf: &Path,
+    file: &Path,
+    log_id: i64,
+    me: Option<SteamId>,
+    mut progress: impl FnMut(&'static str),
+) -> Result<DemoLinked> {
+    progress("Copying the demo");
+    let path = place(tf, file)?;
+    let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let bytes = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+    let header = hl_demos::DemoHeader::parse(&bytes)?;
+    drop(bytes);
+    let json: serde_json::Value = serde_json::from_str(&db.raw_log(log_id).await?.context("this match is not stored")?)?;
+    let log_map = json.pointer("/info/map").and_then(|m| m.as_str()).unwrap_or_default().to_string();
+    if !log_map.is_empty() && hl_demos::map_base(&header.map) != hl_demos::map_base(&log_map) {
+        return Err(WrongDemo(format!("{file_name} is on {}, and this match is on {log_map}.", header.map)).into());
+    }
+    let rate = header.tick_rate().unwrap_or(66.67);
+    let is_stv = header.server.is_empty() || header.recorder.to_ascii_lowercase().contains("sourcetv");
+    let owner = if is_stv { String::new() } else { me.map(|m| m.to_steamid3()).unwrap_or_default() };
+
+    progress("Reading the demo");
+    let read_path = path.clone();
+    let (stored, tl) = tokio::task::spawn_blocking(move || -> Result<_> {
+        let (_, stored) = hl_demos::aim::pass_recording(&read_path, &owner, rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+        let stored = stored.context("the demo gave no timeline")?;
+        let tl = hl_demos::timeline::Timeline::decode(&stored)?;
+        Ok((stored, tl))
+    })
+    .await??;
+
+    progress("Checking it is this match");
+    let log_players: std::collections::HashSet<u32> = json
+        .get("players")
+        .and_then(|p| p.as_object())
+        .map(|o| o.keys().filter_map(|k| SteamId::parse(k).ok()).map(|s| s.account_id()).collect())
+        .unwrap_or_default();
+    let demo_players: std::collections::HashSet<u32> = tl.people.iter().filter_map(|p| crate::aim::account_of(&p.steamid)).collect();
+    let shared = log_players.intersection(&demo_players).count();
+    if shared < 6 {
+        return Err(WrongDemo(format!("{file_name} has {shared} of this match's players in it: it is from another match.")).into());
+    }
+    let demo_kills: Vec<(f64, u32, u32)> = tl
+        .events
+        .iter()
+        .filter_map(|(t, e)| {
+            let hl_demos::timeline::GameEvent::PlayerDeath(d) = e else { return None };
+            let victim = crate::aim::account_of(&tl.people[tl.slot_of_user(d.user_id)?].steamid)?;
+            let killer = crate::aim::account_of(&tl.people[tl.slot_of_user(d.attacker)?].steamid)?;
+            (killer != victim).then_some((tl.seconds(*t), killer, victim))
+        })
+        .collect();
+    let log_kills: Vec<(i64, u32, u32)> = db.kills_for_log(log_id).await?.iter().map(|k| (k.at_raw, k.killer, k.victim)).collect();
+    let Some((shift, matched)) = best_shift(&demo_kills, &log_kills).filter(|(_, m)| *m >= 5) else {
+        return Err(WrongDemo(format!("{file_name} has this match's players, but none of its kills line up with the log's: a different match between the same teams?")).into());
+    };
+
+    progress("Linking the demo");
+    crate::index_demos(db, tf).await?;
+    let here = path.canonicalize()?;
+    let demo_id = db
+        .demos_named(&file_name)
+        .await?
+        .into_iter()
+        .find(|(_, p)| Path::new(p).canonicalize().ok().as_ref() == Some(&here))
+        .map(|(id, _)| id)
+        .context("the demo was not found by the folder scan")?;
+    // The log's raw clock is the server's; the demo starts `shift` seconds
+    // into it, and the log clock's offset turns that into UTC.
+    let clock = db.log_clock_offset(log_id).await?.unwrap_or(0);
+    db.set_demo_start(demo_id, (shift + clock) as f64).await?;
+    let share = (matched as f64 / log_kills.len().max(1) as f64).min(1.0);
+    db.add_demo_link(demo_id, log_id, MANUAL, share).await?;
+    db.put_timeline(
+        demo_id,
+        &TimelineRow {
+            version: stored.version,
+            tick_rate: stored.tick_rate,
+            stride: i64::from(stored.stride),
+            head: stored.head.clone(),
+            samples: stored.samples.clone(),
+            changes: stored.changes.clone(),
+            objects: stored.objects.clone(),
+            events: stored.events.clone(),
+            raw_bytes: stored.raw_bytes as i64,
+            stored_bytes: stored.stored_bytes() as i64,
+        },
+    )
+    .await?;
+    if let Some(me) = me {
+        progress("Reading aim from the demo");
+        if let Err(e) = crate::aim::derive_log(db, me, log_id).await {
+            tracing::warn!(log_id, error = %format!("{e:#}"), "reading aim from a linked demo failed");
+        }
+    }
+    Ok(DemoLinked {
+        demo_id,
+        file_name,
+        stv: is_stv,
+        kills_matched: matched,
+        log_kills: log_kills.len(),
+        players_shared: shared,
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kills_line_up_at_one_shift() {
+        // The demo started 1000 s into the log's clock; one kill a second
+        // off, and one that is in neither.
+        let demo = [(10.0, 1, 2), (40.0, 3, 4), (95.0, 2, 1), (300.0, 9, 9)];
+        let log = [(1010, 1, 2), (1041, 3, 4), (1095, 2, 1), (1500, 5, 6)];
+        assert_eq!(best_shift(&demo, &log), Some((1000, 3)));
+        assert_eq!(best_shift(&[], &log), None);
+    }
 
     #[test]
     fn the_same_file_is_the_same_log() {

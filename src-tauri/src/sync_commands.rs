@@ -1023,6 +1023,29 @@ pub async fn get_team(state: State<'_, AppState>, team_id: i64) -> CmdResult<Opt
     Ok(hl_ingest::leagues::team(&state.db, team_id).await?)
 }
 
+/// A demo dropped on a match page, linked to that match (Flashy). Checked
+/// against the log first: its map, its players, and its kills lining up.
+#[tauri::command]
+pub async fn link_demo(state: State<'_, AppState>, log_id: i64, path: String) -> CmdResult<hl_ingest::demo_import::DemoLinked> {
+    let _guard = BusyGuard::acquire(&state.busy).ok_or_else(|| CmdError::new("busy", "A sync is running; link the demo when it has finished."))?;
+    let tf = state
+        .db
+        .get_config()
+        .await?
+        .tf_path
+        .ok_or_else(|| CmdError::new("missing_config", "Set your TF2 folder in Settings first: the demo is kept in tf/demos."))?;
+    let me = state.db.get_me().await?;
+    match hl_ingest::demo_import::link_to_log(&state.db, std::path::Path::new(&tf), std::path::Path::new(&path), log_id, me, |_| {}).await {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            if let Some(w) = e.downcast_ref::<hl_ingest::demo_import::WrongDemo>() {
+                return Err(CmdError::new("wrong_demo", w.to_string()));
+            }
+            Err(e.into())
+        }
+    }
+}
+
 /// Q18: a match from a demo alone, for a server that wrote no log. Runs the
 /// passes a sync would for it, so it holds the sync's turn while it does.
 #[tauri::command]

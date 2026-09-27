@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
-import { errorMessage, type DemoView, type MatchDetail } from "../../api/types";
+import { open } from "@tauri-apps/plugin-dialog";
+import { api, inTauri } from "../../api/client";
+import { errorMessage, type DemoLinked, type DemoView, type MatchDetail } from "../../api/types";
 import { copy } from "../../lib/toast";
 import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { locale, t, tx } from "../../lib/i18n";
 
 /**
- * The demos behind this match, and how to jump into them.
+ * Demo linking: the demos behind this match, and two ways to add one --
+ * the SourceTV demo from demos.tf, or a demo of your own dropped on the page
+ * (Flashy), checked against the log before it is linked.
  *
  * TF2 cannot open a demo and seek in one console line (`demo_gototick` runs
  * before the demo has loaded), so the flow is two steps: open the demo once
@@ -46,20 +49,11 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
   const hasStv = d.demos.some((x) => x.kind === "stv" && !x.deleted);
   const canFetch = d.demosTfId !== null && !hasStv;
 
-  if (d.demos.length === 0 && !canFetch) {
-    return (
-      <section className="panel demo-panel">
-        <h2>{t("Demo")}</h2>
-        <p className="hint" style={{ marginTop: 6 }}>{t("No recording of this match on this machine, and demos.tf has none either.")}</p>
-      </section>
-    );
-  }
-
   return (
     <section className="panel demo-panel">
       <header className="demo-head">
         <div>
-          <h2>{t("Demo")}</h2>
+          <h2>{t("Demo linking")}</h2>
           {d.demos.length > 0 && (
             <p className="hint">{tx("Open the demo once, then click any marker on the round timeline to copy its{0}{1}. Jumps land 5 seconds early, so you see the lead-up.", { "0": " ", "1": <code>{t("demo_gototick")}</code> })}</p>
           )}
@@ -70,32 +64,168 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
         <DemoRow key={demo.demoId} demo={demo} />
       ))}
 
-      {canFetch && (
-        <div className="stv-fetch">
-          <div>
-            <strong>{t("SourceTV demo on demos.tf")}</strong>
-            <p className="hint">{t("All 18 players, not just your view. Stopwatch matches are usually split into one demo per half, and demos.tf links one of them, so this may cover only part of the match.")}</p>
-          </div>
-          {download ? (
-            <div className="dl-progress">
-              <div className="progress-track">
-                <div
-                  className={download.total ? "progress-fill" : "progress-fill indeterminate"}
-                  style={download.total ? { width: `${Math.round((download.bytes / download.total) * 100)}%` } : undefined}
-                />
-              </div>
-              <span className="hint">
-                {mb(download.bytes)}
-                {download.total ? t(" of {0}", { "0": mb(download.total) }) : ""}
-              </span>
-            </div>
+      <div className="demo-sources">
+        <div className="demo-source">
+          <strong>{t("SourceTV demo on demos.tf")}</strong>
+          {canFetch ? (
+            <>
+              <p className="hint">{t("All 18 players, not just your view. Stopwatch matches are usually split into one demo per half, and demos.tf links one of them, so this may cover only part of the match.")}</p>
+              {download ? (
+                <div className="dl-progress">
+                  <div className="progress-track">
+                    <div
+                      className={download.total ? "progress-fill" : "progress-fill indeterminate"}
+                      style={download.total ? { width: `${Math.round((download.bytes / download.total) * 100)}%` } : undefined}
+                    />
+                  </div>
+                  <span className="hint">
+                    {mb(download.bytes)}
+                    {download.total ? t(" of {0}", { "0": mb(download.total) }) : ""}
+                  </span>
+                </div>
+              ) : (
+                <button className="primary" onClick={() => void fetchStv()}>{t("Download to tf/demos/stv")}</button>
+              )}
+            </>
           ) : (
-            <button onClick={() => void fetchStv()}>{t("Download to tf/demos/stv")}</button>
+            <p className="hint">{hasStv ? t("This match's SourceTV demo is on this machine.") : t("demos.tf has no SourceTV demo for this match.")}</p>
           )}
+          {error && <p className="error">{error}</p>}
         </div>
-      )}
-      {error && <p className="error">{error}</p>}
+        <DropZone d={d} />
+      </div>
     </section>
+  );
+}
+
+/**
+ * Drop a .dem here, or click to pick one: the demo is checked against this
+ * match (map, players, kills lining up) and linked if it is this match's.
+ * Tauri hands dropped files over as paths through its own drag-and-drop
+ * event, not the page's, so the zone listens to the window and checks the
+ * drop landed on it.
+ */
+function DropZone({ d }: { d: MatchDetail }) {
+  const qc = useQueryClient();
+  const zone = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [got, setGot] = useState<DemoLinked | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function link(path: string) {
+    if (!path.toLowerCase().endsWith(".dem")) {
+      setError(t("That is not a .dem file."));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setGot(null);
+    try {
+      const linked = await api.linkDemo(d.logId, path);
+      setGot(linked);
+      for (const key of [["match", d.logId], ["spychecks", d.logId], ["cart", d.logId], ["positions", d.logId], ["aim"], ["paths", d.logId]]) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const linkRef = useRef(link);
+  linkRef.current = link;
+
+  useEffect(() => {
+    if (!inTauri) return;
+    let off: (() => void) | undefined;
+    let dead = false;
+    const within = (x: number, y: number) => {
+      const r = zone.current?.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const [cx, cy] = [x / dpr, y / dpr];
+      return !!r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+    };
+    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
+      getCurrentWebview()
+        .onDragDropEvent((e) => {
+          const p = e.payload;
+          if (p.type === "over") setOver(within(p.position.x, p.position.y));
+          else if (p.type === "drop") {
+            const hit = within(p.position.x, p.position.y);
+            setOver(false);
+            if (hit && p.paths.length > 0) void linkRef.current(p.paths[0]);
+          } else setOver(false);
+        })
+        .then((u) => {
+          if (dead) u();
+          else off = u;
+        }),
+    );
+    return () => {
+      dead = true;
+      off?.();
+    };
+  }, []);
+
+  async function pick() {
+    if (!inTauri) {
+      // The browser build has no paths; a made-up one shows the flow.
+      void link("D:\\demos\\match-20260925-2211-koth_proot_b5b.dem");
+      return;
+    }
+    const chosen = await open({ multiple: false, directory: false, filters: [{ name: t("TF2 demo"), extensions: ["dem"] }] });
+    if (typeof chosen === "string") void link(chosen);
+  }
+
+  return (
+    <div
+      ref={zone}
+      className={over ? "demo-drop over" : busy ? "demo-drop busy" : "demo-drop"}
+      role="button"
+      tabIndex={0}
+      onClick={() => !busy && void pick()}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && !busy && void pick()}
+      // The browser build: the page's own drop, which has names, not paths.
+      onDragOver={(e) => {
+        if (inTauri) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => !inTauri && setOver(false)}
+      onDrop={(e) => {
+        if (inTauri) return;
+        e.preventDefault();
+        setOver(false);
+        const f = e.dataTransfer.files[0];
+        if (f) void link(`D:\\demos\\${f.name}`);
+      }}
+    >
+      {busy ? (
+        <>
+          <span className="spin" aria-hidden style={{ display: "inline-block" }} />
+          <strong>{t("Reading the demo…")}</strong>
+          <span className="hint">{t("Checking it is this match, then linking it.")}</span>
+        </>
+      ) : (
+        <>
+          <span className="demo-drop-icon" aria-hidden>⤓</span>
+          <strong>{over ? t("Drop it to link it") : t("Drop a demo here")}</strong>
+          <span className="hint">{t("Your own recording or an STV from elsewhere, or click to pick a file. It is checked against this match first.")}</span>
+        </>
+      )}
+      {got && !busy && (
+        <p className="demo-drop-ok">
+          {tx("Linked {0}: {1} of the log's {2} kills line up, {3} players in both.", {
+            "0": <code>{got.fileName}</code>,
+            "1": got.killsMatched,
+            "2": got.logKills,
+            "3": got.playersShared,
+          })}
+        </p>
+      )}
+      {error && !busy && <p className="error">{error}</p>}
+    </div>
   );
 }
 

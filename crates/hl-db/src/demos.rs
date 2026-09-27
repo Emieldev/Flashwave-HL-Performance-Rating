@@ -420,9 +420,10 @@ impl Db {
     /// they are exact by construction and not derived from the clock.
     pub async fn replace_demo_links(&self, links: &[(i64, i64, &str, f64)]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
-        // demos.tf's links and imported demos' (Q18) are not the folder
-        // scan's to redo: neither is found by placing logs on the clock.
-        sqlx::query("DELETE FROM demo_link WHERE method NOT IN ('demos.tf', 'import')").execute(&mut *tx).await?;
+        // demos.tf's links, imported demos' (Q18) and demos dropped on a
+        // match page are not the folder scan's to redo: none is found by
+        // placing logs on the clock.
+        sqlx::query("DELETE FROM demo_link WHERE method NOT IN ('demos.tf', 'import', 'manual')").execute(&mut *tx).await?;
         for (demo_id, log_id, method, share) in links {
             sqlx::query(
                 "INSERT INTO demo_link (demo_id, log_id, method, log_share) VALUES (?1, ?2, ?3, ?4)

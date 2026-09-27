@@ -41,6 +41,7 @@ import type {
   LeagueView,
   TeamView,
   DemoImported,
+  DemoLinked,
   CartView,
   Backup,
   Backups,
@@ -188,6 +189,8 @@ const realApi = {
   importLog: (text: string) => invoke<Imported>("import_log", { text }),
   /** Q18: a match from a demo alone, for a server that wrote no log. */
   importDemo: (path: string) => invoke<DemoImported>("import_demo", { path }),
+  /** A demo dropped on a match page, linked to that match once it checks out. */
+  linkDemo: (logId: number, path: string) => invoke<DemoLinked>("link_demo", { logId, path }),
 
   /** STV download events. Returns a function that unsubscribes all three. */
   onStv: async (h: StvHandlers): Promise<UnlistenFn> => {

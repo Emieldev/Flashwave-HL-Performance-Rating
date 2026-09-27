@@ -23,6 +23,7 @@ import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
   SpyReport,
+  DemoLinked,
   CalloutFile,
   PositionsView,
   LeagueView,
@@ -882,6 +883,12 @@ export const mockApi: Api = {
     });
     return delay<PositionsView | null>({ map: f.map, zones: f.zones.length, draft: f.draft, players });
   },
+
+  linkDemo: (_logId: number, path: string) =>
+    delay<DemoLinked>(
+      { demoId: 99, fileName: path.split(/[\\/]/).pop() ?? path, stv: true, killsMatched: 241, logKills: 262, playersShared: 18, path },
+      1200,
+    ),
 
   getMatchAnalysis: (logId: number) =>
     delay(
