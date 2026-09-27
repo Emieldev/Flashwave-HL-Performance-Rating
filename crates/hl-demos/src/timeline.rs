@@ -182,6 +182,9 @@ pub struct Timeline {
     pub tracks: Vec<Track>,
     /// The demo's user ids, which events use, to slots.
     pub user_ids: Vec<(u16, u16)>,
+    /// Entity indices to slots, every pairing seen: a capture names its
+    /// cappers by entity (Q18). Empty for timelines recorded before.
+    pub entities: Vec<(u32, u16)>,
     pub objects: Vec<ObjectRow>,
     pub events: Vec<(u32, GameEvent)>,
 }
@@ -189,6 +192,11 @@ pub struct Timeline {
 impl Timeline {
     pub fn slot_of(&self, steamid: &str) -> Option<usize> {
         self.people.iter().position(|p| p.steamid == steamid)
+    }
+
+    /// The slots that have played on entity `entity`.
+    pub fn slots_of_entity(&self, entity: u32) -> impl Iterator<Item = usize> + '_ {
+        self.entities.iter().filter(move |(e, _)| *e == entity).map(|(_, s)| usize::from(*s))
     }
 
     pub fn slot_of_user(&self, user_id: u16) -> Option<usize> {
@@ -265,6 +273,9 @@ struct Head {
     people: Vec<Person>,
     user_ids: Vec<(u16, u16)>,
     seams: Vec<(u32, u32)>,
+    /// Entity index to slot, every pairing seen. Older timelines have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    entities: Vec<(u32, u16)>,
 }
 
 // ---- Recording ------------------------------------------------------------
@@ -367,6 +378,7 @@ pub struct Recorder {
     people: Vec<Person>,
     slots: HashMap<String, u16>,
     user_ids: HashMap<u16, u16>,
+    entities: std::collections::BTreeSet<(u32, u16)>,
     samples: Vec<SampleWriter>,
     changes: Vec<ChangeWriter>,
     /// The last value of each field kind per slot, to record only changes.
@@ -398,6 +410,7 @@ impl Recorder {
             seams: Vec::new(),
             people: Vec::new(),
             slots: HashMap::new(),
+            entities: std::collections::BTreeSet::new(),
             user_ids: HashMap::new(),
             samples: Vec::new(),
             changes: Vec::new(),
@@ -485,6 +498,7 @@ impl Recorder {
             }
             let slot = self.slot(u16::from(info.user_id), &info.steam_id, &info.name);
             self.by_entity.insert(u32::from(p.entity), slot);
+            self.entities.insert((u32::from(p.entity), slot));
             rows.push((slot, i));
         }
         let sample_now = self.t.is_multiple_of(self.stride);
@@ -608,7 +622,7 @@ impl Recorder {
         let n = self.people.len();
         let s = assemble(n, self.samples.iter().map(|w| (w.count, w.buf.as_slice())));
         let c = assemble(n, self.changes.iter().map(|w| (w.count, w.buf.as_slice())));
-        let head = serde_json::to_string(&Head { people: self.people, user_ids, seams: self.seams })?;
+        let head = serde_json::to_string(&Head { people: self.people, user_ids, seams: self.seams, entities: self.entities.into_iter().collect() })?;
         Ok(Stored {
             version: TIMELINE_VERSION,
             tick_rate: self.tick_rate,
@@ -875,6 +889,7 @@ impl Timeline {
             people: self.people.clone(),
             user_ids: self.user_ids.clone(),
             seams: self.seams.clone(),
+            entities: self.entities.clone(),
         })?;
         Ok(Stored {
             version: self.version,
@@ -987,6 +1002,7 @@ impl Timeline {
             people: head.people,
             tracks,
             user_ids: head.user_ids,
+            entities: head.entities,
             objects,
             events,
         })
@@ -1029,6 +1045,7 @@ mod tests {
                 Track::default(),
             ],
             user_ids: vec![(3, 0), (7, 1)],
+            entities: vec![(2, 0), (5, 1)],
             objects: vec![ObjectRow {
                 t: 4,
                 entity: 99,

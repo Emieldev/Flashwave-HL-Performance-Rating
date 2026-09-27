@@ -233,6 +233,7 @@ pub fn run() {
             sync_commands::failed_logs,
             sync_commands::retry_failed,
             sync_commands::import_log,
+            sync_commands::import_demo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");

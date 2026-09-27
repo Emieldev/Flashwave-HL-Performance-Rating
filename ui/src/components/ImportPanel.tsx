@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { errorMessage, type Imported } from "../api/types";
 import { formatDate } from "../lib/format";
 import { t, tx } from "../lib/i18n";
+import { DemoImport } from "./DemoImport";
 
 /**
  * Logs that would not import, and a way to add one by hand.
@@ -130,6 +131,8 @@ export function ImportPanel() {
         </p>
       )}
       {error && <p className="error" style={{ marginTop: 10 }}>{error}</p>}
+
+      <DemoImport />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import seasonsSniper from "./fixtures/seasons_sniper.json";
 import fightsSniper from "./fixtures/fights_sniper.json";
 import type {
   SpyReport,
+  DemoImported,
   CartView,
   Analysis,
   AppConfig,
@@ -788,6 +789,22 @@ export const mockApi: Api = {
       ],
     });
   },
+
+  importDemo: (path: string) =>
+    delay<DemoImported>(
+      {
+        logId: -781931655,
+        title: `${path.split(/[\\/]/).pop()?.replace(/\.dem$/, "")} (from the demo)`,
+        map: "koth_proot_b5b",
+        playedAt: 1790375521,
+        players: 18,
+        yours: true,
+        rounds: 3,
+        kills: 262,
+        path,
+      },
+      900,
+    ),
 
   getMatchAnalysis: (logId: number) =>
     delay(

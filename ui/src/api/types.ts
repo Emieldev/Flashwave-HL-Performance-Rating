@@ -1254,3 +1254,11 @@ export interface CartFight {
   movingS: number;
   jumpTick: number;
 }
+
+/** Q18: a match built from a demo alone. */
+export interface DemoImported extends Imported {
+  rounds: number;
+  kills: number;
+  /** Where the demo is kept now (copied into tf/demos when picked from elsewhere). */
+  path: string;
+}

@@ -385,8 +385,14 @@ pub async fn import_log(
         .logstf_log(log_id)
         .await
         .with_context(|| format!("logs.tf could not give us log {log_id}"))?;
+    store_log_json(db, w, log_id, &json).await
+}
+
+/// Store a log from its logs.tf JSON -- fetched, or built from a demo (Q18)
+/// -- and rate it.
+pub async fn store_log_json(db: &Db, w: &hl_rating::Weights, log_id: i64, json: &str) -> Result<Imported> {
     let value: serde_json::Value =
-        serde_json::from_str(&json).with_context(|| format!("log {log_id} is not valid JSON"))?;
+        serde_json::from_str(json).with_context(|| format!("log {log_id} is not valid JSON"))?;
     let log = normalize(log_id, &value)?;
 
     // Index it from the log itself, so a log no index ever listed still has
@@ -397,10 +403,10 @@ pub async fn import_log(
         map: log.map.as_deref(),
         played_at: log.played_at,
         player_count: Some(log.players.len() as i64),
-        raw_json: &json,
+        raw_json: json,
     }])
     .await?;
-    db.store_raw_log(log_id, &json).await?;
+    db.store_raw_log(log_id, json).await?;
     db.write_match(&log).await?;
     db.set_heuristic_format(log_id, classify(&log)).await?;
     recompute_supersessions(db).await?;

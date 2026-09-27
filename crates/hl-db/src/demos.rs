@@ -420,7 +420,9 @@ impl Db {
     /// they are exact by construction and not derived from the clock.
     pub async fn replace_demo_links(&self, links: &[(i64, i64, &str, f64)]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
-        sqlx::query("DELETE FROM demo_link WHERE method <> 'demos.tf'").execute(&mut *tx).await?;
+        // demos.tf's links and imported demos' (Q18) are not the folder
+        // scan's to redo: neither is found by placing logs on the clock.
+        sqlx::query("DELETE FROM demo_link WHERE method NOT IN ('demos.tf', 'import')").execute(&mut *tx).await?;
         for (demo_id, log_id, method, share) in links {
             sqlx::query(
                 "INSERT INTO demo_link (demo_id, log_id, method, log_share) VALUES (?1, ?2, ?3, ?4)
@@ -435,6 +437,24 @@ impl Db {
         }
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Set when a demo started, where the folder scan could not tell (an
+    /// STV's file time is when it was downloaded). A rescan keeps it.
+    pub async fn set_demo_start(&self, demo_id: i64, start_utc: f64) -> Result<()> {
+        sqlx::query("UPDATE demo SET start_utc = ?2 WHERE demo_id = ?1").bind(demo_id).bind(start_utc).execute(self.pool()).await?;
+        Ok(())
+    }
+
+    /// Logs a demo is linked to, `(log_id, share of the log it covers)`.
+    pub async fn links_of_demo(&self, demo_id: i64) -> Result<Vec<(i64, f64)>> {
+        Ok(sqlx::query_as("SELECT log_id, log_share FROM demo_link WHERE demo_id = ?1").bind(demo_id).fetch_all(self.pool()).await?)
+    }
+
+    /// Demo rows with this file name, `(demo_id, path)`: the folder scan
+    /// writes paths with mixed separators, so callers compare them on disk.
+    pub async fn demos_named(&self, file_name: &str) -> Result<Vec<(i64, String)>> {
+        Ok(sqlx::query_as("SELECT demo_id, path FROM demo WHERE file_name = ?1").bind(file_name).fetch_all(self.pool()).await?)
     }
 
     pub async fn add_demo_link(&self, demo_id: i64, log_id: i64, method: &str, share: f64) -> Result<()> {

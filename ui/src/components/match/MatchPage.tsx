@@ -159,7 +159,8 @@ function Header({ d }: { d: MatchDetail }) {
   const [myScore, theirScore] = mine === "Blue" ? [d.blueScore, d.redScore] : [d.redScore, d.blueScore];
 
   const etf2lId = d.context?.etf2lMatchId ?? d.etf2lMatchId;
-  const links: Array<[string, string]> = [["logs.tf", `https://logs.tf/${d.logId}`]];
+  // An imported demo's log (Q18) has a negative id and is on no website.
+  const links: Array<[string, string]> = d.logId > 0 ? [["logs.tf", `https://logs.tf/${d.logId}`]] : [];
   if (d.demosTfId) links.push(["demos.tf", `https://demos.tf/${d.demosTfId}`]);
   if (etf2lId) links.push(["ETF2L", `https://etf2l.org/matches/${etf2lId}/`]);
   // The logs this upload was combined from used to be a whole panel of

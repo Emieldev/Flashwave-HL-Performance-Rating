@@ -151,6 +151,13 @@ async fn store(db: &Db, log_id: i64, log: RawLog) -> Result<usize> {
     Ok(kills.len())
 }
 
+/// Re-derive one stored raw log's kills and chat, for a log that did not
+/// come through the fetch (Q18: one built from a demo).
+pub async fn derive_log(db: &Db, log_id: i64) -> Result<usize> {
+    let zip = db.rawlog(log_id).await?.with_context(|| format!("log {log_id} has no raw log"))?;
+    store(db, log_id, rawlog::parse(&rawlog::unzip(&zip)?)).await
+}
+
 /// A parsed raw log moved into logs.tf's round-time frame, in place.
 async fn shifted(db: &Db, log_id: i64, mut log: RawLog) -> Result<RawLog> {
     let logstf_starts = logstf_round_starts(db, log_id).await?;

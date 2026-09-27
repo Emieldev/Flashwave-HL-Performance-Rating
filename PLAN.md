@@ -1439,7 +1439,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q16b~~ | ~~**Aim for everyone, not just you**~~ | large | **Done, and measured on a real match.** The pass took a SteamID and answered for that one player; it reads every player the demo carried now, and `demo_aim`, `demo_death` and `demo_life` each gained the player they are about (migration 0024, pass version 11). On log 4122234 that is **311 kills across 17 players, up from 29** — the same file, read properly. Three things had to be decided rather than coded. **Which demo speaks for whom:** a POV demo records its own client's view angles as the player made them, while an STV takes everyone's off the wire, quantized; so a match with both is read twice, the POV for the owner and the STV for the other seventeen, and neither player gets the second-best number available. **What a demo may not vouch for:** a POV demo carries other players only while its recorder could see them, so every shot and death now records whether the demo held that player across the whole window, the averages ignore the ones it did not, and a POV demo contributes nobody but its recorder. **That crosshair error is a hitscan measure:** the per-player means make this unmissable — the two Snipers read 1.7° and 3.2° at ~1,250 units, the Scouts 9-10° at ~270, a Soldier 27.8° with the Black Box and a sentry kill 28.1°, because a rocket and a sentry never had to be on the head. The numbers are right; calling them aim for those classes would not be, so the tab says which is which. The Aim tab now answers for whoever is selected, and when a match has only your own POV it says that is why, with the STV download a click away, instead of looking empty. **Over the whole history:** 25 matches re-read in 396 s, **1,405 kills stored against 54 shooters** where there were 508 against one — the four matches with an STV give 16 to 18 players each, the twenty-one with only a POV give the owner, which is the rule working. **Found by running it:** the route code has subtracted `tick - last_seen` since pass version 7, and a recording that spans two matches restarts its tick counter. A release build wrapped the subtraction to a huge number, which closed the route and so looked correct; a debug build panics. The seam is handled for what it is now — every open route closed and the frame buffer cleared — because a route joined across a map restart draws a line between two maps. |
 | ~~Q22~~ | ~~**Ubers and numbers in the rounds panel** (Flashy)~~ | medium | **Done.** Each round now carries two strips under its lanes: who was up players and who held the uber, across that round only, on the same axis as its caps and picks — a round lost while a player down for most of it reads very differently from one lost even. The hover says the share ("up a player 42% of the round, down 23%"). It reuses the kill-by-kill panel's analysis query, so when both are open it costs one fetch, not two. |
 | ~~Q17~~ | ~~**Captures weighed by what they cost** (ivg)~~ | medium | **Done, model v8.** Measured twice. First with `hl situation --caps`, against what the numbers already predicted: on stopwatch a cap into 6+ alive is worth +32.8% over its position and one into 3-5 alive +13.8%; on KOTH there is no gradient at all; and the *class* half of the suggestion does not survive splitting by mode -- every class's captures sit at 23-30% on stopwatch. Then as a rating component: `caps_contested` counts, for every capture a player is credited with, the enemies alive to stop it, read from the raw log the moment before it went in. Beside the flat count the fit calls it "unclear" in all nine classes -- it does not *add* to caps. But *replacing* caps with it, at the same weight, in the four models that use caps, is **never worse on the full sample or the held-out one**: scout 74.0 -> 74.1 (held-out +0.5), pyro 76.6 -> 76.7 (+2.0), engineer 75.2 -> 76.0 (+1.0), medic 76.0 -> 76.3 (+0.0). Small, consistently signed, and it fixes the named unfairness -- walking onto a wiped point now adds nothing -- at no cost, so it is applied. **The price:** the component needs the raw server log, so the ~200 oldest logs that exist only on logs.tf lose it rather than keep a flat count, as `untraded_deaths` already does. `docs/rating-formula.md` is updated and still matches the TOML on all 62 weights. |
-| Q18 | **Manual demo upload** (beowulf) | large | For a match where the server had no logs.tf config, so no log exists at all. Nothing like it today: demos are found by scanning the TF2 folder and are *linked to a log*, and the whole app is built on the log being the record. A demo with no log has no scoreboard, no class times and no player list from logs.tf — all of that would have to come out of the demo itself, which is a parser this project half has (`hl-demos` reads positions, angles and kills). **To settle before building:** whether such a match joins the rating pool at all. It cannot be rated against the same components without the same inputs, and quietly rating it on fewer would break the one rule the rating has. Likely answer: import it, show the kill map and the demo-derived views, and mark it unrated. |
+| ~~Q18~~ | ~~**Manual demo upload**~~ (beowulf) | large | **Done: the demo becomes the log.** `hl_demos::synth` writes a server log (spawns, kills with positions, damage, assists, ubers, Medic deaths, rounds, captures) and a logs.tf summary from the timeline, so every pass runs unchanged. Checked against the real log of a match its STV covers whole (swiftwater): kills 309/309, deaths 313/311, damage 98.6%, ubers, drops, headshots, backstabs and caps exact, heals 91%. Settings > Import > A match with no log; `hl import-demo`. See §23. |
 | ~~Q19~~ | ~~**The match page has too much furniture** (Flashy)~~ | small | **Done.** The "Combined from N logs" panel is gone: the part logs are links in the header beside logs.tf, demos.tf and ETF2L, which is what they always were. The "Reading" select is gone as a panel too and now sits in the scoreboard's header, next to the numbers it scopes. Two panels removed from the top of every combined match. Titles trimmed where they were sentences. |
 | ~~Q20~~ | ~~**Fewer explanations, everywhere** (Flashy)~~ | small | **Done, second pass.** The long `title=` tooltips were the same prose hidden behind a hover — the matchup one was 300 characters and is now one line. Seasons, teammates, the scoreboard and the profile's empty state all lost their paragraphs. The rule stands: cut what explains the thing the reader is looking at, keep what they cannot infer. |
 
@@ -2198,3 +2198,47 @@ owner played on. Every other team is unknown.
    a percentile against the owner's pool, which the page says.
 
 **Order:** part 1 as its own release; part 2 together with Q14b.
+
+---
+
+## 23. A match from a demo alone (Q18, beowulf)
+
+> A match where the server had no logs.tf config, so no log exists at all.
+
+**The approach: make the missing log, rather than a second app.** Every page
+and pass is built on a log, so the demo is turned into one
+(`hl_demos::synth`): the server-log lines `rawlog` reads, and the logs.tf
+summary `normalize` reads. The demo's own events are what a server logger
+writes from, so an STV holds nearly everything:
+
+| from the demo | becomes |
+|---|---|
+| alive/class changes | `spawned as`, `changed role to`, time on class |
+| `player_death` | `killed ... with` (positions from the timeline), assists |
+| `player_hurt` | `triggered "damage"` |
+| `player_chargedeployed`, charge meter | `chargedeployed`, `chargeready`, `chargeended` |
+| `medic_death` | `medic_death_ex`, drops |
+| round active / setup / win | `Round_Start`, `Round_Setup_End`, `Round_Win` |
+| `teamplay_point_captured` | `pointcaptured` with cappers (entity -> slot, now kept in the timeline) |
+| patient's health rising while a Medic targets them | healing |
+
+**Checked against a real log.** The swiftwater STV covers its log whole
+(1,844 s against 1,808). Three rules had to be found to match logs.tf:
+Dead Ringer deaths (`death_flags` 0x20) are nobody's; kills after a round's
+win are not counted; a backstab's hit counts only the health there was.
+`player_healed` fires for a tenth of a Medic's heals, so healing is read
+from health instead. Result, real/synth: kills 309/309, deaths 311/313,
+assists 168/163, damage 124,508/122,706, heals 80,574/73,383 (dispenser heals
+are not read), ubers 38/38, drops, headshots, backstabs and caps exact.
+
+**Storing it.** Log id `-(fnv(file name) mod 1e9) - 1`: negative, so it can
+never meet a logs.tf id, and the same file re-imports over itself. The demo
+must live where the folder scan looks (a scan drops rows it cannot find), so
+one picked from elsewhere is copied into `tf/demos`. Its link is method
+`import`, which rescans keep, and the demo's start is set from its name
+(`match-YYYYMMDD-HHMM`, Demo Support's stamp) so the aim pass lines the two
+up exactly (clock offset 0). A demo the scan links to any logs.tf log is
+refused: the match exists, and a second copy would count it twice.
+
+Imported on a copy: koth_proot, 3 rounds, 262 kills, 18 players rated, aim
+read for 239 kills, in 10 s.

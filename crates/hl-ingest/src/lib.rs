@@ -48,5 +48,6 @@ pub mod demostf;
 pub mod spy;
 pub mod spawns;
 pub mod cart;
+pub mod demo_import;
 pub use demos::{fetch_stv, index_demos, DemoIndexSummary, StvFetched};
 pub use rating::{load_profile, rate_all, rated_classes, RateSummary};

@@ -36,6 +36,7 @@ import type {
   SeasonsView,
   AimResponse,
   SpyReport,
+  DemoImported,
   CartView,
   Backup,
   Backups,
@@ -173,6 +174,8 @@ const realApi = {
   retryFailed: (logId?: number) => invoke<number>("retry_failed", { logId: logId ?? null }),
   /** Fetch one log now, by id or logs.tf link. */
   importLog: (text: string) => invoke<Imported>("import_log", { text }),
+  /** Q18: a match from a demo alone, for a server that wrote no log. */
+  importDemo: (path: string) => invoke<DemoImported>("import_demo", { path }),
 
   /** STV download events. Returns a function that unsubscribes all three. */
   onStv: async (h: StvHandlers): Promise<UnlistenFn> => {

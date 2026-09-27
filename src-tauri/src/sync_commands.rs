@@ -974,6 +974,33 @@ pub async fn import_log(state: State<'_, AppState>, text: String) -> CmdResult<h
     Ok(hl_ingest::import_log(&state.db, &state.sources, &weights, log_id).await?)
 }
 
+/// Q18: a match from a demo alone, for a server that wrote no log. Runs the
+/// passes a sync would for it, so it holds the sync's turn while it does.
+#[tauri::command]
+pub async fn import_demo(state: State<'_, AppState>, path: String) -> CmdResult<hl_ingest::demo_import::DemoImported> {
+    let _guard = BusyGuard::acquire(&state.busy).ok_or_else(|| CmdError::new("busy", "A sync is running; import the demo when it has finished."))?;
+    let tf = state
+        .db
+        .get_config()
+        .await?
+        .tf_path
+        .ok_or_else(|| CmdError::new("missing_config", "Set your TF2 folder in Settings first: the demo is kept in tf/demos."))?;
+    let (weights, _) = hl_rating::Weights::load(&state.db_path.with_file_name("weights.toml"));
+    let me = state.db.get_me().await?;
+    let tf = std::path::Path::new(&tf);
+    let got = match hl_ingest::demo_import::import(&state.db, &weights, tf, std::path::Path::new(&path), me, |_| {}).await {
+        Ok(g) => g,
+        Err(e) => {
+            if let Some(a) = e.downcast_ref::<hl_ingest::demo_import::AlreadyLogged>() {
+                return Err(CmdError::new("already_logged", a.to_string()));
+            }
+            return Err(e.into());
+        }
+    };
+    hl_ingest::demo_import::derive(&state.db, &weights, me, |_| {}).await?;
+    Ok(got)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

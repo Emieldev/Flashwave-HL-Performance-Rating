@@ -996,6 +996,46 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["synth", path, out] => {
+            // Q18: a log from a demo alone, written out to compare against a
+            // real one. A file only; no database.
+            let file = std::path::Path::new(path);
+            let header = hl_demos::DemoHeader::parse(&std::fs::read(file)?)?;
+            let rate = header.tick_rate().unwrap_or(66.67);
+            let (_, stored) = hl_demos::aim::pass_recording(file, "", rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+            let tl = hl_demos::timeline::Timeline::decode(&stored.context("no timeline")?)?;
+            let start = std::fs::metadata(file)?.modified()?.duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64 - tl.seconds(tl.end()) as i64;
+            let s = hl_demos::synth::synthesize(&tl, &header.map, start, "synthesized");
+            let out = std::path::Path::new(out);
+            std::fs::write(out.with_extension("log"), &s.text)?;
+            std::fs::write(out.with_extension("json"), serde_json::to_string_pretty(&s.json)?)?;
+            println!("{} · {} rounds · {} kills · {} people · {} lines", header.map, s.rounds, s.kills, s.players, s.text.lines().count());
+            Ok(())
+        }
+
+        ["import-demo", path] => {
+            // Q18: a match from a demo alone, into the database -- a copy,
+            // with --db, like every write here.
+            let db = Db::connect(&db_path).await?;
+            let tf = db.get_config().await?.tf_path.context("set the TF2 folder first: the demo is kept in tf/demos")?;
+            let (w, _) = hl_rating::Weights::load(&db_path.with_file_name("weights.toml"));
+            let me = db.get_me().await?;
+            let started = std::time::Instant::now();
+            let got = hl_ingest::demo_import::import(&db, &w, std::path::Path::new(&tf), std::path::Path::new(path), me, |s| eprintln!("  {s}")).await?;
+            hl_ingest::demo_import::derive(&db, &w, me, |s| eprintln!("  {s}")).await?;
+            println!(
+                "log {} · {} · {} rounds · {} kills · {} players{} · {:.1}s",
+                got.log.log_id,
+                got.log.map.as_deref().unwrap_or("?"),
+                got.rounds,
+                got.kills,
+                got.log.players,
+                if got.log.yours { " · yours" } else { "" },
+                started.elapsed().as_secs_f64()
+            );
+            Ok(())
+        }
+
         ["spychecks", path, rest @ ..] => {
             // Q27's spike: hits on fully cloaked Spies in one demo, listed
             // with the demo's own tick so each can be checked in game with
