@@ -16,6 +16,11 @@
 # The updater points at .../releases/latest/download/latest.json, which
 # GitHub keeps aimed at the newest release, so publishing is all it takes.
 
+param(
+    # Write the manifest for a build already made, without building again.
+    [switch]$SkipBuild
+)
+
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $keyPath = Join-Path $env:USERPROFILE ".flashwave-keys\flashwave.key"
@@ -23,22 +28,27 @@ $keyPath = Join-Path $env:USERPROFILE ".flashwave-keys\flashwave.key"
 if (-not (Test-Path $keyPath)) {
     Write-Error "No signing key at $keyPath. Without it the build cannot be updated to. Restore it from your backup, or generate a new one and accept that everyone already on an old version has to reinstall by hand."
 }
-$env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content $keyPath -Raw).Trim()
-# The key has no password, but tauri still tries to decrypt it and will sit
-# waiting on a prompt that a non-interactive build can never answer -- the
-# build then finishes without signing anything and nothing says why. Saying
-# "no password" out loud is what stops that.
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+$key = (Get-Content $keyPath -Raw).Trim()
 
 $version = (Get-Content (Join-Path $root "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json).version
 Write-Host "Building Flashwave.tf $version (signed)" -ForegroundColor Cyan
 
-Push-Location $root
-try {
-    & npm.cmd run build
-    if ($LASTEXITCODE -ne 0) { Write-Error "build failed" }
-} finally {
-    Pop-Location
+# The key has no password, but tauri still tries to decrypt it, and without
+# being told "no password" it sits on a prompt a non-interactive build can
+# never answer. Telling it means an environment variable that exists and is
+# empty -- which `$env:X = ""` cannot make: in Windows PowerShell that
+# *deletes* the variable. It hung the 0.5.0 build for five minutes with
+# nothing on screen. ProcessStartInfo keeps an empty value, so the build is
+# started through it.
+if (-not $SkipBuild) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo "npm.cmd", "run build"
+    $psi.WorkingDirectory = $root
+    $psi.UseShellExecute = $false
+    $psi.EnvironmentVariables["TAURI_SIGNING_PRIVATE_KEY"] = $key
+    $psi.EnvironmentVariables["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = ""
+    $build = [System.Diagnostics.Process]::Start($psi)
+    $build.WaitForExit()
+    if ($build.ExitCode -ne 0) { Write-Error "build failed" }
 }
 
 $nsis = Join-Path $root "target\release\bundle\nsis"
@@ -49,9 +59,18 @@ if (-not $sig) { Write-Error "no .sig beside the installer -- the build did not 
 
 # The notes shown in the update card: the release notes' first paragraph.
 $notesFile = Join-Path $root "docs\release-$version.md"
-$notes = if (Test-Path $notesFile) {
-    ((Get-Content $notesFile) | Where-Object { $_ -notmatch '^\s*$' -and $_ -notmatch '^#' -and $_ -notmatch '^\s*```' } | Select-Object -First 3) -join " "
-} else { "See the release page." }
+# The summary is the first paragraph after the `---` that ends the install
+# instructions; without a rule, the first paragraph that is not a heading.
+# Read as UTF-8: Windows PowerShell otherwise reads the file in the ANSI
+# code page and a "›" arrives as "â€º".
+$notes = "See the release page."
+if (Test-Path $notesFile) {
+    $text = (Get-Content $notesFile -Raw -Encoding UTF8) -replace "`r`n", "`n"
+    $rule = [regex]::Match($text, "(?m)^---\s*$")
+    if ($rule.Success) { $text = $text.Substring($rule.Index + $rule.Length) }
+    $para = ($text -split "`n`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^(#|```)' } | Select-Object -First 1)
+    if ($para) { $notes = ($para -replace "`n", " ") }
+}
 
 $manifest = [ordered]@{
     version   = $version
@@ -65,7 +84,11 @@ $manifest = [ordered]@{
     }
 }
 $out = Join-Path $nsis "latest.json"
-$manifest | ConvertTo-Json -Depth 6 | Set-Content $out -Encoding utf8
+# Without a byte-order mark. `Set-Content -Encoding utf8` in Windows
+# PowerShell writes one, and a JSON reader that meets it fails -- the updater
+# then finds nothing, silently, for everyone. 0.4.1's manifest had none; the
+# first 0.5.0 build's did, and was caught before upload.
+[System.IO.File]::WriteAllText($out, ($manifest | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host ""
 Write-Host "signed installer : $($setup.FullName)" -ForegroundColor White

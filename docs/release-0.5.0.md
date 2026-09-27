@@ -95,3 +95,10 @@ v8).
 The first sync re-reads every demo you have once, to keep it and to apply
 the aim fixes — a few seconds a demo, with the progress shown. Aim numbers
 shift slightly; that is the fixes.
+
+**SHA-256**
+
+```
+1E07684C9DF3953A4DCA572F680903D6CD48D9581BA26125B267066483EA455F  Flashwave.tf_0.5.0_x64-setup.exe
+364CE59AF6A48B5CE3584BEDD25BE0911B82B40CE9BB74E774EC0348DACA7AAB  Flashwave.tf_0.5.0_x64_en-US.msi
+```
