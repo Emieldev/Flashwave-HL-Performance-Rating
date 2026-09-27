@@ -56,14 +56,28 @@ a PR against.
    ```bash
    gh release create v<version> \
      "target/release/bundle/nsis/Flashwave.tf_<version>_x64-setup.exe" \
+     "target/release/bundle/msi/Flashwave.tf_<version>_x64_en-US.msi" \
      "target/release/bundle/nsis/latest.json" \
      --title "Flashwave.tf <version> alpha" \
      --notes-file docs/release-<version>.md \
-     --prerelease
+     --latest
    ```
 
    **`latest.json` must be attached to the release.** Without it the
    updater has nothing to read and every client silently stays put.
+
+   **And the release must be marked Latest -- not a pre-release.** "alpha"
+   lives in the title only.
+
+6. **Check what the updater will actually see** -- give GitHub's cache a
+   minute:
+
+   ```bash
+   curl -sL https://github.com/bartflk/Flashwave-HL-Performance-Rating/releases/latest/download/latest.json
+   ```
+
+   It must say the new version. If it says the old one, the release is not
+   marked Latest.
 
 ## How the client finds it
 
@@ -77,10 +91,11 @@ GitHub keeps `/releases/latest/` pointed at the newest non-draft release,
 so publishing is all it takes — there is no separate manifest to host and
 nothing to keep in step by hand.
 
-One consequence worth knowing: **a pre-release is not "latest"** as far as
-that URL is concerned, *unless every release is a pre-release*. All of
-these are marked `--prerelease`, so the newest one wins. If you ever publish
-a stable release, the pre-releases after it stop being offered.
+One consequence worth knowing: **a pre-release is never "latest"** while
+any full release exists. 0.4.1 went out as a full release, so when 0.5.0
+was first published as a pre-release this URL kept serving 0.4.1's manifest
+and nobody would have been offered the update. Publish every release as
+Latest (`--latest`), and check the URL afterwards (step 6).
 
 ## Why the restart is a button
 
@@ -102,3 +117,7 @@ and **Copy report** puts it somewhere it can be sent. The usual causes:
 - **Built without the key.** Then there is no `.sig`, the script stops
   before writing a manifest, and you find out at build time rather than
   from a tester.
+- **The manifest starts with a byte-order mark.** A JSON reader rejects it
+  and the check finds nothing. `release.ps1` writes it without one; if you
+  ever write `latest.json` by hand, check its first byte is `{`.
+- **The release is a pre-release.** See above: `/releases/latest/` skips it.
