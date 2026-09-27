@@ -36,6 +36,7 @@ import type {
   SeasonsView,
   AimResponse,
   SpyReport,
+  CartView,
   Backup,
   Backups,
   PathRow,
@@ -144,6 +145,8 @@ const realApi = {
   getAim: (logId: number, player?: number) => invoke<AimResponse>("get_aim", { logId, player }),
   /** Null when the match has no STV timeline to read (Q27). */
   getSpychecks: (logId: number) => invoke<SpyReport | null>("get_spychecks", { logId }),
+  /** Null for a match with no cart to read (Q11). */
+  getCart: (logId: number) => invoke<CartView | null>("get_cart", { logId }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */

@@ -1403,3 +1403,24 @@
 .spy-table { margin-top: 8px; }
 .spy-row { cursor: pointer; }
 .spy-row:hover td { background: rgba(255, 255, 255, 0.04); }
+
+/* The cart (Q11) */
+.cart-panel h3 { margin: 16px 0 8px; }
+.cart-rounds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px 28px;
+  margin-top: 12px;
+}
+.cart-round { display: flex; flex-direction: column; gap: 6px; }
+.cart-round-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cart-bar { display: flex; gap: 2px; height: 10px; border-radius: 3px; overflow: hidden; background: rgba(var(--muted-rgb), 0.12); }
+.cart-seg { min-width: 0; }
+.cart-seg-moving { background: var(--blu); }
+.cart-seg-empty { background: var(--accent); }
+.cart-seg-blocked { background: var(--red); }
+.cart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 0.85rem; }
+.cart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+.cart-after { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.cart-after-cell { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 6px; background: var(--panel-2); }
+.cart-after-cell strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }

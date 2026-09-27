@@ -1210,3 +1210,47 @@ export interface SpyCheck {
   damage: number;
   killed: boolean;
 }
+
+/** Q11: the cart in a numbers advantage, from a match's kept STV timelines. */
+export interface CartView {
+  /** Up this many players or more counts as up. */
+  up: number;
+  /** Seconds after a won fight the push is measured over. */
+  afterS: number;
+  rounds: CartRound[];
+  stalls: CartStall[];
+  fights: CartFight[];
+}
+
+export interface CartRound {
+  demoId: number;
+  seconds: number;
+  movingS: number;
+  upS: number;
+  upStillS: number;
+  /** Of the still seconds, those with no attacker near the cart; the rest
+   *  had one there and a defender blocking. */
+  upStillEmptyS: number;
+}
+
+export interface CartStall {
+  demoId: number;
+  round: number;
+  atS: number;
+  seconds: number;
+  mostUp: number;
+  emptyS: number;
+  jumpTick: number;
+}
+
+export interface CartFight {
+  demoId: number;
+  round: number;
+  nth: number;
+  atS: number;
+  lostAttackers: number;
+  lostDefenders: number;
+  windowS: number;
+  movingS: number;
+  jumpTick: number;
+}

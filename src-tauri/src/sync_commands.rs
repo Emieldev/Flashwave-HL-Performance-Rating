@@ -592,6 +592,13 @@ pub async fn get_spychecks(state: State<'_, AppState>, log_id: i64) -> CmdResult
     Ok(hl_ingest::spy::for_log(&state.db, log_id).await?)
 }
 
+/// Q11: the cart in a numbers advantage, from the match's kept STV
+/// timelines. `None` for a match with no cart to read.
+#[tauri::command]
+pub async fn get_cart(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_ingest::cart::CartView>> {
+    Ok(hl_ingest::cart::for_log(&state.db, log_id).await?)
+}
+
 #[tauri::command]
 pub async fn get_aim(
     state: State<'_, AppState>,

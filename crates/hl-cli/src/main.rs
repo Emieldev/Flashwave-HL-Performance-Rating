@@ -941,6 +941,61 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["events", path] => {
+            // Which game events a demo carries, and when the round ones fall:
+            // for building passes over the timeline. A file only; no database.
+            let file = std::path::Path::new(path);
+            let header = hl_demos::DemoHeader::parse(&std::fs::read(file)?)?;
+            let rate = header.tick_rate().unwrap_or(66.67);
+            let (_, stored) = hl_demos::aim::pass_recording(file, "", rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+            let tl = hl_demos::timeline::Timeline::decode(&stored.context("no timeline")?)?;
+            let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+            for (t, e) in &tl.events {
+                let name = format!("{e:?}");
+                let name = name.split(['(', ' ', '{']).next().unwrap_or("").to_string();
+                if name.starts_with("TeamPlay") {
+                    println!("{:>7.1}s  tick {:>7}  {}", tl.seconds(*t), tl.tick_of(*t), format!("{e:?}").chars().take(140).collect::<String>());
+                }
+                *counts.entry(name).or_default() += 1;
+            }
+            for (n, c) in counts {
+                println!("{c:>7}  {n}");
+            }
+            let carts = tl.objects.iter().filter(|o| o.kind == "cart").count();
+            println!("{carts} cart rows");
+            Ok(())
+        }
+
+        ["cart", path] => {
+            // Q11: the cart in a numbers advantage, from one demo. A file only.
+            let file = std::path::Path::new(path);
+            let header = hl_demos::DemoHeader::parse(&std::fs::read(file)?)?;
+            let rate = header.tick_rate().unwrap_or(66.67);
+            let (_, stored) = hl_demos::aim::pass_recording(file, "", rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+            let tl = hl_demos::timeline::Timeline::decode(&stored.context("no timeline")?)?;
+            let Some(r) = hl_demos::cart::cart(&tl) else {
+                println!("{}: no cart in this demo", header.map);
+                return Ok(());
+            };
+            let clock = |s: u32| format!("{}:{:02}", s / 60, s % 60);
+            println!("{} · {} rounds · {} s up {}+ with the cart still", header.map, r.rounds.len(), r.wasted_s(), hl_demos::cart::UP);
+            println!("\n{:>5} {:>7} {:>7} {:>7} {:>7} {:>8}", "round", "live", "moving", "up 3+", "still", "nobody");
+            for (i, x) in r.rounds.iter().enumerate() {
+                println!("{:>5} {:>6}s {:>6}s {:>6}s {:>6}s {:>7}s", i + 1, x.seconds, x.moving_s, x.up_s, x.up_still_s, x.up_still_empty_s);
+            }
+            println!("\nstalls of 3 s or more while up 3+:");
+            for s in &r.stalls {
+                println!("  round {} at {} for {:>3}s, up to +{}, {}s with no attacker near · demo_gototick {}", s.round + 1, clock(s.from_s), s.seconds, s.most_up, s.empty_s, s.jump_tick);
+            }
+            println!("\nafter a won fight, seconds of the next {} the cart moved:", hl_demos::cart::AFTER_S);
+            for n in [Some(1), Some(2), Some(3), None] {
+                let (k, mean, window) = r.after(n);
+                let label = n.map_or("every".to_string(), |n| format!("{n}{}", ["st", "nd", "rd"][(n - 1) as usize]));
+                println!("  {label:<6} fight won: {k:>3} fights, {mean:>4.1}s of {window:.1}s");
+            }
+            Ok(())
+        }
+
         ["spychecks", path, rest @ ..] => {
             // Q27's spike: hits on fully cloaked Spies in one demo, listed
             // with the demo's own tick so each can be checked in game with

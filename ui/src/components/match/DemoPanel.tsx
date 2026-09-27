@@ -26,6 +26,7 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
     void qc.invalidateQueries({ queryKey: ["match", d.logId] });
     void qc.invalidateQueries({ queryKey: ["matches"] });
     void qc.invalidateQueries({ queryKey: ["spychecks", d.logId] });
+    void qc.invalidateQueries({ queryKey: ["cart", d.logId] });
   }, [download?.state, d.logId, qc]);
 
   async function fetchStv() {
