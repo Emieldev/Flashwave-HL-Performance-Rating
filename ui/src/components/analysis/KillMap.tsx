@@ -109,6 +109,16 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
   const [drawing, setDrawing] = useState<Array<[number, number]>>([]);
   const [zoneSel, setZoneSel] = useState<number | null>(null);
   const zones = callouts && (showZones || editing) ? callouts.zones : [];
+  // How see-through the zones are, and whether they carry names: a busy
+  // map reads better with faint zones, and a zoomed-in one with labels.
+  const [zoneOpacity, setZoneOpacity] = useState(() => storedNumber("hl.km.zoneOpacity", 0.5));
+  const [zoneLabels, setZoneLabels] = useState(true);
+  // Zoom and pan, in canvas pixels. Back to the whole map on another map.
+  const [zoom, setZoom] = useState<Zoom>(NO_ZOOM);
+  useEffect(() => setZoom(NO_ZOOM), [mapName]);
+  // The canvas's size, so the buttons zoom about the middle of the view.
+  const [stage, setStage] = useState<[number, number]>([0, 0]);
+  const zoomBy = (f: number) => setZoom((z) => clampZoom(zoomAt(z, z.z * f, [stage[0] / 2, stage[1] / 2]), stage[0], stage[1]));
   const players = useMemo(() => playerMap(a), [a]);
   const me = players.get(player);
   const enemies = a.players.filter((p) => me && p.team !== me.team);
@@ -323,29 +333,74 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             )}
           </>
         )}
-        {callouts && (callouts.zones.length > 0 || callouts.names.length > 0 || editing) && (
-          <label className="check" title={callouts.draft ? tr("Draft callouts: drawn from the TF2 wiki's descriptions, not yet checked by someone who plays the map") : undefined}>
-            <input type="checkbox" checked={showZones || editing} onChange={(e) => setShowZones(e.target.checked)} />
-            {tr("Callouts")}
-            {callouts.draft && <span className="badge">{tr("draft")}</span>}
-          </label>
-        )}
-        {mapName && !asTable && (
-          <button className="linkish" onClick={() => setEditing((e) => !e)} aria-pressed={editing}>
-            {editing ? tr("Stop editing callouts") : tr("Edit callouts")}
-          </button>
-        )}
-        <button className="linkish km-table-toggle" onClick={() => setAsTable((t) => !t)}>
-          {asTable ? tr("Show map") : tr("Show as table")}
-        </button>
-        <button
-          className="linkish km-full-toggle"
-          onClick={toggleFull}
-          title={full ? tr("Leave full screen (Escape)") : tr("Fill the window with the map")}
-        >
-          {full ? tr("Exit full screen") : tr("Full screen")}
-        </button>
       </div>
+
+      <div className="km-tools">
+        {mapName && !asTable && (
+          <div className="km-group" role="group" aria-label={tr("Callouts")}>
+            <span className="km-group-label">{tr("Callouts")}</span>
+            {callouts && (callouts.zones.length > 0 || editing) && (
+              <>
+                <button
+                  className={showZones || editing ? "km-chip on" : "km-chip"}
+                  aria-pressed={showZones || editing}
+                  onClick={() => setShowZones((v) => !v)}
+                  title={callouts.draft ? tr("Draft callouts, not yet checked in game") : undefined}
+                >
+                  {showZones || editing ? tr("Shown") : tr("Hidden")}
+                  {callouts.draft && <span className="km-draft">{tr("draft")}</span>}
+                </button>
+                <label className="km-slider" title={tr("How solid the zones are")}>
+                  <span>{tr("Opacity")}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round(zoneOpacity * 100)}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) / 100;
+                      setZoneOpacity(v);
+                      storeNumber("hl.km.zoneOpacity", v);
+                    }}
+                    disabled={!(showZones || editing)}
+                  />
+                </label>
+                <button className={zoneLabels ? "km-chip on" : "km-chip"} aria-pressed={zoneLabels} onClick={() => setZoneLabels((v) => !v)}>
+                  {tr("Names")}
+                </button>
+              </>
+            )}
+            <button className={editing ? "km-chip on" : "km-chip"} aria-pressed={editing} onClick={() => setEditing((e) => !e)}>
+              {editing ? tr("Stop editing") : tr("Edit")}
+            </button>
+          </div>
+        )}
+        {!asTable && (
+          <div className="km-group" role="group" aria-label={tr("Zoom")}>
+            <span className="km-group-label">{tr("Zoom")}</span>
+            <button className="km-chip km-icon" onClick={() => zoomBy(1 / 1.5)} disabled={zoom.z <= 1} aria-label={tr("Zoom out")}>−</button>
+            <span className="km-zoom-n">{Math.round(zoom.z * 100)}%</span>
+            <button className="km-chip km-icon" onClick={() => zoomBy(1.5)} disabled={zoom.z >= MAX_ZOOM} aria-label={tr("Zoom in")}>+</button>
+            <button className="km-chip" onClick={() => setZoom(NO_ZOOM)} disabled={zoom.z === 1}>{tr("Whole map")}</button>
+          </div>
+        )}
+        <div className="km-group km-group-end">
+          <button className="km-chip" onClick={() => setAsTable((t) => !t)}>
+            {asTable ? tr("Show map") : tr("Show as table")}
+          </button>
+          <button
+            className={full ? "km-chip on" : "km-chip"}
+            onClick={toggleFull}
+            title={full ? tr("Leave full screen (Escape)") : tr("Fill the window with the map")}
+          >
+            {full ? tr("Exit full screen") : tr("Full screen")}
+          </button>
+        </div>
+      </div>
+      {!asTable && zoom.z === 1 && (
+        <p className="hint km-zoom-hint">{tr("Scroll on the map to zoom in; drag to move around.")}</p>
+      )}
 
       {asTable ? (
         <MarkTable marks={marks} a={a} />
@@ -353,6 +408,11 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
         <>
           <div className={layer === "paths" || editing ? "km-split" : undefined}>
           <Canvas
+            zoom={zoom}
+            onZoom={setZoom}
+            onStage={setStage}
+            zoneOpacity={zoneOpacity}
+            zoneLabels={zoneLabels}
             zones={zones}
             zoneCounts={layer === "dots" && zones.length > 0 && !editing ? countZones(zones, marks) : undefined}
             drawing={editing ? drawing : undefined}
@@ -436,6 +496,12 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
 
 /** The map, a heat layer or the kill marks, and the hover card. */
 function Canvas(props: {
+  /** Zoom and pan, and how to change them (the wheel and a drag). */
+  zoom: Zoom;
+  onZoom: (z: Zoom | ((z: Zoom) => Zoom)) => void;
+  onStage: (size: [number, number]) => void;
+  zoneOpacity: number;
+  zoneLabels: boolean;
   /** Q28: callout zones to draw, how many marks fell in each, a zone being drawn. */
   zones: import("../../api/types").CalloutZone[];
   zoneCounts?: Map<number, number>;
@@ -462,7 +528,7 @@ function Canvas(props: {
   onHover: (m: Mark | null) => void;
   a: Analysis;
 }) {
-  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick } = props;
+  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick, zoom, onZoom, onStage, zoneOpacity, zoneLabels } = props;
   // The three colours the canvas draws with, resolved from the theme.
   const killColour = themeColour("--kill", "#5791c8");
   const deathColour = themeColour("--death", "#d6763a");
@@ -484,19 +550,21 @@ function Canvas(props: {
   const scale = Math.min(boxW / display.width, maxHeight / display.height);
   const W = Math.floor(display.width * scale);
   const H = Math.floor(display.height * scale);
+  // Game units to canvas pixels, zoom and pan included: everything drawn
+  // goes through here, so the image, heat, zones and marks stay together.
   const px = ([x, y]: [number, number]): [number, number] => [
-    ((x - display.minX) / display.cell) * scale,
-    ((display.maxY - y) / display.cell) * scale,
+    ((x - display.minX) / display.cell) * scale * zoom.z + zoom.x,
+    ((display.maxY - y) / display.cell) * scale * zoom.z + zoom.y,
   ];
   // Back from the canvas to game units, for drawing callouts.
   const game = (cx: number, cy: number): [number, number] => [
-    Math.round(display.minX + (cx / scale) * display.cell),
-    Math.round(display.maxY - (cy / scale) * display.cell),
+    Math.round(display.minX + ((cx - zoom.x) / zoom.z / scale) * display.cell),
+    Math.round(display.maxY - ((cy - zoom.y) / zoom.z / scale) * display.cell),
   ];
   // A cell of the counting grid, in canvas pixels.
   const cellRect = (i: number): [number, number, number] => {
     const [x, y] = px([frame.minX + (i % frame.width) * frame.cell, frame.maxY - Math.floor(i / frame.width) * frame.cell]);
-    return [x, y, (frame.cell / display.cell) * scale + 0.5];
+    return [x, y, (frame.cell / display.cell) * scale * zoom.z + 0.5];
   };
 
   useEffect(() => {
@@ -513,7 +581,7 @@ function Canvas(props: {
     if (img) {
       // The image, under a dark veil: the marks' blue and orange have to read
       // on sand and stone, and the veil keeps the map recessive.
-      g.drawImage(img, 0, 0, W, H);
+      g.drawImage(img, zoom.x, zoom.y, W * zoom.z, H * zoom.z);
       g.fillStyle = "rgba(27, 23, 20, 0.45)";
       g.fillRect(0, 0, W, H);
     } else if (view) {
@@ -589,7 +657,7 @@ function Canvas(props: {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [img, view, heat, heatColor, heatResolved, killColour, deathColour, frame, display, W, H, scale, paths, focus]);
+  }, [img, view, heat, heatColor, heatResolved, killColour, deathColour, frame, display, W, H, scale, paths, focus, zoom]);
 
   const nearest = (e: React.MouseEvent<SVGSVGElement>): Mark | null => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -608,6 +676,26 @@ function Canvas(props: {
     return best;
   };
 
+  // The wheel zooms towards the cursor. A native listener, as React's is
+  // passive and cannot stop the page scrolling underneath.
+  const svgRef = useRef<SVGSVGElement>(null);
+  useEffect(() => onStage([W, H]), [W, H, onStage]);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const at: [number, number] = [e.clientX - r.left, e.clientY - r.top];
+      onZoom((z) => clampZoom(zoomAt(z, z.z * Math.pow(1.0015, -e.deltaY), at), W, H));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onZoom, W, H]);
+  // A drag pans; a press that barely moves is still a click.
+  const drag = useRef<{ x: number; y: number; zx: number; zy: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
   return (
     <div className="km-canvas" ref={wrap}>
       <div className="km-stage" style={{ width: W, height: H }}>
@@ -618,9 +706,41 @@ function Canvas(props: {
           className="km-svg"
           role="img"
           aria-label={tr("{marks} kills and deaths on the map", { marks: marks.length })}
-          onMouseMove={(e) => (onMapClick ? undefined : onHover(nearest(e)))}
-          onMouseLeave={() => onHover(null)}
+          ref={svgRef}
+          onMouseDown={(e) => {
+            if (e.button !== 0 || zoom.z <= 1) return;
+            drag.current = { x: e.clientX, y: e.clientY, zx: zoom.x, zy: zoom.y, moved: false };
+          }}
+          onMouseMove={(e) => {
+            const d = drag.current;
+            if (d && (e.buttons & 1) === 1) {
+              const dx = e.clientX - d.x;
+              const dy = e.clientY - d.y;
+              if (!d.moved && Math.hypot(dx, dy) > 4) {
+                d.moved = true;
+                setDragging(true);
+              }
+              if (d.moved) {
+                onZoom((z) => clampZoom({ ...z, x: d.zx + dx, y: d.zy + dy }, W, H));
+                return;
+              }
+            }
+            if (!onMapClick) onHover(nearest(e));
+          }}
+          onMouseUp={() => {
+            // Cleared after the click that follows, so a drag is not a click.
+            setTimeout(() => {
+              drag.current = null;
+              setDragging(false);
+            }, 0);
+          }}
+          onMouseLeave={() => {
+            drag.current = null;
+            setDragging(false);
+            onHover(null);
+          }}
           onClick={(e) => {
+            if (drag.current?.moved) return;
             if (onMapClick) {
               const r = e.currentTarget.getBoundingClientRect();
               onMapClick(game(e.clientX - r.left, e.clientY - r.top));
@@ -629,9 +749,11 @@ function Canvas(props: {
             const m = nearest(e);
             if (m?.k.jump) jumpTo(m.k.jump, `${m.kind} at ${roundClock(m.k.t, a.rounds)}`);
           }}
-          style={{ cursor: onMapClick ? "crosshair" : hover?.k.jump ? "pointer" : "default" }}
+          style={{ cursor: dragging ? "grabbing" : onMapClick ? "crosshair" : hover?.k.jump ? "pointer" : zoom.z > 1 ? "grab" : "default" }}
         >
-          {zones.length > 0 || drawing ? <ZoneShapes zones={zones} px={px} selected={selectedZone} counts={zoneCounts} drawing={drawing} /> : null}
+          {zones.length > 0 || drawing ? (
+            <ZoneShapes zones={zones} px={px} selected={selectedZone} counts={zoneCounts} drawing={drawing} opacity={zoneOpacity} labels={zoneLabels} />
+          ) : null}
           {marks.map((m, i) => {
             const [x, y] = px(m.at);
             const from = m.from ? px(m.from) : null;
@@ -884,4 +1006,45 @@ function countZones(zones: import("../../api/types").CalloutZone[], marks: Mark[
     if (z !== null) out.set(z, (out.get(z) ?? 0) + 1);
   }
   return out;
+}
+
+/** Zoom and pan: canvas pixels are scaled by `z`, then moved by `x`, `y`. */
+interface Zoom {
+  z: number;
+  x: number;
+  y: number;
+}
+
+const NO_ZOOM: Zoom = { z: 1, x: 0, y: 0 };
+const MAX_ZOOM = 8;
+
+/** A new zoom level, keeping the point under `at` still. */
+function zoomAt(z: Zoom, next: number, at: [number, number]): Zoom {
+  const nz = Math.min(MAX_ZOOM, Math.max(1, next));
+  if (nz === 1) return NO_ZOOM;
+  const k = nz / z.z;
+  return { z: nz, x: at[0] - (at[0] - z.x) * k, y: at[1] - (at[1] - z.y) * k };
+}
+
+/** Keep the map on the canvas: never panned so far it leaves the view. */
+function clampZoom(z: Zoom, W: number, H: number): Zoom {
+  if (z.z <= 1) return NO_ZOOM;
+  return { z: z.z, x: Math.min(0, Math.max(W - W * z.z, z.x)), y: Math.min(0, Math.max(H - H * z.z, z.y)) };
+}
+
+function storedNumber(key: string, fallback: number): number {
+  try {
+    const v = Number(localStorage.getItem(key));
+    return localStorage.getItem(key) !== null && Number.isFinite(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function storeNumber(key: string, v: number) {
+  try {
+    localStorage.setItem(key, String(v));
+  } catch {
+    // Blocked storage only costs remembering the setting.
+  }
 }

@@ -47,8 +47,11 @@ export function ZoneShapes(props: {
   selected: number | null;
   counts?: Map<number, number>;
   drawing?: Pt[];
+  /** 0 is outlines only, 1 as solid as the zones go. */
+  opacity?: number;
+  labels?: boolean;
 }) {
-  const { zones, px, selected, counts, drawing } = props;
+  const { zones, px, selected, counts, drawing, opacity = 0.5, labels = true } = props;
   const most = counts ? Math.max(1, ...counts.values()) : 1;
   return (
     <g className="co-layer">
@@ -62,14 +65,21 @@ export function ZoneShapes(props: {
         // With counts, the fill says how busy a zone was; without, every
         // zone is the same faint wash and the outline does the work.
         const n = counts?.get(i) ?? 0;
-        const fill = counts ? 0.06 + 0.4 * (n / most) : 0.14;
+        const fill = (counts ? 0.06 + 0.4 * (n / most) : 0.2) * opacity * 2;
         return (
           <g key={i} className={selected === i ? "co-zone selected" : "co-zone"}>
-            <path d={d} fill={`hsla(${hue}, 60%, 55%, ${fill.toFixed(3)})`} stroke={`hsla(${hue}, 70%, 70%, 0.85)`} strokeWidth={selected === i ? 2.5 : 1.2} />
-            <text x={cx} y={cy} className="co-label" textAnchor="middle" dominantBaseline="middle">
-              {z.name}
-              {counts && n > 0 ? ` ${n}` : ""}
-            </text>
+            <path
+              d={d}
+              fill={`hsla(${hue}, 60%, 55%, ${Math.min(0.85, fill).toFixed(3)})`}
+              stroke={`hsla(${hue}, 70%, 70%, ${(0.25 + 0.6 * Math.min(1, opacity * 1.5)).toFixed(2)})`}
+              strokeWidth={selected === i ? 2.5 : 1.2}
+            />
+            {(labels || selected === i) && (
+              <text x={cx} y={cy} className="co-label" textAnchor="middle" dominantBaseline="middle">
+                {z.name}
+                {counts && n > 0 ? ` ${n}` : ""}
+              </text>
+            )}
           </g>
         );
       })}

@@ -1201,3 +1201,64 @@
 .co-list input { flex: 1; min-width: 0; padding: 2px 6px; }
 .co-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .co-where { font-size: 0.78rem; }
+
+/* The map's tools: callouts, zoom, view (grouped, one row under the filters) */
+.km-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.km-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.km-group-end { margin-left: auto; padding-left: 6px; }
+.km-group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.km-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.km-chip:hover:not(:disabled) { border-color: var(--line-2); background: rgba(var(--muted-rgb), 0.1); }
+.km-chip.on { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
+.km-chip:disabled { opacity: 0.4; cursor: default; }
+.km-icon { width: 28px; justify-content: center; padding: 4px 0; font-size: 1rem; }
+.km-draft {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.km-slider { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+.km-slider input[type="range"] { width: 90px; accent-color: var(--accent); }
+.km-zoom-n { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.km-zoom-hint { margin: -2px 0 0; font-size: 0.78rem; }
+.km-stage { overflow: hidden; border-radius: 4px; }
