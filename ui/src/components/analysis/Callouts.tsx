@@ -53,6 +53,15 @@ export function ZoneShapes(props: {
 }) {
   const { zones, px, selected, counts, drawing, opacity = 0.5, labels = true } = props;
   const most = counts ? Math.max(1, ...counts.values()) : 1;
+  // On a mirrored map a zone takes its side's colour -- RED's ground red,
+  // BLU's blue, the shared middle grey -- so a glance says whose half a
+  // fight was in. One-way maps keep a hue per zone.
+  const names = new Set(zones.map((z) => z.name));
+  const paired = (n: string) => {
+    const m = /^(RED|BLU) (.+)$/.exec(n);
+    return m !== null && names.has(`${m[1] === "RED" ? "BLU" : "RED"} ${m[2]}`) ? m[1] : null;
+  };
+  const mirrored = zones.some((z) => paired(z.name) !== null);
   return (
     <g className="co-layer">
       {zones.map((z, i) => {
@@ -61,7 +70,9 @@ export function ZoneShapes(props: {
         const d = pts.map(([x, y], j) => `${j ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("") + "Z";
         const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
         const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-        const hue = HUES[i % HUES.length];
+        const side = mirrored ? paired(z.name) : null;
+        const hue = side === "RED" ? 2 : side === "BLU" ? 207 : HUES[i % HUES.length];
+        const sat = mirrored && side === null ? 8 : 60;
         // With counts, the fill says how busy a zone was; without, every
         // zone is the same faint wash and the outline does the work.
         const n = counts?.get(i) ?? 0;
@@ -70,13 +81,13 @@ export function ZoneShapes(props: {
           <g key={i} className={selected === i ? "co-zone selected" : "co-zone"}>
             <path
               d={d}
-              fill={`hsla(${hue}, 60%, 55%, ${Math.min(0.85, fill).toFixed(3)})`}
-              stroke={`hsla(${hue}, 70%, 70%, ${(0.25 + 0.6 * Math.min(1, opacity * 1.5)).toFixed(2)})`}
+              fill={`hsla(${hue}, ${sat}%, 55%, ${Math.min(0.85, fill).toFixed(3)})`}
+              stroke={`hsla(${hue}, ${sat + 10}%, 70%, ${(0.25 + 0.6 * Math.min(1, opacity * 1.5)).toFixed(2)})`}
               strokeWidth={selected === i ? 2.5 : 1.2}
             />
             {(labels || selected === i) && (
               <text x={cx} y={cy} className="co-label" textAnchor="middle" dominantBaseline="middle">
-                {z.name}
+                {side ? z.name.slice(4) : z.name}
                 {counts && n > 0 ? ` ${n}` : ""}
               </text>
             )}

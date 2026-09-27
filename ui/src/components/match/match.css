@@ -1426,15 +1426,43 @@
 .cart-after-cell strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
 
 /* Positions (Q28) */
-.pos-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px 28px; margin-top: 12px; }
-.pos-team h3 { margin: 0 0 6px; }
-.pos-row { display: grid; grid-template-columns: minmax(0, 150px) 1fr; gap: 10px; align-items: center; padding: 3px 0; }
-.pos-who { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pos-bar { display: flex; gap: 2px; height: 20px; border-radius: 4px; overflow: hidden; }
-.pos-seg { min-width: 0; display: flex; align-items: center; padding: 0 5px; font-size: 0.72rem; color: var(--text-hi); overflow: hidden; }
-.pos-seg span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pos-seg-0 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.75); }
-.pos-seg-1 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.5); }
-.pos-seg-2 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.32); }
-.pos-seg-3 { background: rgba(var(--accent-rgb, 214, 118, 58), 0.2); }
-.pos-seg-rest { background: rgba(var(--muted-rgb), 0.1); }
+.pos-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 0.82rem; }
+.pos-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+.pos-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px 32px; margin-top: 14px; }
+.pos-team { display: flex; flex-direction: column; gap: 6px; }
+.pos-team h3 { margin: 0 0 2px; }
+.pos-row { display: grid; grid-template-columns: minmax(130px, 170px) 1fr; gap: 12px; align-items: center; }
+.pos-who { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.pos-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.pos-cover { flex: none; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pos-bar { display: flex; gap: 2px; height: 34px; border-radius: 5px; overflow: hidden; min-width: 0; }
+.pos-seg {
+  flex-basis: 0;
+  min-width: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+.pos-seg { flex-direction: column; line-height: 1.1; }
+.pos-seg span { padding: 0 5px; white-space: nowrap; overflow: hidden; }
+.pos-seg-name { font-size: 0.72rem; font-weight: 600; }
+.pos-seg-pct { font-size: 0.76rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* Whose ground: the side's colour, strongest for the zone they used most. */
+.pos-seg-red { background: var(--red-deep); }
+.pos-seg-blue { background: var(--blu-deep); }
+.pos-seg-mid { background: #6f655c; }
+.pos-seg-other { background: rgba(var(--muted-rgb), 0.22); color: var(--text); text-shadow: none; }
+.pos-rank-0 { filter: brightness(1.18); }
+.pos-rank-2 { filter: brightness(0.86); }
+.pos-rank-3 { filter: brightness(0.74); }
+.pos-legend .pos-seg-red, .pos-legend .pos-seg-blue, .pos-legend .pos-seg-mid { filter: none; }
+@media (max-width: 560px) {
+  .pos-teams { grid-template-columns: 1fr; }
+  .pos-row { grid-template-columns: 1fr; gap: 4px; }
+}
