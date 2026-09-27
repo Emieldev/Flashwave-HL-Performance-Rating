@@ -1450,6 +1450,8 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q25~~ | ~~**Penalize delaying your own team's spawn**~~ (ivg, boSe) | medium | **Applied, measured the §18b way.** The head count (`caps_mates_dead`) still reads as rewarding; the *delay* reads the other way. A KOTH cap that cost a dead teammate 8 s+ over their usual wait won 16 points less often than the numbers predicted (715 caps), one costing under 3 s won 11 points more. `caps_spawn_delay` (seconds of those long delays, per capper) is in the fights pass (v7): the player with less of it was on the winning side in all nine classes (54.7-60.3%). Weighted where never worse, full and held out: Scout 0.10, Soldier, Pyro, Medic 0.05, Sniper 0.10. See §18b. |
 | ~~Q26~~ | ~~**Demo and Sniper valued by mode and side**~~ (ivg) | medium | **Closed: measured, half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, ivg is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
+| Q28 | **Callouts, positions and tendencies** (Flashy) | large | Named zones per map, stored like `.lang` files (seeded, user-editable, never overwritten), drawn as a jigsaw on the fullscreen overview. Then kills per zone for every match, and time per zone (anchors, rotators) from STV timelines. See §21. |
+| Q29 | **Teams and seasons** (Flashy) | large | Team pages for a year of ETF2L Highlander: rosters, results, win % per map, season tables -- all from ETF2L's API. Best players per team needs those matches' logs, which is Q14b; built together. See §22. |
 
 ### Reported by testers, and fixed
 
@@ -2088,3 +2090,89 @@ match), then blinking, cooldown and marked. The list carries the demo tick,
 so any check can be confirmed in game with `demo_gototick`. The match page
 shows who checked and who was found, and every check copies its jump.
 
+
+---
+
+## 21. Callouts, positions and tendencies (Q28, Flashy)
+
+> "On every map you have a lot of common holds like sniper sitting on cliff
+> (product). This would basically map areas where the classes play the whole
+> match (would kind of work like positions in counter strike), for example
+> some players are b-anchors or rotators... I need callouts for every map,
+> visible on the map overlay as well... When you get to the fullscreen map
+> overview, you would be able to see the positions highlighted with a jigsaw
+> puzzle like overview."
+
+**What is already there.** The overview images and their placement
+(`overview.rs`, 94-99% of kill positions land on the drawn map), a
+fullscreen kill map, both players' positions on every kill in all stored
+raw logs, and -- for STV demos -- every player's position every tick in the
+kept timeline (Q3).
+
+**What is missing is the names.** Callouts are community vocabulary, not
+data: no file in the game or on logs.tf says where "cliff" is, and teams
+disagree at the edges. So they are stored the way translations are (Q13):
+
+1. **One file per map**, `callouts/<map base>.callouts`, each callout a name
+   and a polygon in game units (so it survives a new overview render). The
+   app ships a seed set and keeps a user folder beside it; an edited file
+   is never overwritten, exactly like `.lang`. A zone may carry a height
+   band, for maps where a balcony sits over a corridor.
+2. **The seed.** Researched per map from what the community publishes
+   (callout images, ETF2L and competitive guides), drawn over the overview,
+   then checked against the kill density: a callout nobody ever fights in
+   is drawn in the wrong place. The Highlander pool first (~12 maps).
+3. **An editor**, in the fullscreen overview: drag a zone's corners, rename
+   it, save to the user file. Without it every correction is a text edit,
+   and nobody will make one.
+
+**Then the positions, from cheapest to richest.**
+
+- **The jigsaw view.** The fullscreen overview draws every callout as a
+  zone with its name, shaded by use: for a class, a player, or one match.
+- **From kills, for every match.** Each kill and death assigned to a zone:
+  "your Sniper kills: 58% from cliff". Works on all 738 logs, but only sees
+  where fights ended.
+- **From STV timelines, time in each zone.** Where a player *stood*, second
+  by second, which is what anchoring and rotating are. Tendencies per
+  player -- "holds last as Engineer", "rotates between cliff and house" --
+  as the share of alive time per zone and the common paths between zones.
+  STV only, so a match-page stat and a profile note where enough STVs
+  exist, not a rating component (the same coverage rule as Q27).
+
+**What could go wrong.** Seed callouts that are wrong look authoritative.
+Every seeded file says it is a draft until someone who plays the map has
+checked it, and the UI shows that.
+
+---
+
+## 22. Teams and seasons (Q29, Flashy)
+
+> "Add a teams page per season, start with maybe 1 year back-tracked ETF2L.
+> Look at their win percentages on each map in the map pool. List their best
+> players with best scores. Have profile pages for teams and performance
+> metrics."
+
+**What is already there.** The owner's own ETF2L history (`etf2l.rs`:
+officials, competitions, rosters), and the Teammates page per ETF2L team the
+owner played on. Every other team is unknown.
+
+**It splits in two, and only the first half is cheap.**
+
+1. **From ETF2L alone.** The API lists each Highlander season's divisions,
+   teams, rosters and results with maps and scores. A year back is about two
+   seasons, a few hundred teams, ~3,000 matches: a few hundred requests,
+   cached, and refetched only while a season is live (the same 14-day
+   settle rule `etf2l.rs` already uses). That gives:
+   - a **team page**: roster per season, division, record, results;
+   - **win % per map** in the pool, from ETF2L's own results;
+   - a season table per division, and head-to-head between two teams.
+2. **Best players and performance metrics.** These need the *logs* of those
+   officials, not the results: ~3,000 logs.tf fetches, matching each official
+   to its log (the time-and-roster match `mark_by_time` already does for the
+   owner), and somewhere to keep games the owner never played. That is
+   **Q14b**'s problem exactly, and they are one piece of work. Once built, a
+   team page lists its best player per class, rated the usual way -- still
+   a percentile against the owner's pool, which the page says.
+
+**Order:** part 1 as its own release; part 2 together with Q14b.
