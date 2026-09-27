@@ -65,7 +65,7 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
       ))}
 
       <div className="demo-sources">
-        <div className="demo-source">
+        <div className="demo-source" id="demo-linking-download">
           <strong>{t("SourceTV demo on demos.tf")}</strong>
           {canFetch ? (
             <>

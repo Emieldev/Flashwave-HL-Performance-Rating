@@ -38,14 +38,39 @@ export function StvLocked({ d, kind }: { d: MatchDetail; kind: Kind }) {
           <Sketch kind={kind} />
         </div>
         <div className="stv-locked-card">
-          <strong className="stv-locked-head">{t("STV demo required")}</strong>
-          <p className="hint">{t(copy.why)}</p>
-          <Fetch d={d} />
-          {stv.error && <p className="error">{stv.error}</p>}
+          <div className="stv-locked-text">
+            <strong className="stv-locked-head">{t("STV demo required")}</strong>
+            <span className="hint">{t(copy.why)}</span>
+          </div>
+          {/* One download, in Demo linking: every locked panel points there
+              rather than each starting its own. */}
+          {stv.download?.state === "running" ? (
+            <span className="hint stv-locked-busy">{t("Downloading…")}</span>
+          ) : stv.canFetch ? (
+            <button className="km-chip on" onClick={goToDemoLinking}>{t("Get the STV demo ↑")}</button>
+          ) : (
+            <span className="hint">{t("demos.tf has no STV demo for this match.")}</span>
+          )}
         </div>
       </div>
     </section>
   );
+}
+
+/** Scroll to Demo linking's download, opening its fold if it is shut, and flash it. */
+function goToDemoLinking() {
+  const box = document.getElementById("demo-linking-download");
+  if (!box) return;
+  const fold = box.closest(".fold");
+  if (fold?.classList.contains("closed")) (fold.querySelector("h2") as HTMLElement | null)?.click();
+  // After the fold has had a moment to open.
+  setTimeout(() => {
+    box.scrollIntoView({ behavior: document.hidden ? "auto" : "smooth", block: "center" });
+    box.classList.remove("flash");
+    // Restarted each time, so a second click flashes again.
+    void box.offsetWidth;
+    box.classList.add("flash");
+  }, 30);
 }
 
 /** One line near the top of a match without an STV. */
@@ -90,7 +115,7 @@ function Fetch({ d, compact }: { d: MatchDetail; compact?: boolean }) {
 
 /** A stand-in for what the panel shows, drawn only to be blurred. */
 function Sketch({ kind }: { kind: Kind }) {
-  const rows = kind === "positions" ? 6 : 4;
+  const rows = 2;
   return (
     <div className="stv-sketch">
       {Array.from({ length: rows }, (_, i) => (
