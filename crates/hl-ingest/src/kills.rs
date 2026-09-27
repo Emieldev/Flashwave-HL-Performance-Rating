@@ -250,10 +250,10 @@ pub fn impacts_for(
 
 /// Add each player's fight counts (from `Db::fight_counts`) to their impact,
 /// creating an entry for players with no kills.
-pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 13])]) {
+pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 14])]) {
     for &(
         account,
-        [opening_kills, opening_deaths, kills, traded_kills, deaths, traded_deaths, flank_deaths, stationary_deaths, fights_present, fights_kast, fights_kast_engaged, caps_contested, caps_mates_dead],
+        [opening_kills, opening_deaths, kills, traded_kills, deaths, traded_deaths, flank_deaths, stationary_deaths, fights_present, fights_kast, fights_kast_engaged, caps_contested, caps_mates_dead, caps_spawn_delay],
     ) in rows
     {
         impacts.entry(account).or_default().fights = Some(hl_rating::FightCounts {
@@ -270,6 +270,7 @@ pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 13]
             fights_kast_engaged,
             caps_contested,
             caps_mates_dead,
+            caps_spawn_delay,
         });
     }
 }

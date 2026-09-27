@@ -90,6 +90,7 @@ const LITERALS = [
   "Caps",
   "Caps into a defence",
   "Caps with your team dead",
+  "Spawns delayed by your caps",
   "Damage / min",
   "Deaths",
   "Deaths to flankers",
@@ -120,6 +121,7 @@ const LITERALS = [
   "per 10 min",
   "per min",
   "teammates dead per 10 min",
+  "seconds per 10 min",
   "win % per 10 min",
 ];
 

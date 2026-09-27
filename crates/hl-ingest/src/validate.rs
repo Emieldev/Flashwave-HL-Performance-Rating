@@ -62,7 +62,7 @@ pub fn components_for(class: TfClass) -> Vec<Component> {
     // every class -- the capping classes are the obvious candidates, but a
     // component that only helps the Engineer should say so here rather
     // than be assumed.
-    v.extend([Component::CapsContested, Component::CapsMatesDead]);
+    v.extend([Component::CapsContested, Component::CapsMatesDead, Component::CapsSpawnDelay]);
     // Q6b: beside the unshared swing, so the fit can say which reads better.
     v.push(Component::FightSwingShared);
     match class {

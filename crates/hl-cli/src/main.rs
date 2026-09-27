@@ -581,6 +581,13 @@ async fn main() -> Result<()> {
                 }
                 return Ok(());
             }
+            // Q25 (§18b): what a capture did to the capping team's dead.
+            if rest.contains(&"--spawn-delay") {
+                let s = hl_ingest::spawns::spawn_delays(&db).await?;
+                print!("{s}");
+                println!("({:.1}s)", started.elapsed().as_secs_f64());
+                return Ok(());
+            }
             // Q17: what a capture was worth, by how much was left to stop it.
             if rest.contains(&"--caps") {
                 let c = hl_ingest::situation::cap_worth(&db).await?;

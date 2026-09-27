@@ -7,7 +7,7 @@ use sqlx::Row;
 use std::collections::HashMap;
 
 /// The counted columns of `fight_stat`, in order.
-pub const FIGHT_COLUMNS: [&str; 27] = [
+pub const FIGHT_COLUMNS: [&str; 28] = [
     "rounds",
     "kills",
     "deaths",
@@ -35,12 +35,13 @@ pub const FIGHT_COLUMNS: [&str; 27] = [
     "fights_kast_engaged",
     "caps_contested",
     "caps_mates_dead",
+    "caps_spawn_delay",
 ];
 
 /// One player's counts in one match, in [`FIGHT_COLUMNS`] order.
 pub struct FightRow {
     pub account_id: u32,
-    pub values: [i64; 27],
+    pub values: [i64; 28],
 }
 
 /// Summed counts over a set of rated performances.
@@ -206,18 +207,18 @@ impl Db {
     /// `(account, [opening kills, opening deaths, kills, traded kills, deaths,
     /// traded deaths, deaths to flankers, stationary deaths, fights present,
     /// KAST fights, engaged KAST fights])`.
-    pub async fn fight_counts(&self, log_id: Option<i64>) -> Result<std::collections::HashMap<i64, Vec<(u32, [u32; 13])>>> {
+    pub async fn fight_counts(&self, log_id: Option<i64>) -> Result<std::collections::HashMap<i64, Vec<(u32, [u32; 14])>>> {
         let rows = sqlx::query(
             "SELECT log_id, account_id, opening_kills, opening_deaths, kills, traded_kills,
                     deaths, traded_deaths, deaths_to_flank, stationary_deaths,
                     fights_present, fights_kast, fights_kast_engaged,
-                    caps_contested, caps_mates_dead
+                    caps_contested, caps_mates_dead, caps_spawn_delay
              FROM fight_stat WHERE ?1 IS NULL OR log_id = ?1",
         )
         .bind(log_id)
         .fetch_all(self.pool())
         .await?;
-        let mut out: std::collections::HashMap<i64, Vec<(u32, [u32; 13])>> = std::collections::HashMap::new();
+        let mut out: std::collections::HashMap<i64, Vec<(u32, [u32; 14])>> = std::collections::HashMap::new();
         for r in rows {
             let n = |c: &str| r.get::<i64, _>(c) as u32;
             out.entry(r.get("log_id")).or_default().push((
@@ -236,6 +237,7 @@ impl Db {
                     n("fights_kast_engaged"),
                     n("caps_contested"),
                     n("caps_mates_dead"),
+                    n("caps_spawn_delay"),
                 ],
             ));
         }

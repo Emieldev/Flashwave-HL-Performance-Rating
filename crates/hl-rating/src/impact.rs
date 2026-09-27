@@ -70,6 +70,9 @@ pub struct FightCounts {
     /// Q17, Q25: captures weighted by enemies alive, and by own team dead.
     pub caps_contested: u32,
     pub caps_mates_dead: u32,
+    /// Q25 (§18b): seconds of missed waves the capper's caps cost their
+    /// own dead -- only extra waits of 8 s or more.
+    pub caps_spawn_delay: u32,
 }
 
 /// A victim whose class the log never named is valued like a Scout, the

@@ -518,7 +518,9 @@ dpm = 0.0
             let total: f64 = model.iter().map(|(_, x)| x).sum();
             let survival: f64 = model
                 .iter()
-                .filter(|(k, _)| !k.higher_is_better())
+                // Lower-is-better, less the cap costs (Q25): a spawn you
+                // delayed is a teammate's death wait, not your own dying.
+                .filter(|(k, _)| !k.higher_is_better() && !matches!(k, Component::CapsMatesDead | Component::CapsSpawnDelay))
                 .map(|(_, x)| x)
                 .sum();
             assert!(survival / total <= 0.5 + 1e-9, "{} gives dying {survival}", c.as_str());

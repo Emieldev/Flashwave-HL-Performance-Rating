@@ -44,7 +44,7 @@ pub struct KillState {
 }
 
 impl KillState {
-    fn flip(self) -> Self {
+    pub(crate) fn flip(self) -> Self {
         KillState { diff: -self.diff, adv: -self.adv }
     }
 }

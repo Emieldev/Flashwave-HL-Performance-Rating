@@ -222,6 +222,10 @@ ours   = [1, 1, 1, 1, 1, 1, 1, 0.75, 0.5]
 # game: what his picks were worth, and how often he was the one picked.
 # Survival is 0.45 here; the uncapped fit wanted 0.55 and scored 0.2 better.
 [model.sniper]
+# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
+# player's caps cost their own dead, fewer is better. Picks the winner
+# +0.3 / +0.5 points (full / held out) at 0.10.
+caps_spawn_delay = 0.10
 impact_kills    = 0.25
 deaths          = 0.25
 untraded        = 0.10
@@ -236,6 +240,12 @@ situation_kills = 0.20
 # behind him. Caps are in at 0.05 because a Scout capping is a Scout doing
 # the job nobody else on the team can do twice as fast.
 [model.scout]
+# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
+# player's caps cost their own dead, fewer is better. Picks the winner
+# +1.0 / +2.0 points (full / held out) at 0.10. Measured for all nine; applied
+# only where never worse on either: demoman, heavy, engineer and spy
+# lost ground on the held-out matches, so they carry none.
+caps_spawn_delay = 0.10
 impact_kills    = 0.20
 impact_assists  = 0.20
 medic_picks     = 0.05
@@ -255,6 +265,10 @@ situation_kills = 0.10
 # the ordinary one: kill people, set up kills, stay up. Nothing class-shaped
 # survived the fit, and nothing was added to make the table look fuller.
 [model.soldier]
+# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
+# player's caps cost their own dead, fewer is better. Picks the winner
+# +0.5 / +1.0 points (full / held out) at 0.05.
+caps_spawn_delay = 0.05
 impact_kills    = 0.35
 impact_assists  = 0.20
 deaths          = 0.20
@@ -267,6 +281,10 @@ untraded_deaths = 0.25
 # someone else's kill), holding the point, and being alive when the push
 # comes. His own kills carry 0.20 between them, less than his assists.
 [model.pyro]
+# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
+# player's caps cost their own dead, fewer is better. Picks the winner
+# +0.5 / +0.0 points (full / held out) at 0.05.
+caps_spawn_delay = 0.05
 impact_kills    = 0.15
 impact_assists  = 0.20
 medic_picks     = 0.05
@@ -350,6 +368,10 @@ untraded_deaths = 0.20
 # a Medic rating. So ubers and drops are in at 0.15 and 0.10, dying is held
 # to half the model, and the 1.6 points are the price.
 [model.medic]
+# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
+# player's caps cost their own dead, fewer is better. Picks the winner
+# +0.4 / +1.0 points (full / held out) at 0.05.
+caps_spawn_delay = 0.05
 impact_assists  = 0.10
 heal            = 0.15
 ubers           = 0.15

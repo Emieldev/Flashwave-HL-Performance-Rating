@@ -130,6 +130,11 @@ pub struct FightStats {
     /// question for the data (and for zaag's reading of the respawn rule),
     /// not something to assume here.
     pub caps_mates_dead: u32,
+    /// Q25 reopened (§18b): seconds of missed waves this player's caps
+    /// cost their own dead -- each dead teammate's wait beyond their
+    /// team's usual one, counted only at [`crate::spawns::LONG_DELAY_S`] or
+    /// more. A shorter delay is a mate who died off-timing (boSe).
+    pub caps_spawn_delay: u32,
 }
 
 /// The first kill of each round, for the match page.
@@ -296,6 +301,10 @@ pub fn analyse(raw: &RawLog, gs: &GameState) -> Fights {
         s.caps_mates_dead += mates_dead;
     }
 
+    for (account, secs) in cap_spawn_delays(gs) {
+        stats.entry(account).or_insert_with(|| FightStats { account_id: account, ..Default::default() }).caps_spawn_delay += secs;
+    }
+
     let mut players: Vec<FightStats> = stats.into_values().collect();
     players.sort_by_key(|s| s.account_id);
     Fights { tags, players, first_picks }
@@ -319,6 +328,30 @@ fn cap_costs(gs: &GameState) -> Vec<(u32, u32, u32)> {
         let mates_dead = 9u32.saturating_sub(alive(team));
         for &capper in &c.cappers {
             out.push((capper, enemies, mates_dead));
+        }
+    }
+    out
+}
+
+/// Per capper, per cap: the long extra waits it cost their own dead (Q25,
+/// §18b). The usual wait is per colour over the whole log, where
+/// `hl situation --spawn-delay` has the round's map to key it by.
+fn cap_spawn_delays(gs: &GameState) -> Vec<(u32, u32)> {
+    let deaths = crate::spawns::respawns(gs);
+    let usual = crate::spawns::usual_waits(gs, &deaths, |_| Some(()));
+    let mut out = Vec::new();
+    for c in &gs.caps {
+        let Some(team) = c.team else { continue };
+        let secs: f64 = deaths
+            .iter()
+            .filter(|d| d.team == team && d.died <= c.at && d.back > c.at)
+            .filter_map(|d| Some(d.wait() as f64 - usual.get(&((), d.team))?))
+            .filter(|extra| *extra >= crate::spawns::LONG_DELAY_S)
+            .sum();
+        if secs > 0.0 {
+            for &capper in &c.cappers {
+                out.push((capper, secs.round() as u32));
+            }
         }
     }
     out
@@ -392,7 +425,8 @@ pub fn kill_credits(raw: &RawLog) -> Vec<(i64, u32, f64)> {
 /// 4: each kill's situation (numbers and uber advantage), PLAN §12 step 3.
 /// 5: what each capture cost -- enemies alive, own team dead (Q17, Q25).
 /// 6: each kill's credit, shared with whoever damaged the victim (Q6b).
-pub const VERSION: i64 = 6;
+/// 7: the long respawn delays each capture cost the capper's dead (Q25, §18b).
+pub const VERSION: i64 = 7;
 
 /// Logs written per transaction by [`derive_all`].
 const GROUP: usize = 100;
@@ -474,6 +508,7 @@ fn row(s: &FightStats) -> hl_db::FightRow {
         s.fights_kast_engaged,
         s.caps_contested,
         s.caps_mates_dead,
+        s.caps_spawn_delay,
     ];
     hl_db::FightRow { account_id: s.account_id, values: v.map(i64::from) }
 }

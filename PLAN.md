@@ -1447,7 +1447,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 
 | ~~Q24~~ | ~~**Say what it is doing, everywhere it does something slow** (Flashy)~~ | medium | **Done.** The aim pass's progress is spent rather than discarded -- `|_, _| {}` was eating the count of the slowest job in the product, 396 s for 25 demos, all of it after the card said "Sync finished" -- and names the match it is on. `fights::derive_all` takes a callback and reports. Five stages that ran silently now name themselves: the profile refresh, demos.tf matching, the demo folder scan, round-map resolution and the rebuild's ETF2L pass. **The folder scan keeps a name rather than a fraction on purpose:** measured at 0.6 s for 109 demos in a debug build, which is exactly the case §17's rule is for -- short work gets named, long work gets a bar. The inline-bar idea for work started from a page is dropped for now: nothing started from a page currently takes long enough to need one, and the STV download, which does, already has its own. See §17. |
 
-| Q25 | **Penalize delaying your own team's spawn** (zaag) | medium | **Measured, and the data says the opposite -- not applied.** `caps_mates_dead` counts, for every capture a player is credited with, their own teammates who were dead when it went in; it rides in the same fights pass as Q17. If capping with your people dead were costly, the player who did less of it should be on the winning side. In **eight of nine classes it is the other way round**: the team whose player capped *more* while teammates were dead won 53-60% of the time (Engineer 59.7%, Pyro 58.5%, Scout 55.2%), and in the Soldier fit the effect is clear of zero *in the rewarding direction* (-0.70 [-1.12, -0.20] on the flipped scale). A penalty would push the rating against the result. **A guess at why, to put to zaag rather than to assume:** on attack/defence a capture moves the attacking team's spawn forward, so capping while your team is dead brings them back into the fight sooner -- which would make it one of the more valuable caps, not a cost. The column stays stored and in `hl validate`; nothing is weighted by it. **Reopened 27 Sept** (boSe, ivg): count the *delay* each dead mate actually suffered, from the log's spawn lines, not the head count; only long delays are the capper's; cappers on point and the clock can make the cap worth it. Next: `hl situation --spawn-delay`, then decide. See §18b. |
+| ~~Q25~~ | ~~**Penalize delaying your own team's spawn**~~ (ivg, boSe) | medium | **Applied, measured the §18b way.** The head count (`caps_mates_dead`) still reads as rewarding; the *delay* reads the other way. A KOTH cap that cost a dead teammate 8 s+ over their usual wait won 16 points less often than the numbers predicted (715 caps), one costing under 3 s won 11 points more. `caps_spawn_delay` (seconds of those long delays, per capper) is in the fights pass (v7): the player with less of it was on the winning side in all nine classes (54.7-60.3%). Weighted where never worse, full and held out: Scout 0.10, Soldier, Pyro, Medic 0.05, Sniper 0.10. See §18b. |
 | Q26 | **Demo and Sniper valued by mode and side** (zaag) | medium | **Measured: half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, zaag is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
 
@@ -1949,6 +1949,47 @@ it is no surprise the column reads as noise-to-rewarding. Four things change:
   victim-value ordering zaag asked for, softened by cappers and clock) to
   the fights pass beside `caps_mates_dead`, and A/B it the usual way:
   applied only if never worse on the full set and the held-out one.
+
+**Measured and applied (27 Sept 2026).** `hl situation --spawn-delay`, 738
+logs. A capture does lengthen the capping team's waits: on KOTH the dead at
+a cap waited 4-5 s longer than their team's usual, against +1.2 s for the
+dead of the team that lost the point (the general bias of a wait spanning
+any capture). On stopwatch the effect is small (+0.5 s, +2.6 s for mates
+already 8 s dead).
+
+| longest delay among the capper's dead | KOTH caps | excess | stopwatch caps | excess |
+|---|---|---|---|---|
+| nobody dead | 1813 | +1.2% | 835 | +26.0% |
+| under 3 s | 475 | +11.4% | 549 | +30.7% |
+| 3-8 s | 1793 | -4.7% | 100 | +24.3% |
+| 8 s or more | 715 | **-16.3%** | 45 | -14.2% |
+
+So boSe was right on both halves: a short delay is harmless (it is the
+mate who died off-timing), a long one goes with losing. ivg's softener did
+not show: with 3+ cappers the 8 s+ caps read -15.9%, with 1-2 -16.5%. The
+clock could not be read (logs carry no KOTH timer), so it is not in.
+
+`caps_spawn_delay`, per capper, is the seconds of extra wait of 8 s or more
+their caps cost their own dead. The player with less of it was on the
+winning side in all nine classes, 54.7% (Spy) to 60.3% (Scout, z 3.5). The
+A/B, weight added and the model renormalised:
+
+| class | live | +0.05 | +0.10 | applied |
+|---|---|---|---|---|
+| scout | 74.1 / 65.8 | 74.6 / 66.8 | 75.1 / 67.8 | 0.10 |
+| soldier | 74.6 / 68.0 | 75.1 / 69.0 | 75.0 / 69.0 | 0.05 |
+| pyro | 76.7 / 75.9 | 77.2 / 75.9 | 76.9 / 74.9 | 0.05 |
+| demoman | 77.3 / 73.0 | 77.4 / 72.5 | 77.4 / 72.5 | none |
+| heavy | 77.8 / 73.5 | 78.0 / 72.5 | 77.4 / 71.0 | none |
+| engineer | 76.0 / 72.1 | 74.9 / 71.6 | 75.7 / 71.1 | none |
+| medic | 76.3 / 68.7 | 76.7 / 69.7 | 76.7 / 69.2 | 0.05 |
+| sniper | 75.8 / 75.0 | 76.0 / 75.0 | 76.1 / 75.5 | 0.10 |
+| spy | 74.1 / 71.1 | 73.6 / 70.1 | 73.4 / 70.1 | none |
+
+(all matches / held out after the split, % of winners picked.) zaag's
+class ordering of the *delayed* player (a Demo stuck in spawn costs more
+than an Engineer) is not in yet: the seconds are unweighted. It is the
+obvious next refinement if the component earns a larger weight.
 
 ---
 

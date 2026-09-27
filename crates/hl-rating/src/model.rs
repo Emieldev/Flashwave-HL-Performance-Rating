@@ -141,10 +141,14 @@ pub enum Component {
     /// Fight swing with each kill shared among whoever damaged the victim in
     /// the five seconds before (Q6b), not given whole to the last shot.
     FightSwingShared,
+    /// Q25 reopened (§18b, boSe and ivg): seconds of missed respawn waves
+    /// the player's caps cost their own dead. Lower is taken as better;
+    /// `hl situation --spawn-delay` found long delays go with losing.
+    CapsSpawnDelay,
 }
 
 impl Component {
-    pub const ALL: [Component; 24] = [
+    pub const ALL: [Component; 25] = [
         Component::ImpactKills,
         Component::ImpactAssists,
         Component::MedicPicks,
@@ -169,6 +173,7 @@ impl Component {
         Component::CapsContested,
         Component::CapsMatesDead,
         Component::FightSwingShared,
+        Component::CapsSpawnDelay,
     ];
 
     pub fn key(self) -> &'static str {
@@ -197,6 +202,7 @@ impl Component {
             Component::CapsContested => "caps_contested",
             Component::CapsMatesDead => "caps_mates_dead",
             Component::FightSwingShared => "fight_swing_shared",
+            Component::CapsSpawnDelay => "caps_spawn_delay",
         }
     }
 
@@ -230,6 +236,7 @@ impl Component {
             Component::CapsContested => "Caps into a defence",
             Component::CapsMatesDead => "Caps with your team dead",
             Component::FightSwingShared => "Fight swing, shared",
+            Component::CapsSpawnDelay => "Spawns delayed by your caps",
         }
     }
 
@@ -244,6 +251,7 @@ impl Component {
             Component::CapsContested => "defenders per 10 min",
             Component::CapsMatesDead => "teammates dead per 10 min",
             Component::FightSwingShared => "win % per 10 min",
+            Component::CapsSpawnDelay => "seconds per 10 min",
             _ => "per 10 min",
         }
     }
@@ -258,6 +266,7 @@ impl Component {
                 | Component::FlankDeaths
                 | Component::StationaryDeaths
                 | Component::CapsMatesDead
+                | Component::CapsSpawnDelay
         )
     }
 }
@@ -376,6 +385,11 @@ pub fn extract(
                 .then(|| impact.and_then(|i| i.fights))
                 .flatten()
                 .map(|f| f64::from(f.caps_mates_dead) * per10),
+            Component::CapsSpawnDelay => flags
+                .cp
+                .then(|| impact.and_then(|i| i.fights))
+                .flatten()
+                .map(|f| f64::from(f.caps_spawn_delay) * per10),
             Component::FightSwingShared => impact.and_then(|i| i.swing_shared).map(|s| s * 100.0 * per10),
         };
         if let Some(v) = v {

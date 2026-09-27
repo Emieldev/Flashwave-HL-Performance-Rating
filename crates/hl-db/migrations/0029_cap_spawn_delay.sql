@@ -1,0 +1,12 @@
+-- PLAN Q25, reopened (§18b, boSe and ivg): what each capture cost the
+-- capper's own dead, as seconds rather than heads.
+--
+--   caps_spawn_delay  per capper, summed over their caps: the extra wait,
+--                     beyond that team's usual one, of every teammate who
+--                     was dead when the point went in and came back 8 s or
+--                     more later than usual. Shorter delays are a mate who
+--                     died off-timing, and are not the capper's.
+--
+-- DERIVED by the fights pass, which moves to version 7 and recomputes every
+-- stored log; the default only exists so the ALTER can run.
+ALTER TABLE fight_stat ADD COLUMN caps_spawn_delay INTEGER NOT NULL DEFAULT 0;
