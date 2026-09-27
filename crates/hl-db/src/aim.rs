@@ -10,10 +10,11 @@ use std::collections::HashSet;
 /// class, kind and period. `None` everywhere means every match read.
 #[derive(Debug, Clone, Default)]
 pub struct AimFilter<'a> {
-    /// The owner's account id: `class` is their main class in the match.
+    /// Whose numbers these are. Their aim, their deaths, their time — and
+    /// `class` is their main class in the match, not the owner's.
     pub me: u32,
     pub log_id: Option<i64>,
-    /// The owner's main class in the match, e.g. `sniper`.
+    /// Their main class in the match, e.g. `sniper`.
     pub class: Option<&'a str>,
     /// `official`, `scrim` or `pug`.
     pub kind: Option<&'a str>,
@@ -22,11 +23,17 @@ pub struct AimFilter<'a> {
     pub to: Option<i64>,
 }
 
-/// The rows of `table` this filter covers, as a `WHERE` clause over `?1..?5`.
+/// The rows of `table` this filter covers, as a `WHERE` clause over `?1..?6`.
 /// Every filter is a parameter, so nothing is ever pasted into SQL.
-fn scope(table: &str) -> String {
+///
+/// `who` names the column holding the player each row is about — the tables
+/// carry all eighteen since Q16b, so every read has to say whose numbers it
+/// wants. It is the same account the class filter asks about: "their aim in
+/// the matches they played Sniper", not "their aim in the matches I did".
+fn scope(table: &str, who: &str) -> String {
     format!(
         "WHERE (?1 IS NULL OR {table}.log_id = ?1)
+           AND {table}.{who} = ?6
            AND (?2 IS NULL OR EXISTS (SELECT 1 FROM match_player mp
                                       WHERE mp.log_id = {table}.log_id AND mp.account_id = ?6
                                         AND mp.main_class = ?2))
@@ -43,6 +50,8 @@ fn scope(table: &str) -> String {
 pub struct AimRow {
     pub demo_id: i64,
     pub tick: i64,
+    /// Whose kill it was.
+    pub shooter: u32,
     pub at_raw: Option<i64>,
     /// The round it happened in, where the log's rounds cover it.
     pub round_num: Option<i64>,
@@ -62,6 +71,10 @@ pub struct AimRow {
     pub range_units: f64,
     pub height: f64,
     pub victim_seen: bool,
+    /// The demo carried the shooter across the whole window, so these angles
+    /// are a measurement rather than the last thing it happened to see. In a
+    /// POV demo that is only ever the recorder.
+    pub shooter_seen: bool,
     pub headshot: bool,
 }
 
@@ -71,6 +84,8 @@ pub struct AimRow {
 pub struct DeathRow {
     pub demo_id: i64,
     pub tick: i64,
+    /// Who died.
+    pub who: u32,
     pub at_raw: Option<i64>,
     /// The round it happened in, where the log's rounds cover it.
     pub round_num: Option<i64>,
@@ -82,6 +97,8 @@ pub struct DeathRow {
     pub nearest_mate: Option<f64>,
     pub mates_near: i64,
     pub scoped: bool,
+    /// The demo carried them across the whole window.
+    pub seen: bool,
 }
 
 /// One life as a route across the map, as stored.
@@ -147,14 +164,15 @@ impl Db {
         for r in rows {
             sqlx::query(
                 "INSERT OR REPLACE INTO demo_aim
-                    (log_id, demo_id, tick, at_raw, victim, error_deg, before_deg, flick_deg,
-                     range_units, height, victim_seen, headshot, dx_deg, dy_deg, before_dx_deg, before_dy_deg,
-                     path)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                    (log_id, demo_id, tick, shooter, at_raw, victim, error_deg, before_deg, flick_deg,
+                     range_units, height, victim_seen, shooter_seen, headshot,
+                     dx_deg, dy_deg, before_dx_deg, before_dy_deg, path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             )
             .bind(log_id)
             .bind(r.demo_id)
             .bind(r.tick)
+            .bind(r.shooter)
             .bind(r.at_raw)
             .bind(r.victim.map(i64::from))
             .bind(r.error_deg)
@@ -163,6 +181,7 @@ impl Db {
             .bind(r.range_units)
             .bind(r.height)
             .bind(i64::from(r.victim_seen))
+            .bind(i64::from(r.shooter_seen))
             .bind(i64::from(r.headshot))
             .bind(r.dx_deg)
             .bind(r.dy_deg)
@@ -183,38 +202,43 @@ impl Db {
     }
 
     /// Replace one log's deaths and living time.
-    pub async fn replace_deaths(&self, log_id: i64, rows: &[DeathRow], life: &[(i64, i64, i64)]) -> Result<()> {
+    /// `life` is one entry per player the demo carried: `(demo, account,
+    /// ticks alive, ticks scoped)`.
+    pub async fn replace_deaths(&self, log_id: i64, rows: &[DeathRow], life: &[(i64, u32, i64, i64)]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
         sqlx::query("DELETE FROM demo_death WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM demo_life WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
         for r in rows {
             sqlx::query(
                 "INSERT OR REPLACE INTO demo_death
-                    (log_id, demo_id, tick, at_raw, killer, killer_range, nearest_mate, mates_near, scoped,
-                     killer_dx_deg, killer_dy_deg)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    (log_id, demo_id, tick, who, at_raw, killer, killer_range, nearest_mate, mates_near,
+                     scoped, seen, killer_dx_deg, killer_dy_deg)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             )
             .bind(log_id)
             .bind(r.demo_id)
             .bind(r.tick)
+            .bind(r.who)
             .bind(r.at_raw)
             .bind(r.killer.map(i64::from))
             .bind(r.killer_range)
             .bind(r.nearest_mate)
             .bind(r.mates_near)
             .bind(i64::from(r.scoped))
+            .bind(i64::from(r.seen))
             .bind(r.killer_dx_deg)
             .bind(r.killer_dy_deg)
             .execute(&mut *tx)
             .await?;
         }
-        for &(demo_id, alive, scoped) in life {
+        for &(demo_id, account_id, alive, scoped) in life {
             sqlx::query(
-                "INSERT OR REPLACE INTO demo_life (log_id, demo_id, alive_ticks, scoped_ticks)
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT OR REPLACE INTO demo_life (log_id, demo_id, account_id, alive_ticks, scoped_ticks)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             )
             .bind(log_id)
             .bind(demo_id)
+            .bind(account_id)
             .bind(alive)
             .bind(scoped)
             .execute(&mut *tx)
@@ -279,16 +303,18 @@ impl Db {
             .collect())
     }
 
-    pub async fn deaths_for_log(&self, log_id: i64) -> Result<Vec<DeathRow>> {
+    /// One player's deaths in one match.
+    pub async fn deaths_for_log(&self, log_id: i64, who: u32) -> Result<Vec<DeathRow>> {
         let rows = sqlx::query(
-            "SELECT d.demo_id, d.tick, d.at_raw, d.killer, d.killer_range, d.nearest_mate,
-                    d.mates_near, d.scoped, d.killer_dx_deg, d.killer_dy_deg,
+            "SELECT d.demo_id, d.tick, d.who, d.at_raw, d.killer, d.killer_range, d.nearest_mate,
+                    d.mates_near, d.scoped, d.seen, d.killer_dx_deg, d.killer_dy_deg,
                     (SELECT r.round_num FROM match_round r
                       WHERE r.log_id = d.log_id
                         AND d.at_raw BETWEEN r.start_time AND r.start_time + r.length_s) AS round_num
-             FROM demo_death d WHERE d.log_id = ?1 ORDER BY d.tick",
+             FROM demo_death d WHERE d.log_id = ?1 AND d.who = ?2 ORDER BY d.tick",
         )
         .bind(log_id)
+        .bind(who)
         .fetch_all(self.pool())
         .await?;
         Ok(rows
@@ -296,6 +322,7 @@ impl Db {
             .map(|r| DeathRow {
                 demo_id: r.get("demo_id"),
                 tick: r.get("tick"),
+                who: r.get::<i64, _>("who") as u32,
                 at_raw: r.get("at_raw"),
                 round_num: r.get("round_num"),
                 killer: r.get::<Option<i64>, _>("killer").map(|v| v as u32),
@@ -305,6 +332,7 @@ impl Db {
                 nearest_mate: r.get("nearest_mate"),
                 mates_near: r.get("mates_near"),
                 scoped: r.get::<i64, _>("scoped") != 0,
+                seen: r.get::<i64, _>("seen") != 0,
             })
             .collect())
     }
@@ -316,7 +344,7 @@ impl Db {
             "SELECT SUM(alive_ticks) AS alive, SUM(scoped_ticks) AS scoped
              FROM demo_life
              {}",
-            scope("demo_life")
+            scope("demo_life", "account_id")
         ))
         .bind(f.log_id)
         .bind(f.class)
@@ -339,7 +367,7 @@ impl Db {
                              ELSE 0.0 END) AS behind
              FROM demo_death
              {}",
-            scope("demo_death")
+            scope("demo_death", "who")
         ))
         .bind(f.log_id)
         .bind(f.class)
@@ -401,17 +429,19 @@ impl Db {
         .await?)
     }
 
-    pub async fn aim_for_log(&self, log_id: i64) -> Result<Vec<AimRow>> {
+    /// One player's kills in one match, with the aim behind each.
+    pub async fn aim_for_log(&self, log_id: i64, who: u32) -> Result<Vec<AimRow>> {
         let rows = sqlx::query(
-            "SELECT a.demo_id, a.tick, a.at_raw, a.victim, a.error_deg, a.before_deg, a.flick_deg,
-                    a.range_units, a.height, a.victim_seen, a.headshot,
+            "SELECT a.demo_id, a.tick, a.shooter, a.at_raw, a.victim, a.error_deg, a.before_deg, a.flick_deg,
+                    a.range_units, a.height, a.victim_seen, a.shooter_seen, a.headshot,
                     a.dx_deg, a.dy_deg, a.before_dx_deg, a.before_dy_deg, a.path,
                     (SELECT r.round_num FROM match_round r
                       WHERE r.log_id = a.log_id
                         AND a.at_raw BETWEEN r.start_time AND r.start_time + r.length_s) AS round_num
-             FROM demo_aim a WHERE a.log_id = ?1 ORDER BY a.tick",
+             FROM demo_aim a WHERE a.log_id = ?1 AND a.shooter = ?2 ORDER BY a.tick",
         )
         .bind(log_id)
+        .bind(who)
         .fetch_all(self.pool())
         .await?;
         Ok(rows.into_iter().map(row).collect())
@@ -425,8 +455,8 @@ impl Db {
                     AVG(CASE WHEN before_deg <= 3 THEN 1.0 ELSE 0.0 END) AS held,
                     AVG(dx_deg) AS bx, AVG(dy_deg) AS by
              FROM demo_aim
-             {} AND demo_aim.victim_seen = 1",
-            scope("demo_aim")
+             {} AND demo_aim.victim_seen = 1 AND demo_aim.shooter_seen = 1",
+            scope("demo_aim", "shooter")
         ))
         .bind(f.log_id)
         .bind(f.class)
@@ -454,6 +484,7 @@ fn row(r: sqlx::sqlite::SqliteRow) -> AimRow {
     AimRow {
         demo_id: r.get("demo_id"),
         tick: r.get("tick"),
+        shooter: r.get::<i64, _>("shooter") as u32,
         at_raw: r.get("at_raw"),
         round_num: r.get("round_num"),
         victim: r.get::<Option<i64>, _>("victim").map(|v| v as u32),
@@ -471,6 +502,7 @@ fn row(r: sqlx::sqlite::SqliteRow) -> AimRow {
         range_units: r.get("range_units"),
         height: r.get("height"),
         victim_seen: r.get::<i64, _>("victim_seen") != 0,
+        shooter_seen: r.get::<i64, _>("shooter_seen") != 0,
         headshot: r.get::<i64, _>("headshot") != 0,
     }
 }

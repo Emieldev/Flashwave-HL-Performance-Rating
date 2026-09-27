@@ -29,7 +29,7 @@ use std::collections::HashMap;
 /// v6: the score is an HLTV-style rating around 1.00, not a 0-100 percentile.
 /// v7: a model per class (Q8), each fitted against who won and
 /// cross-validated, in place of six classes sharing one generic model.
-pub const MODEL_VERSION: &str = "v7";
+pub const MODEL_VERSION: &str = "v8";
 
 /// How far one standard deviation moves the rating.
 ///
@@ -132,10 +132,19 @@ pub enum Component {
     /// the state's value, measured and unnormalised: a kill at even numbers
     /// is worth 0.19 and a clean-up at four up 0.05.
     FightSwing,
+    /// Captures weighted by the enemies alive to stop them (Q17, zaag).
+    CapsContested,
+    /// Captures weighted by the capper's own team dead at the time (Q25,
+    /// zaag). Lower is taken as better, which is zaag's reading of the
+    /// respawn rule; `hl validate` says whether the data agrees.
+    CapsMatesDead,
+    /// Fight swing with each kill shared among whoever damaged the victim in
+    /// the five seconds before (Q6b), not given whole to the last shot.
+    FightSwingShared,
 }
 
 impl Component {
-    pub const ALL: [Component; 21] = [
+    pub const ALL: [Component; 24] = [
         Component::ImpactKills,
         Component::ImpactAssists,
         Component::MedicPicks,
@@ -157,6 +166,9 @@ impl Component {
         Component::FightKastEngaged,
         Component::SituationKills,
         Component::FightSwing,
+        Component::CapsContested,
+        Component::CapsMatesDead,
+        Component::FightSwingShared,
     ];
 
     pub fn key(self) -> &'static str {
@@ -182,6 +194,9 @@ impl Component {
             Component::FightKastEngaged => "fight_kast_engaged",
             Component::SituationKills => "situation_kills",
             Component::FightSwing => "fight_swing",
+            Component::CapsContested => "caps_contested",
+            Component::CapsMatesDead => "caps_mates_dead",
+            Component::FightSwingShared => "fight_swing_shared",
         }
     }
 
@@ -212,6 +227,9 @@ impl Component {
             Component::FightKastEngaged => "Fight KAST, engaged",
             Component::SituationKills => "Kills in context",
             Component::FightSwing => "Fight swing",
+            Component::CapsContested => "Caps into a defence",
+            Component::CapsMatesDead => "Caps with your team dead",
+            Component::FightSwingShared => "Fight swing, shared",
         }
     }
 
@@ -223,6 +241,9 @@ impl Component {
             Component::Heal | Component::Dpm => "per min",
             Component::Opening => "net per 10 min",
             Component::FightSwing => "win % per 10 min",
+            Component::CapsContested => "defenders per 10 min",
+            Component::CapsMatesDead => "teammates dead per 10 min",
+            Component::FightSwingShared => "win % per 10 min",
             _ => "per 10 min",
         }
     }
@@ -231,7 +252,12 @@ impl Component {
     pub fn higher_is_better(self) -> bool {
         !matches!(
             self,
-            Component::Deaths | Component::Drops | Component::UntradedDeaths | Component::FlankDeaths | Component::StationaryDeaths
+            Component::Deaths
+                | Component::Drops
+                | Component::UntradedDeaths
+                | Component::FlankDeaths
+                | Component::StationaryDeaths
+                | Component::CapsMatesDead
         )
     }
 }
@@ -338,6 +364,19 @@ pub fn extract(
             Component::FightSwing => {
                 impact.and_then(|i| i.swing).map(|s| s * 100.0 * per10)
             }
+            // Both only exist where the raw log was read, and only mean
+            // anything on a map with points, like `Caps` itself.
+            Component::CapsContested => flags
+                .cp
+                .then(|| impact.and_then(|i| i.fights))
+                .flatten()
+                .map(|f| f64::from(f.caps_contested) * per10),
+            Component::CapsMatesDead => flags
+                .cp
+                .then(|| impact.and_then(|i| i.fights))
+                .flatten()
+                .map(|f| f64::from(f.caps_mates_dead) * per10),
+            Component::FightSwingShared => impact.and_then(|i| i.swing_shared).map(|s| s * 100.0 * per10),
         };
         if let Some(v) = v {
             values.push((*component, v));

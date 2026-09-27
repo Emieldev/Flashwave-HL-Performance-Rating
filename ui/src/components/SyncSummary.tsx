@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { eta, startSync, useSyncStatus } from "../lib/sync";
+import { t, tx } from "../lib/i18n";
 
 /**
  * What is stored, and the button that fetches more — in the top bar, beside
@@ -22,9 +23,9 @@ export function SyncSummary() {
   const note = !s
     ? undefined
     : [
-        s.pending > 0 ? `${s.pending.toLocaleString()} not fetched yet (about ${eta(s.pending)})` : null,
+        s.pending > 0 ? t("{0} not fetched yet (about {1})", { "0": s.pending.toLocaleString(), "1": eta(s.pending) }) : null,
         s.outsideWindow > 0
-          ? `${s.outsideWindow.toLocaleString()} older matches kept out — Settings, How far back`
+          ? t("{0} older matches kept out — Settings, How far back", { "0": s.outsideWindow.toLocaleString() })
           : null,
       ]
         .filter(Boolean)
@@ -34,16 +35,13 @@ export function SyncSummary() {
     <div className="sync-summary" title={note}>
       {s ? (
         <span className="ss-counts">
-          <strong>{s.highlander.toLocaleString()}</strong> matches
-          <span className="sep">·</span>
-          <strong>{s.officials}</strong> official{s.officials === 1 ? "" : "s"}
-          {(s.pending > 0 || s.outsideWindow > 0) && !running && <span className="ss-more">•</span>}
+          {tx("{0} matches{1}{2} official{3}{4}", { "0": <strong>{s.highlander.toLocaleString()}</strong>, "1": <span className="sep">·</span>, "2": <strong>{s.officials}</strong>, "3": s.officials === 1 ? "" : "s", "4": (s.pending > 0 || s.outsideWindow > 0) && !running && <span className="ss-more">•</span> })}
         </span>
       ) : (
-        <span className="ss-counts muted">Loading…</span>
+        <span className="ss-counts muted">{t("Loading…")}</span>
       )}
       <button className="primary ss-sync" onClick={() => void startSync()} disabled={running}>
-        {running ? "Syncing…" : "Sync"}
+        {running ? t("Syncing…") : t("Sync")}
       </button>
     </div>
   );

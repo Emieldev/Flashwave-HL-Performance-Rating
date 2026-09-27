@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { PeriodStats, Season } from "../../api/types";
 import { setPeriod, usePeriod } from "../../lib/period";
+import { locale, t } from "../../lib/i18n";
 
 const shortDate = (t: number) =>
-  new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" });
+  new Date(t * 1000).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" });
 
 const num = (v: number | null, digits = 0) => (v === null ? "–" : v.toFixed(digits));
 const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
@@ -27,24 +28,24 @@ export function SeasonsPanel({ cls }: { cls: string }) {
   return (
     <section className="panel seasons-panel">
       <header>
-        <h2>By season</h2>
-        <p className="hint">Click a season to filter everything to it.</p>
+        <h2>{t("By season")}</h2>
+        <p className="hint">{t("Click a season to filter everything to it.")}</p>
       </header>
       <div className="table-wrap">
         <table className="match-table seasons-table">
           <thead>
             <tr>
-              <th>Season</th>
-              <th className="num" title="Officials / scrims / pugs">Games</th>
-              <th className="num">Record</th>
-              <th className="num" title="Average rating">Rating</th>
-              <th className="num" title="Damage per minute on the class">DPM</th>
+              <th>{t("Season")}</th>
+              <th className="num" title={t("Officials / scrims / pugs")}>{t("Games")}</th>
+              <th className="num">{t("Record")}</th>
+              <th className="num" title={t("Average rating")}>{t("Rating")}</th>
+              <th className="num" title={t("Damage per minute on the class")}>{t("DPM")}</th>
               <th className="num">K/D</th>
-              <th className="num" title="Kills per 10 minutes">Kills/10</th>
-              <th className="num" title="Deaths per 10 minutes">Deaths/10</th>
-              <th className="num" title="First kills of fights: yours against you dying">Opening duels</th>
-              <th className="num" title="Your kills where your team lost someone within 3 s">Traded</th>
-              <th className="num" title="Fights with a kill or assist, survival, or a traded death">Fight KAST</th>
+              <th className="num" title={t("Kills per 10 minutes")}>{t("Kills/10")}</th>
+              <th className="num" title={t("Deaths per 10 minutes")}>{t("Deaths/10")}</th>
+              <th className="num" title={t("First kills of fights: yours against you dying")}>{t("Opening duels")}</th>
+              <th className="num" title={t("Your kills where your team lost someone within 3 s")}>{t("Traded")}</th>
+              <th className="num" title={t("Fights with a kill or assist, survival, or a traded death")}>{t("Fight KAST")}</th>
             </tr>
           </thead>
           <tbody>
@@ -60,7 +61,7 @@ export function SeasonsPanel({ cls }: { cls: string }) {
                   <td>
                     <div className="season-name">
                       {s.name}
-                      {s.ongoing && <span className="badge badge-now">now</span>}
+                      {s.ongoing && <span className="badge badge-now">{t("now")}</span>}
                     </div>
                     <div className="hint season-dates">
                       {shortDate(s.from)} – {shortDate(s.to)}
@@ -72,7 +73,7 @@ export function SeasonsPanel({ cls }: { cls: string }) {
               );
             })}
             <tr className="seasons-total">
-              <td>All time</td>
+              <td>{t("All time")}</td>
               <Cells stats={allTime} />
             </tr>
           </tbody>
@@ -85,9 +86,7 @@ export function SeasonsPanel({ cls }: { cls: string }) {
 function Cells({ stats: s }: { stats: PeriodStats }) {
   if (s.games === 0) {
     return (
-      <td className="hint" colSpan={10}>
-        No rated games on this class
-      </td>
+      <td className="hint" colSpan={10}>{t("No rated games on this class")}</td>
     );
   }
   return (

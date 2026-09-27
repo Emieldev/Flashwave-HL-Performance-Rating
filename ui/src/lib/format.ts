@@ -1,4 +1,5 @@
 import type { Team } from "../api/types";
+import { locale, t } from "./i18n";
 
 /** `pl_swiftwater_final1` -> mode `pl`, name `swiftwater`. */
 export function splitMap(map: string | null): { mode: string | null; name: string | null } {
@@ -13,7 +14,7 @@ export function formatDate(unix: number | null, withYear = false): string {
   if (unix === null) return "—";
   const d = new Date(unix * 1000);
   const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(locale(), {
     day: "numeric",
     month: "short",
     ...(sameYear && !withYear ? {} : { year: "numeric" }),
@@ -30,7 +31,7 @@ export function clock(seconds: number | null): string {
 
 /** 2816 -> `47 min`. */
 export function minutes(seconds: number): string {
-  return `${Math.round(seconds / 60)} min`;
+  return t("{n} min", { n: Math.round(seconds / 60) });
 }
 
 export function capitalize(s: string): string {

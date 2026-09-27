@@ -1,0 +1,13 @@
+-- PLAN Q23: a demo the app downloaded and has finished reading can be
+-- deleted to save space. It is 80 MB, it was needed once, and it can be
+-- fetched again from the demos.tf id on this row.
+--
+-- That last part is what makes deleting safe, and it is why the row has to
+-- outlive the file. Until now `prune_demos` deleted the row of any demo no
+-- longer on disk, cascading `demo_link` with it -- so a file removed by
+-- hand did not just disappear, it took with it the only record of which
+-- demos.tf demo it had been, and the match quietly went back to having no
+-- demo at all.
+--
+-- NULL means the file is where the row says it is.
+ALTER TABLE demo ADD COLUMN deleted_at INTEGER;

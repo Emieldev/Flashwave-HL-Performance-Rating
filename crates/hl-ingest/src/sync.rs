@@ -58,6 +58,24 @@ pub enum Progress {
     /// Raw server logs from logs.tf.
     #[serde(rename_all = "camelCase")]
     RawLogs { done: usize, total: usize },
+    /// A short stage with no count of its own, named so the card can say
+    /// what is happening and the bar can run indeterminate rather than sit
+    /// at a number looking stuck (PLAN Q24). Seconds, not minutes -- long
+    /// work reports a fraction instead.
+    #[serde(rename_all = "camelCase")]
+    Stage { what: &'static str },
+    /// Fights: who was in each one, and what each kill's state was.
+    #[serde(rename_all = "camelCase")]
+    Fights { done: usize, total: usize },
+    /// Demos being read for aim, routes and deaths (PLAN Q24).
+    ///
+    /// The slowest thing the app does -- about 16 s a demo, and 396 s for
+    /// twenty-five of them here. It counted its own work all along and the
+    /// window was handed `|_, _| {}`, so the sync card said "Sync finished"
+    /// and then sat silent for minutes. `logId` names the match being read,
+    /// because a job this slow should say which one it is on.
+    #[serde(rename_all = "camelCase")]
+    ReadingDemos { done: usize, total: usize, log_id: Option<i64> },
     /// A source could not be reached. The sync carries on without it: every
     /// one of them adds to what is already stored rather than replacing it.
     #[serde(rename_all = "camelCase")]

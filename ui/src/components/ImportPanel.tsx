@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { errorMessage, type Imported } from "../api/types";
 import { formatDate } from "../lib/format";
+import { t, tx } from "../lib/i18n";
 
 /**
  * Logs that would not import, and a way to add one by hand.
@@ -65,27 +66,23 @@ export function ImportPanel() {
 
   return (
     <div className="panel">
-      <h2>Logs that didn&apos;t import</h2>
+      <h2>{t("Logs that didn't import")}</h2>
 
       {rows.length === 0 ? (
-        <p className="hint" style={{ marginTop: 6 }}>
-          Nothing has failed.
-        </p>
+        <p className="hint" style={{ marginTop: 6 }}>{t("Nothing has failed.")}</p>
       ) : (
         <>
           <p className="hint" style={{ marginTop: 6 }}>
-            {rows.length === 1 ? "One log" : `${rows.length} logs`} would not download. Usually logs.tf was busy —
-            try again.
-          </p>
+            {tx("{0} would not download. Usually logs.tf was busy — try again.", { "0": rows.length === 1 ? t("One log") : t("{rows} logs", { rows: rows.length }) })}</p>
           <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="match-table">
               <thead>
                 <tr>
-                  <th>Played</th>
-                  <th>Map</th>
-                  <th className="num">Log</th>
-                  <th className="num">Tries</th>
-                  <th>Why</th>
+                  <th>{t("Played")}</th>
+                  <th>{t("Map")}</th>
+                  <th className="num">{t("Log")}</th>
+                  <th className="num">{t("Tries")}</th>
+                  <th>{t("Why")}</th>
                   <th />
                 </tr>
               </thead>
@@ -102,25 +99,19 @@ export function ImportPanel() {
                     <td className="num">{r.attempts}</td>
                     <td className="muted">{r.error}</td>
                     <td className="num">
-                      <button className="linkish" disabled={busy} onClick={() => void add(String(r.logId))}>
-                        Try now
-                      </button>
+                      <button className="linkish" disabled={busy} onClick={() => void add(String(r.logId))}>{t("Try now")}</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <button className="linkish" style={{ marginTop: 12 }} disabled={busy} onClick={() => void retry()}>
-            Let the next sync try all of them again
-          </button>
+          <button className="linkish" style={{ marginTop: 12 }} disabled={busy} onClick={() => void retry()}>{t("Let the next sync try all of them again")}</button>
         </>
       )}
 
-      <h3 style={{ marginTop: 22 }}>Add a log by hand</h3>
-      <p className="hint" style={{ marginTop: 6 }}>
-        A log id or logs.tf link. Fetched now, not at the next sync.
-      </p>
+      <h3 style={{ marginTop: 22 }}>{t("Add a log by hand")}</h3>
+      <p className="hint" style={{ marginTop: 6 }}>{t("A log id or logs.tf link. Fetched now, not at the next sync.")}</p>
       <div className="row" style={{ marginTop: 10, gap: 8 }}>
         <input
           value={text}
@@ -130,14 +121,12 @@ export function ImportPanel() {
           style={{ flex: 1, minWidth: 0 }}
         />
         <button disabled={busy || !text.trim()} onClick={() => void add(text)}>
-          {busy ? "Fetching…" : "Add it"}
+          {busy ? t("Fetching…") : t("Add it")}
         </button>
       </div>
 
       {got && (
-        <p className="hint" style={{ marginTop: 10 }}>
-          Added <strong>{got.map ?? got.title ?? `log ${got.logId}`}</strong>, {got.players} players.
-          {got.yours ? " It is in your matches now." : " You are not in this one, so it joins the pool everyone is rated against rather than your match list."}
+        <p className="hint" style={{ marginTop: 10 }}>{tx("Added {0}, {players} players.{2}", { "0": <strong>{got.map ?? got.title ?? t("log {logId}", { logId: got.logId })}</strong>, "2": got.yours ? t(" It is in your matches now.") : t(" You are not in this one, so it joins the pool everyone is rated against rather than your match list."), players: got.players })}
         </p>
       )}
       {error && <p className="error" style={{ marginTop: 10 }}>{error}</p>}

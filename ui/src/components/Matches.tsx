@@ -7,26 +7,27 @@ import { bounds, usePeriod } from "../lib/period";
 import { ContextBadge } from "./ContextBadge";
 import { ClassIcon } from "./ClassIcon";
 import { PeriodPicker } from "./PeriodPicker";
+import { t, k } from "../lib/i18n";
 
 const PAGE = 50;
 
 type View = "highlander" | ContextKind | "all";
 
 const VIEWS: Array<{ id: View; label: string; hint?: string }> = [
-  { id: "highlander", label: "Highlander" },
-  { id: "official", label: "Officials", hint: "ETF2L officials" },
-  { id: "scrim", label: "Scrims", hint: "Team games: most of your side are regular teammates or your ETF2L roster" },
-  { id: "pug", label: "Pugs", hint: "Pugs, lobbies and mixes: a different team every game" },
-  { id: "all", label: "All formats" },
+  { id: "highlander", label: k("Highlander") },
+  { id: "official", label: k("Officials"), hint: k("ETF2L officials") },
+  { id: "scrim", label: k("Scrims"), hint: k("Team games: most of your side are regular teammates or your ETF2L roster") },
+  { id: "pug", label: k("Pugs"), hint: k("Pugs, lobbies and mixes: a different team every game") },
+  { id: "all", label: k("All formats") },
 ];
 
 /** The sortable columns, in table order. `null` sorts by date. */
 const SORTS: Array<{ key: string; label: string; num?: boolean; title?: string }> = [
-  { key: "date", label: "Date" },
-  { key: "kills", label: "K / D / A", num: true, title: "Sort by kills" },
-  { key: "dmg", label: "Dmg", num: true, title: "Sort by damage" },
-  { key: "dpm", label: "DPM", num: true, title: "Sort by damage per minute" },
-  { key: "rating", label: "Rating", num: true, title: "Sort by your rating on your main class" },
+  { key: "date", label: k("Date") },
+  { key: "kills", label: "K / D / A", num: true, title: k("Sort by kills") },
+  { key: "dmg", label: k("Dmg"), num: true, title: k("Sort by damage") },
+  { key: "dpm", label: k("DPM"), num: true, title: k("Sort by damage per minute") },
+  { key: "rating", label: k("Rating"), num: true, title: k("Sort by your rating on your main class") },
 ];
 
 export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
@@ -78,21 +79,21 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
               key={v.id}
               role="tab"
               aria-selected={view === v.id}
-              title={v.hint}
+              title={t(v.hint)}
               className={view === v.id ? "seg active" : "seg"}
               onClick={() => {
                 setView(v.id);
                 setPages(1);
               }}
             >
-              {v.label}
+              {t(v.label)}
             </button>
           ))}
         </div>
         <PeriodPicker />
         {(filters.data?.maps.length ?? 0) > 0 && (
           <label className="an-field fi-map">
-            <span className="an-label">Map</span>
+            <span className="an-label">{t("Map")}</span>
             <select
               value={map ?? ""}
               onChange={(e) => {
@@ -100,7 +101,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
                 setPages(1);
               }}
             >
-              <option value="">Every map</option>
+              <option value="">{t("Every map")}</option>
               {filters.data!.maps.map(([name, n]) => (
                 <option key={name} value={name}>
                   {capitalize(name)} ({n})
@@ -110,12 +111,12 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
           </label>
         )}
         <span className="fi-count">
-          {matches.isPending ? "Loading…" : `${total.toLocaleString()} match${total === 1 ? "" : "es"}`}
+          {matches.isPending ? t("Loading…") : t("{0} match{1}", { "0": total.toLocaleString(), "1": total === 1 ? "" : "es" })}
         </span>
         </div>
 
       {(filters.data?.classes.length ?? 0) > 0 && (
-        <div className="class-filter" role="tablist" aria-label="Class">
+        <div className="class-filter" role="tablist" aria-label={t("Class")}>
           <button
             role="tab"
             aria-selected={cls === null}
@@ -124,16 +125,14 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
               setCls(null);
               setPages(1);
             }}
-          >
-            All classes
-          </button>
+          >{t("All classes")}</button>
           {filters.data!.classes.map(([name, n]) => (
             <button
               key={name}
               role="tab"
               aria-selected={cls === name}
               className={cls === name ? "cf active" : "cf"}
-              title={`${capitalize(name)}: ${n} match${n === 1 ? "" : "es"}`}
+              title={t("{0}: {n} match{2}", { "0": capitalize(name), "2": n === 1 ? "" : "es", n: n })}
               onClick={() => {
                 setCls(cls === name ? null : name);
                 setPages(1);
@@ -151,8 +150,8 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
 
       {!matches.isPending && items.length === 0 && !matches.isError && (
         <div className="empty">
-          <p>No matches yet.</p>
-          <p className="hint">Press Sync to pull your history from trends.tf and logs.tf.</p>
+          <p>{t("No matches yet.")}</p>
+          <p className="hint">{t("Press Sync to pull your history from trends.tf and logs.tf.")}</p>
         </div>
       )}
 
@@ -162,13 +161,13 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
             <thead>
               <tr>
                 <SortHead col={SORTS[0]} sort={sort} onSort={setSort} />
-                <th>Map</th>
-                <th>Class</th>
-                <th>Result</th>
+                <th>{t("Map")}</th>
+                <th>{t("Class")}</th>
+                <th>{t("Result")}</th>
                 {SORTS.slice(1).map((c) => (
                   <SortHead key={c.key} col={c} sort={sort} onSort={setSort} />
                 ))}
-                <th>Match</th>
+                <th>{t("Match")}</th>
               </tr>
             </thead>
             <tbody>
@@ -182,7 +181,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
 
       {items.length < total && (
         <button className="load-more" onClick={() => setPages((p) => p + 1)} disabled={matches.isFetching}>
-          {matches.isFetching ? "Loading…" : `Show ${Math.min(PAGE, total - items.length)} more`}
+          {matches.isFetching ? t("Loading…") : t("Show {0} more", { "0": Math.min(PAGE, total - items.length) })}
         </button>
       )}
     </section>
@@ -200,11 +199,11 @@ function SortHead(props: {
   return (
     <th
       className={`sortable${col.num ? " num" : ""}${on ? " sorted" : ""}`}
-      title={col.title ?? "Sort by date"}
+      title={col.title ? t(col.title) : t("Sort by date")}
       aria-sort={on ? (sort.ascending ? "ascending" : "descending") : "none"}
       onClick={() => onSort({ key: col.key, ascending: on ? !sort.ascending : false })}
     >
-      {col.label}
+      {t(col.label)}
       {on && <span className="sort-arrow">{sort.ascending ? " ▴" : " ▾"}</span>}
     </th>
   );
@@ -229,7 +228,7 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
       }}
     >
       <td className="muted nowrap">{formatDate(m.playedAt)}</td>
-      <td className="nowrap" title={maps.length > 0 ? maps.join(", ") : m.map ?? "Map not recorded in the log"}>
+      <td className="nowrap" title={maps.length > 0 ? maps.join(", ") : m.map ?? t("Map not recorded in the log")}>
         {maps.length > 1 ? (
           <span className="multi-map">
             {maps.map((x) => splitMap(x).name).join(" · ")}
@@ -237,7 +236,7 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
         ) : (
           <>
             {mode && <span className={`mode mode-${mode}`}>{mode}</span>}
-            <span className={name ? "" : "muted"}>{name ?? "unknown"}</span>
+            <span className={name ? "" : "muted"}>{name ?? t("unknown")}</span>
           </>
         )}
       </td>
@@ -256,7 +255,7 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
             {me.result} <span className="score">{mine ?? "?"}–{theirs ?? "?"}</span>
           </span>
         ) : (
-          <span className="muted">not in log</span>
+          <span className="muted">{t("not in log")}</span>
         )}
       </td>
       <td className="num nowrap">{me ? `${me.kills} / ${me.deaths} / ${me.assists}` : ""}</td>
@@ -272,26 +271,22 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
           m.league && <span className="badge badge-league">{m.league.toUpperCase()}</span>
         )}
         {m.parts > 0 && (
-          <span className="badge badge-parts" title={`Combined from ${m.parts} logs; open the match to see them`}>
-            {m.parts} {m.parts === 1 ? "log" : "logs"}
+          <span className="badge badge-parts" title={t("Combined from {parts} logs; open the match to see them", { parts: m.parts })}>
+            {m.parts} {m.parts === 1 ? t("log") : t("logs")}
           </span>
         )}
         {m.hasDemo && (
-          <span className="badge badge-pov" title="Your recording of this match is on this machine">
-            POV
-          </span>
+          <span className="badge badge-pov" title={t("Your recording of this match is on this machine")}>{t("POV")}</span>
         )}
         {m.demosTfId && (
-          <span className="badge badge-demo" title={`STV demo on demos.tf (#${m.demosTfId})`}>
-            STV
-          </span>
+          <span className="badge badge-demo" title={t("STV demo on demos.tf (#{demosTfId})", { demosTfId: m.demosTfId })}>{t("STV")}</span>
         )}
         {m.context?.oppName ? (
           <span title={m.title ?? undefined}>
-            <span className="muted">vs</span> {m.context.oppName}
+            <span className="muted">{t("vs")}</span> {m.context.oppName}
           </span>
         ) : (
-          <span className="muted">{m.title ?? `log ${m.logId}`}</span>
+          <span className="muted">{m.title ?? t("log {logId}", { logId: m.logId })}</span>
         )}
       </td>
     </tr>

@@ -4,10 +4,12 @@
 //! Support sidecar. No packet parsing; that is v2.
 
 pub mod aim;
+pub mod deep;
 pub mod header;
 pub mod link;
 pub mod parse;
 pub mod scan;
+pub mod timeline;
 
 pub use header::DemoHeader;
 pub use hl_core::map_base;

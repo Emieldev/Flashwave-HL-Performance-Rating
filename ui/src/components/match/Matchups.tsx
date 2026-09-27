@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { MatchDetail, Matchup, Part, Side, Team } from "../../api/types";
-import { capitalize, rating, RATING_GAP_FULL, teamLabel } from "../../lib/format";
+import { rating, RATING_GAP_FULL, teamLabel } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
+import { t, tx } from "../../lib/i18n";
+import { classLabel } from "../analysis/common";
 
 /**
  * The nine class matchups: the headline of the match page.
@@ -31,35 +33,30 @@ export function Matchups({ d }: { d: MatchDetail }) {
     <section className="panel mu">
       <header className="mu-head">
         <div>
-          <h2>Class matchups</h2>
+          <h2>{t("Class matchups")}</h2>
           <p className="hint">
             {d.rated ? (
               <>
-                {us ? "You" : teamLabel(left)} won {wonByLeft}, {us ? "they" : teamLabel(right)} won {wonByRight}
-                {even > 0 && `, ${even} even`}. Ratings measure individual play, not who won the match.
-                Click a row for the working.
-              </>
+                {tx("{0} won {wonByLeft}, {2} won {wonByRight}{4}. Ratings measure individual play, not who won the match. Click a row for the working.", { "0": us ? t("You") : teamLabel(left), "2": us ? t("they") : teamLabel(right), "4": even > 0 && t(", {even} even", { even: even }), wonByLeft: wonByLeft, wonByRight: wonByRight })}</>
             ) : (
-              "Not rated yet — ratings appear after the next Sync or Rebuild."
+              t("Not rated yet — ratings appear after the next Sync or Rebuild.")
             )}
           </p>
         </div>
         <span
           className="model-tag"
-          title="1.00 is the typical player you face; one standard deviation is 0.25."
-        >
-          model {d.modelVersion} · one model per class
-        </span>
+          title={t("1.00 is the typical player you face; one standard deviation is 0.25.")}
+        >{tx("model {modelVersion} · one model per class", { modelVersion: d.modelVersion })}</span>
       </header>
 
       <div className="mu-cols" aria-hidden>
         <span />
         <span className={`team-${left.toLowerCase()} mu-col-l`}>
-          {us ? "Us" : ""} {teamLabel(left)}
+          {us ? t("Us") : ""} {teamLabel(left)}
         </span>
-        <span className="mu-col-c">head-to-head</span>
+        <span className="mu-col-c">{t("head-to-head")}</span>
         <span className={`team-${right.toLowerCase()} mu-col-r`}>
-          {teamLabel(right)} {us ? "Them" : ""}
+          {teamLabel(right)} {us ? t("Them") : ""}
         </span>
         <span />
       </div>
@@ -106,8 +103,8 @@ function MatchupRow(props: {
       <button className={classes.join(" ")} onClick={onToggle} aria-expanded={open}>
         <span className="mu-class">
           <ClassIcon cls={m.class} size={22} />
-          {capitalize(m.class)}
-          {m.involvesMe && <span className="you-tag">you</span>}
+          {classLabel(m.class)}
+          {m.involvesMe && <span className="you-tag">{t("you")}</span>}
         </span>
 
         <SideCell side={m.left} align="left" winning={leftWins} />
@@ -122,7 +119,7 @@ function MatchupRow(props: {
               />
             )}
           </span>
-          <span className="h2h" title="Kills on each other, read straight from the log">
+          <span className="h2h" title={t("Kills on each other, read straight from the log")}>
             {m.headToHead ? (
               <>
                 <b className={m.headToHead[0] > m.headToHead[1] ? "h2h-win" : ""}>{m.headToHead[0]}</b>
@@ -139,9 +136,9 @@ function MatchupRow(props: {
 
         <span className="mu-tag">
           {m.decisive ? (
-            <span className="decisive-tag">decisive</span>
+            <span className="decisive-tag">{t("decisive")}</span>
           ) : m.winner === "even" ? (
-            <span className="muted">even</span>
+            <span className="muted">{t("even")}</span>
           ) : null}
         </span>
       </button>
@@ -153,10 +150,10 @@ function MatchupRow(props: {
 
 function SideCell({ side, align, winning }: { side: Side | null; align: "left" | "right"; winning: boolean }) {
   if (!side) {
-    return <span className={`mu-side ${align} muted`}>nobody</span>;
+    return <span className={`mu-side ${align} muted`}>{t("nobody")}</span>;
   }
   const name = (
-    <span className="mu-name" title={side.subs.length ? `Also played: ${side.subs.join(", ")}` : undefined}>
+    <span className="mu-name" title={side.subs.length ? t("Also played: {0}", { "0": side.subs.join(", ") }) : undefined}>
       {side.name}
       {side.subs.length > 0 && <span className="sub-tag">+{side.subs.length}</span>}
     </span>
@@ -164,7 +161,7 @@ function SideCell({ side, align, winning }: { side: Side | null; align: "left" |
   const score = (
     <span
       className={winning ? "mu-score win" : "mu-score"}
-      title={side.rating ? undefined : "Not rated: nobody here had this as their main class for 5+ minutes"}
+      title={side.rating ? undefined : t("Not rated: nobody here had this as their main class for 5+ minutes")}
     >
       {side.rating ? rating(side.rating.score) : "—"}
     </span>
@@ -184,7 +181,7 @@ function Breakdown({ m, left, right, perPct }: { m: Matchup; left: Team; right: 
   if (!lr && !rr) {
     return (
       <div className="mu-breakdown">
-        <p className="hint">Neither side is rated here.</p>
+        <p className="hint">{t("Neither side is rated here.")}</p>
       </div>
     );
   }
@@ -214,10 +211,10 @@ function Breakdown({ m, left, right, perPct }: { m: Matchup; left: Team; right: 
         <div className="bd-head">
           <ScoreCard side={m.left} team={lc} align="left" lead={leader === "left"} />
           <div className="bd-vs">
-            <span className="bd-vs-label">Rating</span>
+            <span className="bd-vs-label">{t("Rating")}</span>
             {lr && rr && (
               <span className="bd-gap">
-                {Math.abs(lr.score - rr.score).toFixed(2)} <small>apart</small>
+                {Math.abs(lr.score - rr.score).toFixed(2)} <small>{t("apart")}</small>
               </span>
             )}
           </div>
@@ -226,11 +223,11 @@ function Breakdown({ m, left, right, perPct }: { m: Matchup; left: Team; right: 
 
         {drivers.length > 0 && (
           <p className="bd-drivers">
-            <span className="muted">Decided by </span>
+            <span className="muted">{t("Decided by")}{" "}</span>
             {drivers.map((r, i) => (
               <span key={r.p.component}>
                 {i > 0 && <span className="muted">, </span>}
-                <b>{r.p.label}</b>{" "}
+                <b>{t(r.p.label)}</b>{" "}
                 <span className={`team-${leader === "left" ? lc : rc}`}>+{Math.abs(r.swing!).toFixed(1)}</span>
               </span>
             ))}
@@ -239,13 +236,13 @@ function Breakdown({ m, left, right, perPct }: { m: Matchup; left: Team; right: 
 
         <div className="bd-rows">
           {rows.map(({ p, a, b, swing }) => (
-            <div className="bd-row" key={p.component} title={`${p.label}, ${p.unit}. Weight ${Math.round(p.weight * 100)}%.`}>
+            <div className="bd-row" key={p.component} title={t("{label}, {unit}. Weight {2}%.", { "2": Math.round(p.weight * 100), label: t(p.label), unit: t(p.unit) })}>
               <span className={a && b && a.percentile > b.percentile ? "bd-val better" : "bd-val"}>{a ? fmtRaw(a) : "—"}</span>
               <Bar part={a} team={lc} align="left" better={!!a && (!b || a.percentile >= b.percentile)} />
               <span className="bd-label">
-                <span className="bd-name">{p.label}</span>
+                <span className="bd-name">{t(p.label)}</span>
                 <span className="bd-meta">
-                  {p.unit} · {Math.round(p.weight * 100)}%
+                  {t(p.unit)} · {Math.round(p.weight * 100)}%
                   {swing !== null && Math.abs(swing) >= 0.1 && (
                     <span className={`bd-swing team-${swing > 0 ? lc : rc}`}>
                       {" "}
@@ -263,9 +260,7 @@ function Breakdown({ m, left, right, perPct }: { m: Matchup; left: Team; right: 
           ))}
         </div>
       </div>
-      <p className="hint bd-hint">
-        Percentile against the players on this class in your matches; deaths flipped so longer is better.
-      </p>
+      <p className="hint bd-hint">{t("Percentile against the players on this class in your matches; deaths flipped so longer is better.")}</p>
     </div>
   );
 }
@@ -275,7 +270,7 @@ function ScoreCard(props: { side: Side | null; team: string; align: "left" | "ri
   const r = side?.rating ?? null;
   return (
     <div className={`bd-card ${align}${lead ? " lead" : ""}`}>
-      <span className={`bd-card-name team-${team}`}>{side?.name ?? "nobody"}</span>
+      <span className={`bd-card-name team-${team}`}>{side?.name ?? t("nobody")}</span>
       <span className="bd-card-score">{r ? rating(r.score) : "—"}</span>
       {side && (
         <span className="bd-card-kda">

@@ -107,12 +107,17 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
             // player lists, so that part happens here.
             hl_ingest::etf2l::derive_context(&db, me).await?;
             // Your name and picture for the top bar; a failure keeps the old ones.
+            let stage = |what| {
+                let _ = emitter.emit(EV_PROGRESS, Progress::Stage { what });
+            };
+            stage("Refreshing your profile");
             if let Err(e) = hl_ingest::owner::refresh(&db, &sources, me).await {
                 tracing::warn!(error = %format!("{e:#}"), "owner profile refresh failed");
             }
             // Which demos.tf demo each log is, for the ones trends.tf never
             // linked -- 30% of them here. Best effort: demos.tf being down
             // costs those links, not the sync.
+            stage("Matching demos.tf");
             match hl_ingest::demostf::index(&db, &sources, me).await {
                 Ok(f) if f.matched > 0 => tracing::info!(listed = f.listed, matched = f.matched, "demos.tf demos matched to logs"),
                 Ok(_) => {}
@@ -122,18 +127,38 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
             // New logs can link to demos already on disk. This also places
             // every log on the real clock, which the round maps use.
             if let Some(tf) = db.get_config().await?.tf_path {
+                stage("Scanning your demos folder");
                 let s = hl_ingest::index_demos(&db, std::path::Path::new(&tf)).await?;
                 let _ = emitter.emit(EV_DEMOS_INDEXED, &s);
             }
             // Every round's map, then the rating: kills are valued on their map.
+            stage("Resolving each round's map");
             hl_ingest::maps::resolve_all(&db).await?;
-            hl_ingest::fights::derive_all(&db, false).await?;
+            hl_ingest::fights::derive_all(&db, false, |done, total| {
+                let _ = emitter.emit(EV_PROGRESS, Progress::Fights { done, total });
+            })
+            .await?;
             // Aim from any newly linked demo. Seconds a demo, and a demo the
             // parser cannot read must not fail the whole sync.
-            match hl_ingest::aim::derive_all(&db, me, false, |_, _| {}).await {
+            match hl_ingest::aim::derive_all(&db, me, false, |done, total, log_id| {
+                let _ = emitter.emit(EV_PROGRESS, Progress::ReadingDemos { done, total, log_id });
+            })
+            .await
+            {
                 Ok(s) if s.read > 0 => tracing::info!(read = s.read, kills = s.kills, "aim read from demos"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %format!("{e:#}"), "reading aim from demos failed"),
+            }
+            // Asked for in Settings: a demo that has been read is 80 MB
+            // doing nothing. It is swept here, right after the pass, and
+            // nowhere else -- this is the only point where "the app has
+            // finished with it" is certainly true.
+            if db.auto_delete_demos().await.unwrap_or(false) {
+                match sweep_read_demos(&db).await {
+                    Ok(n) if n > 0 => tracing::info!(deleted = n, "downloaded demos cleaned up"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(error = %format!("{e:#}"), "demo cleanup failed"),
+                }
             }
             // Every sync ends by re-rating: new matches shift the baselines.
             hl_ingest::rate_all(&db, Some(me), &weights, |p: Progress| {
@@ -182,10 +207,15 @@ pub async fn reprocess_start(app: AppHandle, state: State<'_, AppState>) -> CmdR
             .await?;
             let me = db.get_me().await?;
             if let Some(me) = me {
+                let _ = emitter.emit(EV_PROGRESS, Progress::Stage { what: "Reading ETF2L" });
                 hl_ingest::etf2l::derive_context(&db, me).await?;
             }
+            let _ = emitter.emit(EV_PROGRESS, Progress::Stage { what: "Resolving each round's map" });
             hl_ingest::maps::resolve_all(&db).await?;
-            hl_ingest::fights::derive_all(&db, true).await?;
+            hl_ingest::fights::derive_all(&db, true, |done, total| {
+                let _ = emitter.emit(EV_PROGRESS, Progress::Fights { done, total });
+            })
+            .await?;
             let (weights, _) = hl_rating::Weights::load(&weights_path);
             hl_ingest::rate_all(&db, me, &weights, |p: Progress| {
                 let _ = emitter.emit(EV_PROGRESS, p);
@@ -255,28 +285,15 @@ pub async fn list_matches(
 ///
 /// Weights are re-read on every call, so edits to `weights.toml` show up the
 /// next time a match is opened.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MatchResponse {
-    #[serde(flatten)]
-    detail: hl_rating::MatchDetail,
-    /// Official, scrim or pug, with the ETF2L side of an official.
-    context: Option<hl_db::MatchContext>,
-    /// The maps played, in order, with rounds won on each.
-    segments: Vec<hl_db::Segment>,
-}
-
 #[tauri::command]
-pub async fn get_match(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<MatchResponse>> {
+pub async fn get_match(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_ingest::MatchView>> {
     let me = state.db.get_me().await?;
     let (weights, warning) = hl_rating::Weights::load(&state.db_path.with_file_name("weights.toml"));
     let Some(mut detail) = hl_ingest::match_detail(&state.db, log_id, me, &weights).await? else {
         return Ok(None);
     };
     detail.weights_warning = warning;
-    let context = state.db.match_context(log_id).await?;
-    let segments = state.db.segments(log_id).await?;
-    Ok(Some(MatchResponse { detail, context, segments }))
+    Ok(Some(hl_ingest::view_of(&state.db, log_id, detail).await?))
 }
 
 #[derive(Serialize)]
@@ -347,6 +364,66 @@ pub async fn get_profile(
     })
 }
 
+/// The demos the app downloaded and still holds (PLAN Q23).
+#[tauri::command]
+pub async fn downloaded_demos(state: State<'_, AppState>) -> CmdResult<Vec<hl_db::DownloadedDemo>> {
+    Ok(state.db.downloaded_demos(hl_ingest::aim::VERSION, hl_ingest::aim::TIMELINE_VERSION).await?)
+}
+
+/// What one round of cleanup did.
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Cleaned {
+    pub deleted: usize,
+    pub bytes: i64,
+    /// Demos left alone because the app has not finished reading them.
+    pub skipped: usize,
+}
+
+/// Delete downloaded demos to reclaim space (PLAN Q23).
+///
+/// `only` names one demo; without it every downloaded demo goes. Deleting
+/// is safe in the one sense that matters: the row stays, with the demos.tf
+/// id on it, so anything removed here can be fetched again. What does not
+/// come back on its own is a future pass version's chance to re-read it --
+/// so a demo the current pass has *not* finished with is left alone unless
+/// `force` says otherwise.
+///
+/// A POV demo is never touched. Those are the player's own recordings, TF2
+/// wrote them, and `downloaded_demos` does not list them.
+#[tauri::command]
+pub async fn delete_downloaded_demos(
+    state: State<'_, AppState>,
+    only: Option<i64>,
+    force: bool,
+) -> CmdResult<Cleaned> {
+    let all = state.db.downloaded_demos(hl_ingest::aim::VERSION, hl_ingest::aim::TIMELINE_VERSION).await?;
+    let mut out = Cleaned::default();
+    for d in all.iter().filter(|d| only.is_none_or(|id| id == d.demo_id)) {
+        if !d.read && !force {
+            out.skipped += 1;
+            continue;
+        }
+        let Some((path, already)) = state.db.demo_path(d.demo_id).await? else { continue };
+        if already {
+            continue;
+        }
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            // Already gone from disk is the state we wanted; record it.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                tracing::warn!(path = %path, error = %e, "could not delete demo");
+                continue;
+            }
+        }
+        state.db.mark_demo_deleted(d.demo_id).await?;
+        out.deleted += 1;
+        out.bytes += d.size_bytes;
+    }
+    Ok(out)
+}
+
 /// Copies of the database, newest first, with where they live.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -377,6 +454,48 @@ pub async fn set_all_history(state: State<'_, AppState>, on: bool) -> CmdResult<
     state.db.set_all_history(on).await?;
     tracing::info!(on, "history policy changed");
     Ok(on)
+}
+
+/// Whether a downloaded demo is deleted once it has been read (PLAN Q23).
+#[tauri::command]
+pub async fn auto_delete_demos(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(state.db.auto_delete_demos().await?)
+}
+
+#[tauri::command]
+pub async fn set_auto_delete_demos(state: State<'_, AppState>, on: bool) -> CmdResult<bool> {
+    state.db.set_auto_delete_demos(on).await?;
+    tracing::info!(on, "demo cleanup policy changed");
+    Ok(on)
+}
+
+/// Delete every downloaded demo the pass has finished with.
+///
+/// Shared by the sweep after a sync and by the Settings button, so "has
+/// been read" means the same thing in both. A demo still needed is left,
+/// and so is every POV demo -- `downloaded_demos` only lists files the app
+/// fetched and can fetch again.
+async fn sweep_read_demos(db: &hl_db::Db) -> anyhow::Result<usize> {
+    let mut n = 0;
+    for d in db.downloaded_demos(hl_ingest::aim::VERSION, hl_ingest::aim::TIMELINE_VERSION).await? {
+        if !d.read {
+            continue;
+        }
+        let Some((path, already)) = db.demo_path(d.demo_id).await? else { continue };
+        if already {
+            continue;
+        }
+        // Already gone from disk is the state we were aiming for.
+        if let Err(e) = std::fs::remove_file(&path) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(path = %path, error = %e, "could not delete demo");
+                continue;
+            }
+        }
+        db.mark_demo_deleted(d.demo_id).await?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 /// Copy the database now, whatever the last copy's age.
@@ -445,11 +564,18 @@ pub async fn get_match_analysis(
     Ok(hl_ingest::analysis::load(&state.db, log_id, me).await?)
 }
 
-/// What the demo says about your aim in one match (PLAN §14): every kill it
-/// could answer for, and the averages over them. Empty without a demo.
+/// What the demo says about one player's aim in one match (PLAN §14): every
+/// kill it could answer for, and the averages over them. Empty without a demo.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AimResponse {
+    /// Whose aim this is. The owner's unless the caller asked for someone
+    /// else, so the cards can never be captioned with the wrong name.
+    pub player: u32,
+    /// The match has an STV demo. Only an STV carries all eighteen players'
+    /// angles, so it is the difference between "nothing for this player" and
+    /// "nothing for anyone but you" — and the UI has to say which.
+    pub stv: bool,
     pub kills: Vec<hl_db::AimRow>,
     pub deaths: Vec<hl_db::DeathRow>,
     pub totals: Option<hl_db::AimTotals>,
@@ -460,13 +586,22 @@ pub struct AimResponse {
 }
 
 #[tauri::command]
-pub async fn get_aim(state: State<'_, AppState>, log_id: i64) -> CmdResult<AimResponse> {
+pub async fn get_aim(
+    state: State<'_, AppState>,
+    log_id: i64,
+    player: Option<u32>,
+) -> CmdResult<AimResponse> {
     let me = state.db.get_me().await?.map_or(0, |m| m.account_id());
-    let this = hl_db::AimFilter { me, log_id: Some(log_id), ..Default::default() };
-    let all = hl_db::AimFilter { me, ..Default::default() };
+    // No player named, or a zero from a page that has not resolved one yet,
+    // means the owner: the same answer this command always gave.
+    let who = player.filter(|p| *p != 0).unwrap_or(me);
+    let this = hl_db::AimFilter { me: who, log_id: Some(log_id), ..Default::default() };
+    let all = hl_db::AimFilter { me: who, ..Default::default() };
     Ok(AimResponse {
-        kills: state.db.aim_for_log(log_id).await?,
-        deaths: state.db.deaths_for_log(log_id).await?,
+        player: who,
+        stv: state.db.demos_for_log(log_id).await?.iter().any(|d| d.kind == "stv"),
+        kills: state.db.aim_for_log(log_id, who).await?,
+        deaths: state.db.deaths_for_log(log_id, who).await?,
         totals: state.db.aim_totals(&this).await?,
         life: state.db.life_totals(&this).await?,
         career: state.db.aim_totals(&all).await?,
@@ -503,7 +638,7 @@ pub async fn get_parts(state: State<'_, AppState>, log_id: i64) -> CmdResult<Vec
 
 /// Fetch one part's log from logs.tf and score it.
 #[tauri::command]
-pub async fn fetch_part(state: State<'_, AppState>, part_id: i64) -> CmdResult<Option<hl_rating::MatchDetail>> {
+pub async fn fetch_part(state: State<'_, AppState>, part_id: i64) -> CmdResult<Option<hl_ingest::MatchView>> {
     let me = state.db.get_me().await?;
     let (weights, _) = hl_rating::Weights::load(&state.db_path.with_file_name("weights.toml"));
     Ok(hl_ingest::parts::fetch(&state.db, &state.sources, part_id, me, &weights).await?)
@@ -550,6 +685,8 @@ const EV_STV_PROGRESS: &str = "stv://progress";
 const EV_STV_DONE: &str = "stv://done";
 const EV_STV_ERROR: &str = "stv://error";
 const EV_STV_QUEUED: &str = "stv://queued";
+/// What happens between the last byte and "ready": linking, reading, keeping.
+const EV_STV_STAGE: &str = "stv://stage";
 
 async fn tf_path(state: &AppState) -> CmdResult<std::path::PathBuf> {
     let tf = state
@@ -582,6 +719,39 @@ struct StvProgress {
     log_id: i64,
     bytes: u64,
     total: Option<u64>,
+}
+
+/// One step after the download, for the card's step list. `step` is
+/// "linking", "reading", "keeping" or "saving"; the rest only where they
+/// mean something.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct StvStage {
+    log_id: i64,
+    step: &'static str,
+    demo: Option<usize>,
+    of: Option<usize>,
+    kind: Option<String>,
+    pct: Option<u8>,
+}
+
+impl StvStage {
+    fn linking(log_id: i64) -> Self {
+        StvStage { log_id, step: "linking", demo: None, of: None, kind: None, pct: None }
+    }
+
+    fn from_read(log_id: i64, s: hl_ingest::aim::ReadStep) -> Self {
+        use hl_ingest::aim::ReadStep;
+        match s {
+            ReadStep::Reading { demo, of, kind, pct } => {
+                StvStage { log_id, step: "reading", demo: Some(demo), of: Some(of), kind: Some(kind), pct: Some(pct) }
+            }
+            ReadStep::Keeping { demo, of } => {
+                StvStage { log_id, step: "keeping", demo: Some(demo), of: Some(of), kind: None, pct: None }
+            }
+            ReadStep::Saving => StvStage { log_id, step: "saving", demo: None, of: None, kind: None, pct: None },
+        }
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -657,11 +827,18 @@ fn announce(app: &AppHandle, queue: &DemoQueue) {
 
 /// Download the demos.tf STV demo for a match in the background, then index
 /// and link it. Progress streams on `stv://progress`.
-/// Link a freshly downloaded demo to its match and read it.
-async fn index_and_read(db: &hl_db::Db, tf: &std::path::Path, log_id: i64) -> anyhow::Result<()> {
+/// Link a freshly downloaded demo to its match and read it, saying which
+/// step it is on: this is the half-minute after the bar reaches 100%, and it
+/// used to pass in silence.
+async fn index_and_read(app: &AppHandle, db: &hl_db::Db, tf: &std::path::Path, log_id: i64) -> anyhow::Result<()> {
+    let _ = app.emit(EV_STV_STAGE, StvStage::linking(log_id));
     hl_ingest::index_demos(db, tf).await?;
     if let Some(me) = db.get_me().await? {
-        let routes = hl_ingest::aim::derive_log(db, me, log_id).await?;
+        let emitter = app.clone();
+        let routes = hl_ingest::aim::derive_log_with(db, me, log_id, &mut |s| {
+            let _ = emitter.emit(EV_STV_STAGE, StvStage::from_read(log_id, s));
+        })
+        .await?;
         tracing::info!(log_id, routes, "STV demo read");
     }
     Ok(())
@@ -711,7 +888,7 @@ pub async fn fetch_stv(app: AppHandle, state: State<'_, AppState>, log_id: i64) 
             Ok(done) => {
                 // The file is on disk; link it, then read it, so the match
                 // page has everyone's movement by the time the event lands.
-                if let Err(e) = index_and_read(&db, &tf, log_id).await {
+                if let Err(e) = index_and_read(&app, &db, &tf, log_id).await {
                     tracing::warn!(log_id, error = %format!("{e:#}"), "reading the new STV demo failed");
                 }
                 queue.leave(log_id);

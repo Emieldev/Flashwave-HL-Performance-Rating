@@ -1,5 +1,6 @@
 import type { MatchDetail } from "../../api/types";
 import { capitalize, formatDate, minutes, splitMap } from "../../lib/format";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * The per-round logs a combined log was built from.
@@ -14,22 +15,19 @@ export function Parts({ d }: { d: MatchDetail }) {
   return (
     <section className="panel parts">
       <header className="parts-head">
-        <h2>Combined from {d.parts.length} logs</h2>
-        <p className="hint">
-          Someone uploaded these rounds as one log. The parts are not counted again here, so your totals stay
-          right; open one on logs.tf to see it on its own.
-        </p>
+        <h2>{tx("Combined from {parts} logs", { parts: d.parts.length })}</h2>
+        <p className="hint">{t("Someone uploaded these rounds as one log. The parts are not counted again here, so your totals stay right; open one on logs.tf to see it on its own.")}</p>
       </header>
       <div className="table-wrap">
         <table className="match-table">
           <thead>
             <tr>
-              <th>Log</th>
-              <th>When</th>
-              <th>Map</th>
-              <th className="num">Length</th>
-              <th className="num">Players</th>
-              <th>Title</th>
+              <th>{t("Log")}</th>
+              <th>{t("When")}</th>
+              <th>{t("Map")}</th>
+              <th className="num">{t("Length")}</th>
+              <th className="num">{t("Players")}</th>
+              <th>{t("Title")}</th>
             </tr>
           </thead>
           <tbody>
@@ -45,7 +43,7 @@ export function Parts({ d }: { d: MatchDetail }) {
                   <td className="muted nowrap">{formatDate(p.playedAt, true)}</td>
                   <td className="nowrap">
                     {mode && <span className={`mode mode-${mode}`}>{mode}</span>}
-                    <span className={name ? "" : "muted"}>{name ? capitalize(name) : "unknown"}</span>
+                    <span className={name ? "" : "muted"}>{name ? capitalize(name) : t("unknown")}</span>
                   </td>
                   <td className="num">{p.durationS ? minutes(p.durationS) : <span className="muted">-</span>}</td>
                   <td className="num">{p.playerCount ?? <span className="muted">-</span>}</td>

@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    // The translations live in lang/ at the top of the repository, outside
+    // this folder, so contributors find them without digging into the UI.
+    fs: { allow: [".."] },
     watch: {
       // Rust rebuilds are handled by Tauri; watching them just churns HMR.
       ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"],

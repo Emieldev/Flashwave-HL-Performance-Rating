@@ -8,11 +8,11 @@
 //! scores exactly like a match of its own. Their JSON is stored in
 //! `part_raw`, fetched during a sync or on demand here.
 
-use crate::detail::match_detail_from;
+use crate::detail::{match_detail_from, view_of, MatchView};
 use anyhow::{Context, Result};
 use hl_core::SteamId;
 use hl_db::Db;
-use hl_rating::{MatchDetail, Weights};
+use hl_rating::Weights;
 use serde::Serialize;
 
 /// One part of a combined log, with its own scoreboard where the data is
@@ -25,7 +25,7 @@ pub struct PartScore {
     pub map: Option<String>,
     pub played_at: Option<i64>,
     pub duration_s: Option<i64>,
-    pub detail: Option<MatchDetail>,
+    pub detail: Option<MatchView>,
     /// The rounds of the combined log this part covers. logs.tf copies rounds
     /// verbatim when it combines, so a part's round and its copy in the
     /// combined log start on the same second.
@@ -72,7 +72,7 @@ async fn parent_rounds(db: &Db, part_id: i64, parent: &[(i64, i64, i64)]) -> Res
 
 /// Fetch one part's log from logs.tf, store it, and score it. Does nothing
 /// but score it when it is already stored.
-pub async fn fetch(db: &Db, sources: &crate::Sources, part_id: i64, me: Option<SteamId>, w: &Weights) -> Result<Option<MatchDetail>> {
+pub async fn fetch(db: &Db, sources: &crate::Sources, part_id: i64, me: Option<SteamId>, w: &Weights) -> Result<Option<MatchView>> {
     if db.part_raw(part_id).await?.is_none() {
         let json = sources
             .logstf_log(part_id)
@@ -85,7 +85,7 @@ pub async fn fetch(db: &Db, sources: &crate::Sources, part_id: i64, me: Option<S
 
 /// Build a part's match page from its stored JSON. `None` when it has not
 /// been fetched, or its JSON cannot be read.
-async fn detail_of(db: &Db, part_id: i64, me: Option<SteamId>, w: &Weights) -> Result<Option<MatchDetail>> {
+async fn detail_of(db: &Db, part_id: i64, me: Option<SteamId>, w: &Weights) -> Result<Option<MatchView>> {
     let Some(json) = db.part_raw(part_id).await? else { return Ok(None) };
     let value: serde_json::Value = match serde_json::from_str(&json) {
         Ok(v) => v,
@@ -97,7 +97,10 @@ async fn detail_of(db: &Db, part_id: i64, me: Option<SteamId>, w: &Weights) -> R
     // A part is an ordinary log: it normalizes, and its players are rated
     // against the same pool as everyone else.
     match match_detail_from(db, part_id, &value, me, w).await {
-        Ok(d) => Ok(Some(d)),
+        // The same wrapper the whole match gets. A part is one map, so its
+        // `segments` is usually empty -- empty is a list, and the page can
+        // read a list.
+        Ok(d) => Ok(Some(view_of(db, part_id, d).await?)),
         Err(e) => {
             tracing::warn!(part_id, error = %format!("{e:#}"), "part could not be scored");
             Ok(None)

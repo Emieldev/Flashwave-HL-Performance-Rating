@@ -13,6 +13,7 @@ mod players;
 mod ratings;
 mod rawlog;
 mod roundmap;
+mod timeline;
 
 pub use context::{
     ContextCounts, ContextGameRow, ContextRow, Etf2lMatchRow, MatchContext, MateRow, OfficialInfo,
@@ -20,12 +21,13 @@ pub use context::{
 };
 pub use aim::{AimFilter, AimRow, AimTotals, DeathRow, LifeTotals, PathRow};
 pub use fights::{ClassGame, FightFilter, FightRow, FightTotals, SeasonOfficial, FIGHT_COLUMNS};
-pub use demos::{ClockInput, ClockRow, DemoRow, DemoStats, LinkedDemo};
+pub use demos::{ClockInput, ClockRow, DemoRow, DemoStats, DownloadedDemo, LinkedDemo};
 pub use rawlog::{ChatRow, KillRow, RawlogStats, StoredKill};
 pub use roundmap::{
     PartRow, ResolverLog, RoundMapRow, RoundMapStats, RoundRow, RoundWindow, Segment, SegmentRow,
 };
 pub use ratings::{HistoryDbRow, RatingRow, VsTotals};
+pub use timeline::{TimelineRow, TimelineTotals};
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
 pub use matches::{
     FailedLog, IndexInfo, IndexStats, LogsTfIndexRow, MatchFilter, MatchPage, MatchSummary, PartSummary, MyLine,

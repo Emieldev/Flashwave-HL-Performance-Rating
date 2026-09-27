@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
 import type { Analysis, Jump, KillView, PlayEvent, Team } from "../../api/types";
 import { capitalize, teamLabel } from "../../lib/format";
-import { CLASS_SHORT, inSlice, jumpTo, playerMap, roundClock, type Slice } from "./common";
+import { inSlice, jumpTo, playerMap, roundClock, type Slice, classLabel } from "./common";
+import { t as tr, tx, k } from "../../lib/i18n";
 
 type Kind = "kills" | "ubers" | "caps" | "chat" | "streaks";
 
 const FILTERS: Array<[Kind, string]> = [
-  ["kills", "Kills"],
-  ["ubers", "Ubers"],
-  ["caps", "Caps"],
-  ["chat", "Chat"],
-  ["streaks", "Streaks"],
+  ["kills", k("Kills")],
+  ["ubers", k("Ubers")],
+  ["caps", k("Caps")],
+  ["chat", k("Chat")],
+  ["streaks", k("Streaks")],
 ];
 
 type Row = { t: number; roundNum: number; kind: Kind; kill?: KillView; ev?: PlayEvent; jump: Jump | null };
@@ -75,28 +76,27 @@ export function PlayByPlay({ a, player, slice }: { a: Analysis; player: number; 
       <div className="pbp-filters">
         {FILTERS.map(([k, label]) => (
           <button key={k} className={on.has(k) ? "chip on" : "chip"} aria-pressed={on.has(k)} onClick={() => toggle(k)}>
-            {label}
+            {tr(label)}
           </button>
         ))}
         <label className="check">
-          <input type="checkbox" checked={onlyPlayer} onChange={(e) => setOnlyPlayer(e.target.checked)} />
-          Only rows with {who?.name ?? "the player"}
+          <input type="checkbox" checked={onlyPlayer} onChange={(e) => setOnlyPlayer(e.target.checked)} />{tr("Only rows with")}{" "}{who?.name ?? tr("the player")}
         </label>
-        <span className="hint">{shown.length} rows</span>
+        <span className="hint">{tx("{shown} rows", { shown: shown.length })}</span>
       </div>
 
-      {shown.length === 0 && <p className="hint an-empty">Nothing for this filter.</p>}
+      {shown.length === 0 && <p className="hint an-empty">{tr("Nothing for this filter.")}</p>}
 
       {[...byRound.entries()].map(([rn, list]) => (
         <section key={rn} className="pbp-round">
-          <h3 className="pbp-round-head">Round {rn}</h3>
+          <h3 className="pbp-round-head">{tx("Round {rn}", { rn: rn })}</h3>
           <ol className="pbp-list">
             {list.map((r, i) => (
               <li
                 key={i}
                 className={`pbp-row pbp-${r.kind}${r.jump ? " jumpable" : ""}${involves(r) ? " pbp-involved" : ""}`}
                 onClick={() => r.jump && jumpTo(r.jump, `${r.kind} at ${roundClock(r.t, a.rounds)}`)}
-                title={r.jump ? `Copy demo_gototick ${r.jump.tick}` : undefined}
+                title={r.jump ? tr("Copy demo_gototick {tick}", { tick: r.jump.tick }) : undefined}
               >
                 <span className="pbp-time">{roundClock(r.t, a.rounds).replace(/^R\d+ /, "")}</span>
                 <span className="pbp-body">
@@ -112,7 +112,7 @@ export function PlayByPlay({ a, player, slice }: { a: Analysis; player: number; 
                         {r.kill.custom && ` · ${r.kill.custom}`}
                         {r.kill.assister !== null && (
                           <>
-                            {" · assist "}
+                            {tr(" · assist ")}
                             <Who id={r.kill.assister} />
                           </>
                         )}
@@ -121,30 +121,29 @@ export function PlayByPlay({ a, player, slice }: { a: Analysis; player: number; 
                   )}
                   {r.ev?.kind === "charge" && (
                     <>
-                      <Who id={r.ev.player} /> popped{" "}
-                      {r.ev.text && r.ev.text !== "medigun" ? capitalize(r.ev.text) : "uber"}
+                      <Who id={r.ev.player} />{" "}{tr("popped")}{" "}
+                      {r.ev.text && r.ev.text !== "medigun" ? capitalize(r.ev.text) : tr("uber")}
                     </>
                   )}
                   {r.ev?.kind === "drop" && (
                     <>
-                      <Who id={r.ev.player} /> <strong className="warn-text">dropped uber</strong>
+                      <Who id={r.ev.player} /> <strong className="warn-text">{tr("dropped uber")}</strong>
                     </>
                   )}
                   {r.ev?.kind === "pointcap" && (
                     <>
-                      <span className={`team-${(r.ev.team ?? "none").toLowerCase()}`}>{r.ev.team ? teamLabel(r.ev.team) : "?"}</span>{" "}
-                      captured{r.ev.text ? ` point ${r.ev.text}` : ""}
+                      {tx("{0}{1}captured{2}", { "0": <span className={`team-${(r.ev.team ?? "none").toLowerCase()}`}>{r.ev.team ? teamLabel(r.ev.team) : "?"}</span>, "1": " ", "2": r.ev.text ? tr(" point {text}", { text: r.ev.text }) : "" })}
                     </>
                   )}
                   {r.ev?.kind === "chat" && (
                     <>
                       <Who id={r.ev.player} />
-                      {r.ev.teamChat && <span className="muted"> (team)</span>}: <span className="pbp-chat">{r.ev.text}</span>
+                      {r.ev.teamChat && <span className="muted">{" "}{tr("(team)")}</span>}: <span className="pbp-chat">{r.ev.text}</span>
                     </>
                   )}
                   {r.ev?.kind === "streak" && (
                     <>
-                      <Who id={r.ev.player} /> <strong>{r.ev.text}-kill streak</strong>
+                      <Who id={r.ev.player} /> <strong>{tx("{text}-kill streak", { text: r.ev.text })}</strong>
                       <span className="pbp-meta">
                         {r.ev.victims.map((v, j) => (
                           <span key={j}>
@@ -166,7 +165,7 @@ export function PlayByPlay({ a, player, slice }: { a: Analysis; player: number; 
 }
 
 function cls(c: string | null): string {
-  return c ? `(${CLASS_SHORT[c] ?? c})` : "";
+  return c ? `(${classLabel(c, true)})` : "";
 }
 
 /** The few labels worth a glance in a feed: rare enough to stand out. */
@@ -174,17 +173,17 @@ function KillTagChips({ k }: { k: KillView }) {
   const t = k.tags;
   if (!t) return null;
   const chips: Array<[string, string, string]> = [];
-  if (t.firstOfRound) chips.push(["first pick", "tag-open", "The first kill of the round"]);
-  else if (t.opening) chips.push(["opening", "tag-open", "The first kill of a fight: more than 10 s after the last one"]);
-  if (t.drop) chips.push(["drop", "tag-charge", "The Medic died holding a ready charge"]);
-  else if (t.intoCharge) chips.push(["into charge", "tag-charge", "A combo player killed while their team held a ready charge"]);
+  if (t.firstOfRound) chips.push([tr("first pick"), "tag-open", tr("The first kill of the round")]);
+  else if (t.opening) chips.push([tr("opening"), "tag-open", tr("The first kill of a fight: more than 10 s after the last one")]);
+  if (t.drop) chips.push([tr("drop"), "tag-charge", tr("The Medic died holding a ready charge")]);
+  else if (t.intoCharge) chips.push([tr("into charge"), "tag-charge", tr("A combo player killed while their team held a ready charge")]);
   // "Traded" and "clean-up" fit a third of all kills each: in the Fights tab, not here.
-  if (t.diedAfter) chips.push(["died after", "tag-traded", "The killer died within 3 s"]);
+  if (t.diedAfter) chips.push([tr("died after"), "tag-traded", tr("The killer died within 3 s")]);
   return (
     <>
       {chips.map(([label, cls, title]) => (
         <span key={label} className={`kill-tag ${cls}`} title={title}>
-          {label}
+          {tr(label)}
         </span>
       ))}
     </>
@@ -198,18 +197,12 @@ function DeathTagChips({ k }: { k: KillView }) {
   return (
     <>
       {t.deathTraded ? (
-        <span className="kill-tag tag-open" title="Your team killed back within 3 s: the death opened something">
-          traded
-        </span>
+        <span className="kill-tag tag-open" title={tr("Your team killed back within 3 s: the death opened something")}>{tr("traded")}</span>
       ) : (
-        <span className="kill-tag tag-traded" title="Nobody on your team killed back within 3 s">
-          untraded
-        </span>
+        <span className="kill-tag tag-traded" title={tr("Nobody on your team killed back within 3 s")}>{tr("untraded")}</span>
       )}
       {t.stationary && (
-        <span className="kill-tag tag-plain" title="You died near a spot you had already got two kills from this life">
-          stayed put
-        </span>
+        <span className="kill-tag tag-plain" title={tr("You died near a spot you had already got two kills from this life")}>{tr("stayed put")}</span>
       )}
     </>
   );

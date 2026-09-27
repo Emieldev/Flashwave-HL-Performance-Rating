@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "../../api/types";
 import { formatDate, rating, splitMap } from "../../lib/format";
 import { useMeasuredWidth } from "../../lib/measure";
+import { t as tr, tx, k } from "../../lib/i18n";
 
 /**
  * Rating over time, as an emphasis chart: the rolling average is the story
@@ -15,9 +16,9 @@ import { useMeasuredWidth } from "../../lib/measure";
 
 type Range = "50" | "200" | "all";
 const RANGES: Array<{ id: Range; label: string }> = [
-  { id: "50", label: "Last 50" },
-  { id: "200", label: "Last 200" },
-  { id: "all", label: "All" },
+  { id: "50", label: k("Last 50") },
+  { id: "200", label: k("Last 200") },
+  { id: "all", label: k("All") },
 ];
 
 const H = 260;
@@ -109,13 +110,12 @@ export function TrendChart(props: {
     <section className="panel trend">
       <header className="trend-head">
         <div>
-          <h2>Rating over time</h2>
+          <h2>{tr("Rating over time")}</h2>
           <p className="hint">
-            {shown.length} games, oldest to newest. Click a game to open it.
-          </p>
+            {tx("{shown} games, oldest to newest. Click a game to open it.", { shown: shown.length })}</p>
         </div>
         <div className="trend-controls">
-          <div className="segmented" role="tablist" aria-label="Range">
+          <div className="segmented" role="tablist" aria-label={tr("Range")}>
             {RANGES.map((r) => (
               <button
                 key={r.id}
@@ -124,12 +124,12 @@ export function TrendChart(props: {
                 className={range === r.id ? "seg active" : "seg"}
                 onClick={() => setRange(r.id)}
               >
-                {r.label}
+                {tr(r.label)}
               </button>
             ))}
           </div>
           <button className="linkish" onClick={() => setAsTable((t) => !t)}>
-            {asTable ? "Show chart" : "Show as table"}
+            {asTable ? tr("Show chart") : tr("Show as table")}
           </button>
         </div>
       </header>
@@ -139,28 +139,21 @@ export function TrendChart(props: {
           <svg width="18" height="8" aria-hidden>
             <line x1="1" y1="4" x2="17" y2="4" className="tl-line" />
           </svg>
-          {rollingWindow}-game average
-        </span>
+          {tr("{rollingWindow}-game average", { rollingWindow })}</span>
         <span>
           <svg width="10" height="10" aria-hidden>
             <circle cx="5" cy="5" r="4" className="tl-dot" />
-          </svg>
-          single game
-        </span>
+          </svg>{tr("single game")}</span>
         {hasOfficials && (
           <span>
             <svg width="10" height="10" aria-hidden>
               <circle cx="5" cy="5" r="4" className="tl-dot official" />
-            </svg>
-            ETF2L official
-          </span>
+            </svg>{tr("ETF2L official")}</span>
         )}
         <span>
           <svg width="18" height="8" aria-hidden>
             <line x1="1" y1="4" x2="17" y2="4" className="tl-median" />
-          </svg>
-          1.00 = the typical player you face
-        </span>
+          </svg>{tr("1.00 = the typical player you face")}</span>
       </div>
 
       {asTable ? (
@@ -172,7 +165,7 @@ export function TrendChart(props: {
             viewBox={`0 0 ${width} ${H}`}
             height={H}
             role="img"
-            aria-label={`Rating over ${shown.length} games; latest ${rollingWindow}-game average ${last?.rolling ?? "n/a"}`}
+            aria-label={tr("Rating over {shown} games; latest {rollingWindow}-game average {2}", { "2": last?.rolling ?? "n/a", shown: shown.length, rollingWindow: rollingWindow })}
             tabIndex={0}
             className="trend-svg"
             onPointerMove={(e) => setHover(nearest(e.clientX, e.currentTarget))}
@@ -206,7 +199,7 @@ export function TrendChart(props: {
 
             {yearTicks.map((t) => (
               <text key={t.i} x={x(t.i)} y={H - 8} className="tl-axis" textAnchor="middle">
-                {t.label}
+                {tr(t.label)}
               </text>
             ))}
 
@@ -256,7 +249,7 @@ export function TrendChart(props: {
                     <line x1="1" y1="3" x2="13" y2="3" className="tl-line" />
                   </svg>
                   <strong>{rating(h.rolling)}</strong>
-                  <span className="muted">{rollingWindow}-game avg</span>
+                  <span className="muted">{tx("{rollingWindow}-game avg", { rollingWindow: rollingWindow })}</span>
                 </div>
               )}
               <div className="tip-row">
@@ -264,10 +257,10 @@ export function TrendChart(props: {
                   <circle cx="7" cy="4" r="3.5" className="tl-dot solid" />
                 </svg>
                 <strong>{rating(h.score)}</strong>
-                <span className="muted">this game</span>
+                <span className="muted">{tr("this game")}</span>
               </div>
               <div className="tip-meta">
-                {formatDate(h.playedAt, true)} · {splitMap(h.map).name ?? "unknown map"}
+                {formatDate(h.playedAt, true)} · {splitMap(h.map).name ?? tr("unknown map")}
                 {h.result && <span className={`result-${h.result}`}> · {h.result}</span>}
                 {h.kind && <span> · {h.kind}</span>}
               </div>
@@ -287,18 +280,18 @@ function TrendTable({ points, onOpen }: { points: TrendPoint[]; onOpen: (logId: 
       <table className="match-table">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Map</th>
-            <th>Result</th>
-            <th className="num">Rating</th>
-            <th className="num">10-game avg</th>
+            <th>{tr("Date")}</th>
+            <th>{tr("Map")}</th>
+            <th>{tr("Result")}</th>
+            <th className="num">{tr("Rating")}</th>
+            <th className="num">{tr("10-game avg")}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p) => (
             <tr key={p.logId} className="clickable" tabIndex={0} onClick={() => onOpen(p.logId)} onKeyDown={(e) => e.key === "Enter" && onOpen(p.logId)}>
               <td className="muted nowrap">{formatDate(p.playedAt, true)}</td>
-              <td className="nowrap">{splitMap(p.map).name ?? <span className="muted">unknown</span>}</td>
+              <td className="nowrap">{splitMap(p.map).name ?? <span className="muted">{tr("unknown")}</span>}</td>
               <td>{p.result && <span className={`result result-${p.result}`}>{p.result}</span>}</td>
               <td className="num">{rating(p.score)}</td>
               <td className="num">{rating(p.rolling)}</td>

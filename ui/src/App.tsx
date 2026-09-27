@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
+import { t, useLanguage, t as tr, tx } from "./lib/i18n";
 import { errorMessage } from "./api/types";
 import { Setup } from "./components/Setup";
 import { Settings } from "./components/Settings";
@@ -17,6 +18,7 @@ import { watchDownloads } from "./lib/downloads";
 import { watchSync } from "./lib/sync";
 import { watchDemos } from "./lib/demowatch";
 import { checkForUpdate } from "./lib/update";
+import { useNavigation } from "./lib/navigation";
 import { OwnerBadge } from "./components/OwnerBadge";
 import { RestoreBanner } from "./components/RestoreBanner";
 import "./App.css";
@@ -34,13 +36,18 @@ const TABS: Array<[Tab, string]> = [
 ];
 
 export default function App() {
+  // Subscribed here, once: nothing below is memoised, so a language change
+  // re-renders the whole tree and every `t()` in it reads the new table.
+  useLanguage();
   // Set when the user chooses to revisit setup after it is already complete.
   const [forceSetup, setForceSetup] = useState(false);
   // A first run keeps the setup screen up until its last step, even once the
   // SteamID alone has made the app ready.
   const [onboarding, setOnboarding] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<Tab>("matches");
-  const [openLog, setOpenLog] = useState<number | null>(null);
+  // Where you are, with back and forward (mouse buttons, Alt+arrows).
+  const nav = useNavigation<Tab>("matches");
+  const { tab, log: openLog } = nav;
+  const setOpenLog = nav.open;
   // A sync and a demo download both keep running while you read other
   // matches, so the app follows them rather than the panel that started one.
   const qc = useQueryClient();
@@ -55,12 +62,12 @@ export default function App() {
   // Pages stay mounted once visited, so their filters and scroll survive a
   // trip to a match and back.
   const [visited, setVisited] = useState<Set<Tab>>(new Set(["matches"]));
+  // Whichever way a tab was reached -- clicked, or back and forward. Set
+  // during render, which React re-runs at once, rather than in an effect a
+  // frame later.
+  if (!visited.has(tab)) setVisited(new Set(visited).add(tab));
 
-  const go = (t: Tab) => {
-    setTab(t);
-    setOpenLog(null);
-    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
-  };
+  const go = nav.go;
 
   const status = useQuery({
     queryKey: ["app_status"],
@@ -72,7 +79,7 @@ export default function App() {
     return (
       <div className="shell">
         <div className="centered">
-          <p className="hint">Opening database…</p>
+          <p className="hint">{tr("Opening database…")}</p>
         </div>
       </div>
     );
@@ -83,13 +90,11 @@ export default function App() {
       <div className="shell">
         <div className="centered">
           <div className="card">
-            <h1>Could not start</h1>
+            <h1>{tr("Could not start")}</h1>
             <p className="error" style={{ marginTop: 12 }}>
               {errorMessage(status.error)}
             </p>
-            <button style={{ marginTop: 18 }} onClick={() => void status.refetch()}>
-              Retry
-            </button>
+            <button style={{ marginTop: 18 }} onClick={() => void status.refetch()}>{tr("Retry")}</button>
           </div>
         </div>
       </div>
@@ -134,17 +139,14 @@ export default function App() {
         <div className="brand">
           <h1 className="wordmark">
             <img src="/logo.svg" alt="" />
-            <span>
-              Flashwave<span className="hl">.tf</span>
+            <span>{tx("Flashwave{0}", { "0": <span className="hl">{tr(".tf")}</span> })}
             </span>
-            <span className="beta-tag" title="Early build: expect rough edges, and please report them">
-              alpha
-            </span>
+            <span className="beta-tag" title={tr("Early build: expect rough edges, and please report them")}>{tr("alpha")}</span>
           </h1>
           <nav className="tabs">
-            {TABS.map(([t, label]) => (
-              <button key={t} className={tab === t ? "tab active" : "tab"} onClick={() => go(t)}>
-                {label}
+            {TABS.map(([id, label]) => (
+              <button key={id} className={tab === id ? "tab active" : "tab"} onClick={() => go(id)}>
+                {t(label)}
               </button>
             ))}
           </nav>
@@ -154,8 +156,8 @@ export default function App() {
           <OwnerBadge steamid={data.config.steamid} />
           <button
             className={tab === "settings" ? "cog active" : "cog"}
-            title="Settings"
-            aria-label="Settings"
+            title={t("Settings")}
+            aria-label={t("Settings")}
             aria-pressed={tab === "settings"}
             onClick={() => go(tab === "settings" ? "matches" : "settings")}
           >
@@ -194,7 +196,7 @@ export default function App() {
       {/* "Back" returns to whichever tab the match was opened from. */}
       {openLog !== null && (
         <ErrorBoundary what="The match page" key={openLog}>
-          <MatchPage logId={openLog} onBack={() => setOpenLog(null)} />
+          <MatchPage logId={openLog} onBack={nav.close} />
         </ErrorBoundary>
       )}
       <Notifications onOpenMatch={setOpenLog} />

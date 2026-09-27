@@ -37,6 +37,10 @@ pub struct Impact {
     /// a kill at even numbers is worth 0.19, a clean-up at four up 0.05.
     /// `None` where no `[swing]` table was measured.
     pub swing: Option<f64>,
+    /// The same swing with each kill shared among whoever damaged the victim
+    /// in the five seconds before (Q6b), rather than all of it going to the
+    /// last shot. `None` without a raw log or a `[swing]` table.
+    pub swing_shared: Option<f64>,
     pub assists: f64,
     /// The player's kills in context (PLAN §11 B), where the fights pass has
     /// read the log. `None` without a raw log.
@@ -63,6 +67,9 @@ pub struct FightCounts {
     pub fights_present: u32,
     pub fights_kast: u32,
     pub fights_kast_engaged: u32,
+    /// Q17, Q25: captures weighted by enemies alive, and by own team dead.
+    pub caps_contested: u32,
+    pub caps_mates_dead: u32,
 }
 
 /// A victim whose class the log never named is valued like a Scout, the

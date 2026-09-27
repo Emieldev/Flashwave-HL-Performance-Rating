@@ -284,6 +284,15 @@ button.primary {
   letter-spacing: 0.04em;
 }
 
+/* A language button: the orange already marks the chosen one, and a name
+   like "Français" should read as its speakers write it, not in capitals. */
+button.primary.lang-choice {
+  font-family: inherit;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 button.primary:hover:not(:disabled) {
   background: linear-gradient(var(--accent-hi-hover), var(--accent-lo-hover));
   border-color: var(--accent-edge-hover);

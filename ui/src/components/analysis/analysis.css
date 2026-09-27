@@ -1131,3 +1131,27 @@
 .km-cap-at {
   color: var(--faint);
 }
+
+/* Teamfights (Q7b): a side that arrived as one, and one that trickled in.
+   Colour is paired with the number itself, never carrying the meaning alone. */
+.teamfights .kv {
+  margin-bottom: 12px;
+}
+
+.tf-together {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.tf-apart {
+  color: var(--bad);
+}
+
+.teamfights tr.muted-row td {
+  color: var(--muted);
+}
+
+.an-sub {
+  margin: 20px 0 8px;
+  font-size: 0.95rem;
+}

@@ -414,6 +414,10 @@ impl Worth {
 #[serde(rename_all = "camelCase")]
 pub struct VictimWorth {
     pub by: HashMap<(hl_core::TfClass, Mode), Worth>,
+    /// Q26 (zaag): stopwatch only, split by whether the *killer* was
+    /// attacking. On every stopwatch map here BLU attacks, so the killer's
+    /// colour is the side. Measured against the same stopwatch baseline.
+    pub by_side: HashMap<(hl_core::TfClass, bool), Worth>,
     pub logs: usize,
     pub unmapped: usize,
 }
@@ -431,7 +435,7 @@ pub async fn victim_worth(db: &hl_db::Db) -> anyhow::Result<VictimWorth> {
 
     // One pass over the logs; the baseline needs every kill before any
     // excess can be worked out, and parsing them twice costs eight seconds.
-    let mut seen: Vec<(Mode, KillState, hl_core::TfClass, bool)> = Vec::new();
+    let mut seen: Vec<(Mode, KillState, hl_core::TfClass, bool, bool)> = Vec::new();
     for log_id in db.rawlog_ids().await? {
         let Some(zip) = db.rawlog(log_id).await? else { continue };
         let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
@@ -455,7 +459,8 @@ pub async fn victim_worth(db: &hl_db::Db) -> anyhow::Result<VictimWorth> {
                 out.unmapped += 1;
                 continue;
             };
-            seen.push((Mode::of(map), state, vc, won == kt));
+            // The killer attacking: BLU attacks on every stopwatch map.
+            seen.push((Mode::of(map), state, vc, won == kt, kt == Team::Blue));
         }
     }
 
@@ -463,7 +468,7 @@ pub async fn victim_worth(db: &hl_db::Db) -> anyhow::Result<VictimWorth> {
     // team won the round. Each kill is two moments — the killer's, and the
     // victim's seeing the state flipped and not getting the kill.
     let mut base: HashMap<(Mode, KillState), (u32, u32)> = HashMap::new();
-    for &(mode, state, _, won) in &seen {
+    for &(mode, state, _, won, _) in &seen {
         let a = base.entry((mode, state)).or_default();
         a.0 += 1;
         a.1 += u32::from(won);
@@ -472,14 +477,279 @@ pub async fn victim_worth(db: &hl_db::Db) -> anyhow::Result<VictimWorth> {
         b.1 += u32::from(!won);
     }
 
-    for (mode, state, vc, won) in seen {
+    // Q26: stopwatch again, with a baseline per side. Winning a stopwatch
+    // round means something different to each side -- the attackers win by
+    // capping, the defenders by the clock -- so a baseline pooled across
+    // them puts every attacking kill near +30% and every defending one near
+    // -26%, whoever died. Built the same way as `base`: each kill is the
+    // killer's side in its state and the victim's side seeing it flipped.
+    let mut base_side: HashMap<(KillState, bool), (u32, u32)> = HashMap::new();
+    for &(mode, state, _, won, attacking) in &seen {
+        if mode != Mode::Stopwatch {
+            continue;
+        }
+        let a = base_side.entry((state, attacking)).or_default();
+        a.0 += 1;
+        a.1 += u32::from(won);
+        let b = base_side.entry((state.flip(), !attacking)).or_default();
+        b.0 += 1;
+        b.1 += u32::from(!won);
+    }
+
+    for (mode, state, vc, won, attacking) in seen {
         let Some(&(n, w)) = base.get(&(mode, state)) else { continue };
         let e = out.by.entry((vc, mode)).or_default();
         e.kills += 1;
         e.won += u32::from(won);
         e.expected += f64::from(w) / f64::from(n);
+        if mode == Mode::Stopwatch {
+            let Some(&(n, w)) = base_side.get(&(state, attacking)) else { continue };
+            let s = out.by_side.entry((vc, attacking)).or_default();
+            s.kills += 1;
+            s.won += u32::from(won);
+            s.expected += f64::from(w) / f64::from(n);
+        }
     }
     Ok(out)
+}
+
+/// What one group of captures was worth, over what the situation predicted.
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapWorth {
+    pub caps: u32,
+    /// Of those, how many were by the team that went on to win the round.
+    pub won: u32,
+    /// The sum of what the state before each cap predicted.
+    pub expected: f64,
+}
+
+impl CapWorth {
+    /// How much more often the capping team won than its position said it
+    /// would. `None` below [`MIN_CAPS`], where the number is noise.
+    pub fn excess(&self) -> Option<f64> {
+        (self.caps >= MIN_CAPS).then(|| f64::from(self.won) / f64::from(self.caps) - self.expected / f64::from(self.caps))
+    }
+}
+
+/// A group needs this many caps before its excess is worth printing.
+pub const MIN_CAPS: u32 = 30;
+
+/// Enemies alive at a cap, bucketed. Nine is the whole team, and the buckets
+/// are the shapes a Highlander player would name: an empty point, the last
+/// one or two holding it, a real defence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Defence {
+    /// Nobody alive to stop it.
+    Empty,
+    /// One or two left.
+    Remnant,
+    /// Three to five.
+    Half,
+    /// Six or more: they were there and it went in anyway.
+    Live,
+}
+
+impl Defence {
+    pub fn of(alive: u8) -> Defence {
+        match alive {
+            0 => Defence::Empty,
+            1..=2 => Defence::Remnant,
+            3..=5 => Defence::Half,
+            _ => Defence::Live,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Defence::Empty => "nobody alive",
+            Defence::Remnant => "1-2 left",
+            Defence::Half => "3-5 left",
+            Defence::Live => "6+ alive",
+        }
+    }
+
+    pub const ALL: [Defence; 4] = [Defence::Empty, Defence::Remnant, Defence::Half, Defence::Live];
+}
+
+/// Q17 (zaag): what a capture was worth, by how much was left to stop it and
+/// by who took it.
+///
+/// The rating counts captures flat: `cpc` from logs.tf, per ten minutes. The
+/// complaint is that this pays the same for walking onto a point nobody is
+/// alive to defend as for taking one into a live defence — "sitting on the
+/// cart as Pyro when the enemy wiped gives more rating than moving forward
+/// with the team".
+///
+/// Measured the same way Q4's victim table was, because the confound is the
+/// same one: a team that just wiped the enemy was going to win anyway, so
+/// the raw win rate after an easy cap looks *excellent* and means nothing.
+/// The baseline removes it. Every kill in the history gives two team-moments
+/// — the killer's side in its state, and the victim's side seeing that state
+/// flipped — and from those comes "a team this far up, with or without uber,
+/// wins the round X% of the time". A cap's excess is how often its team
+/// actually won, less what that table already expected of them.
+///
+/// So the question is not "do teams that cap win" (they do) but **"once you
+/// know the numbers, does the cap still tell you anything?"** If an
+/// uncontested cap is worth as much as a contested one, both read zero.
+pub async fn cap_worth(db: &hl_db::Db) -> anyhow::Result<CapValue> {
+    let maps = db.all_round_map_names().await?;
+    let mut out = CapValue::default();
+
+    // One pass: the kill-moments the baseline is built from, and the caps
+    // measured against it.
+    let mut moments: Vec<(Mode, KillState, bool)> = Vec::new();
+    let mut caps: Vec<CapSeen> = Vec::new();
+
+    for log_id in db.rawlog_ids().await? {
+        let Some(zip) = db.rawlog(log_id).await? else { continue };
+        let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
+        let gs = GameState::build(&raw);
+        let tags = analyse(&raw, &gs).tags;
+        let states = kill_states(&raw, &gs, &tags);
+        let rounds = maps.get(&log_id);
+        out.logs += 1;
+
+        for (i, st) in states.iter().enumerate() {
+            let Some((state, _)) = *st else { continue };
+            let k = &raw.kills[i];
+            let Some(kt) = k.killer.team else { continue };
+            let Some(round) = gs.round_at(k.at) else { continue };
+            let Some(won) = round.winner else { continue };
+            let Some(map) = rounds.and_then(|m| m.get(&i64::from(round.num))) else { continue };
+            moments.push((Mode::of(map), state, won == kt));
+        }
+
+        for c in &gs.caps {
+            let Some(team) = c.team else { continue };
+            let Some(round) = gs.round_at(c.at) else { continue };
+            let Some(won) = round.winner else { continue };
+            let Some(map) = rounds.and_then(|m| m.get(&i64::from(round.num))) else {
+                out.unmapped += 1;
+                continue;
+            };
+            // The moment before it went in, from the capping team's side.
+            let at = c.at - 1;
+            let n = gs.numbers_at(at);
+            let alive = |t: Team| if t == Team::Red { n[0] } else { n[1] };
+            let (mine, theirs) = (alive(team), alive(team.other()));
+            let state = KillState {
+                diff: (i16::from(mine) - i16::from(theirs))
+                    .clamp(-i16::from(MAX_DIFF), i16::from(MAX_DIFF)) as i8,
+                adv: match gs.advantage_at(at) {
+                    Some(t) if t == team => 1,
+                    Some(_) => -1,
+                    None => 0,
+                },
+            };
+            // Who was on the point. logs.tf credits every player touching it,
+            // so one cap can name five; each is counted for their own class,
+            // which is what "should a Pyro cap count less" needs.
+            let classes: Vec<hl_core::TfClass> = c
+                .cappers
+                .iter()
+                .filter_map(|a| gs.alive_at(at).find(|l| l.account == *a).map(|l| l.class))
+                .collect();
+            caps.push(CapSeen { mode: Mode::of(map), state, defence: Defence::of(theirs), classes, won: won == team });
+        }
+    }
+
+    // How often a team in each state won the round, per mode. Both sides of
+    // every kill count, so the table is not itself about kills.
+    let mut base: HashMap<(Mode, KillState), (u32, u32)> = HashMap::new();
+    for &(mode, state, won) in &moments {
+        let a = base.entry((mode, state)).or_default();
+        a.0 += 1;
+        a.1 += u32::from(won);
+        let b = base.entry((mode, state.flip())).or_default();
+        b.0 += 1;
+        b.1 += u32::from(!won);
+    }
+
+    for c in caps {
+        let Some(&(n, w)) = base.get(&(c.mode, c.state)) else { continue };
+        let expected = f64::from(w) / f64::from(n);
+        let add = |e: &mut CapWorth| {
+            e.caps += 1;
+            e.won += u32::from(c.won);
+            e.expected += expected;
+        };
+        add(out.by_defence.entry((c.defence, c.mode)).or_default());
+        add(&mut out.all);
+        // Who was on the point only means something when somebody was there
+        // to stop them; an empty point is nobody's achievement.
+        if matches!(c.defence, Defence::Half | Defence::Live) {
+            for class in &c.classes {
+                add(out.by_class.entry((*class, c.mode)).or_default());
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// One capture, reduced to what measuring it needs.
+struct CapSeen {
+    mode: Mode,
+    state: KillState,
+    defence: Defence,
+    classes: Vec<hl_core::TfClass>,
+    won: bool,
+}
+
+/// The answer to Q17, before anything is done about it.
+#[derive(Debug, Clone, Default)]
+pub struct CapValue {
+    pub logs: usize,
+    /// Caps skipped because the round's map is unknown.
+    pub unmapped: u32,
+    pub all: CapWorth,
+    pub by_defence: HashMap<(Defence, Mode), CapWorth>,
+    /// Per class and mode, counting only caps into a defence that was still
+    /// alive to stop them. Keyed by mode because the two modes disagree
+    /// about caps entirely, and pooling them averages a positive against a
+    /// negative into a number that describes neither.
+    pub by_class: HashMap<(hl_core::TfClass, Mode), CapWorth>,
+}
+
+impl fmt::Display for CapValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{} logs, {} captures; what a capture was worth over what the numbers already predicted\n\
+             ({} skipped: the round's map is unknown; a group under {} caps reads as a dash)\n",
+            self.logs, self.all.caps, self.unmapped, MIN_CAPS
+        )?;
+
+        writeln!(f, "{:<14} {:>18} {:>18} {:>18}", "left to stop it", "KOTH", "stopwatch", "other")?;
+        writeln!(f, "{:<14} {:>18} {:>18} {:>18}", "", "caps   excess", "caps   excess", "caps   excess")?;
+        let cell = |w: CapWorth| match w.excess() {
+            Some(e) => format!("{:>6}  {:>+7.2}%", w.caps, e * 100.0),
+            None => format!("{:>6}  {:>8}", w.caps, "-"),
+        };
+        for d in Defence::ALL {
+            let g = |m: Mode| self.by_defence.get(&(d, m)).copied().unwrap_or_default();
+            writeln!(
+                f,
+                "{:<14} {} {} {}",
+                d.as_str(),
+                cell(g(Mode::Koth)),
+                cell(g(Mode::Stopwatch)),
+                cell(g(Mode::Other))
+            )?;
+        }
+
+        writeln!(f, "\nWho was on the point, counting only caps into 3+ alive:\n")?;
+        writeln!(f, "{:<10} {:>18} {:>18}", "capper", "KOTH", "stopwatch")?;
+        let mut rows: Vec<_> = hl_core::TfClass::ALL.to_vec();
+        rows.sort_by_key(|c| c.as_str());
+        for c in rows {
+            let g = |m: Mode| self.by_class.get(&(c, m)).copied().unwrap_or_default();
+            writeln!(f, "{:<10} {} {}", c.as_str(), cell(g(Mode::Koth)), cell(g(Mode::Stopwatch)))?;
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Display for VictimWorth {
@@ -506,6 +776,26 @@ impl fmt::Display for VictimWorth {
                 _ => format!("{:>10}", "–"),
             };
             writeln!(f, "{:<10} {} {} {}", c.as_str(), cell(k), cell(s), diff)?;
+        }
+
+        // Q26: the stopwatch column again, by which side got the kill, each
+        // side against its own baseline.
+        writeln!(f, "\nstopwatch, by the killer's side (each side against its own baseline)")?;
+        writeln!(f, "{:<10} {:>18} {:>18} {:>10}", "victim", "attacking", "defending", "att - def")?;
+        let mut rows: Vec<_> = hl_core::TfClass::ALL.to_vec();
+        rows.sort_by_key(|c| c.as_str());
+        for c in rows {
+            let a = self.by_side.get(&(c, true)).copied().unwrap_or_default();
+            let d = self.by_side.get(&(c, false)).copied().unwrap_or_default();
+            let cell = |w: Worth| match w.excess() {
+                Some(e) => format!("{:>6}  {:>+7.2}%", w.kills, e * 100.0),
+                None => format!("{:>6}  {:>8}", w.kills, "-"),
+            };
+            let diff = match (a.excess(), d.excess()) {
+                (Some(x), Some(y)) => format!("{:>+9.2}%", (x - y) * 100.0),
+                _ => format!("{:>10}", "-"),
+            };
+            writeln!(f, "{:<10} {} {} {}", c.as_str(), cell(a), cell(d), diff)?;
         }
         Ok(())
     }

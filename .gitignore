@@ -10,6 +10,8 @@ ui/dist
 src-tauri/gen
 
 # Local data
+# The dev build's own database, backups and language files (src-tauri/src/lib.rs).
+/dev-data/
 # Map images are third-party renders, kept on this machine only.
 ui/public/overviews-local/
 *.sqlite3

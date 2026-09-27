@@ -58,6 +58,11 @@ COMMANDS:
                            crosshair error, flick and range (PLAN §14)
     aim --derive [--all]   Read every linked demo and store the aim behind every
                            kill; --all re-reads demos already done
+    kept [DEMO_ID]         Demos kept as timelines (Q3); with an id, read one
+                           back from the database alone and derive from it
+    timeline <PATH> [--stride N] [--owner STEAMID3]
+                           Keep a demo (Q3): record it, report the size, and
+                           check what is stored against the demo itself
     demo <PATH> [--stride N] [--json]
                            Read a demo's packets: who is in it, and where you
                            stood and looked (PLAN §14)
@@ -209,7 +214,7 @@ async fn main() -> Result<()> {
             }
             let m = hl_ingest::maps::resolve_all(&db).await?;
             println!("round maps: {} multi-map logs, {} rounds unresolved", m.multi_map_logs, m.unresolved);
-            hl_ingest::fights::derive_all(&db, false).await?;
+            hl_ingest::fights::derive_all(&db, false, |_, _| {}).await?;
             print_stats(&db.index_stats().await?);
             rate(&db, &db_path).await
         }
@@ -219,6 +224,11 @@ async fn main() -> Result<()> {
             let db = Db::connect(&db_path).await?;
             let me = db.get_me().await?.context("no owner set")?;
             let (mut fights, mut together, mut mine, mut joined) = (0usize, 0usize, 0usize, 0usize);
+            // Q7b: does arriving together win fights? For every side of
+            // three or more in every teamfight: the share of it in within
+            // TOGETHER_S of its own first arrival, and whether it lost fewer
+            // players than the other side. Bucketed by that share.
+            let mut by_share: [(usize, usize, usize); 5] = [(0, 0, 0); 5];
             let mut joins: Vec<i64> = Vec::new();
             let mut spreads: Vec<i64> = Vec::new();
             for log_id in db.rawlog_ids().await? {
@@ -232,6 +242,24 @@ async fn main() -> Result<()> {
                     .map(|x| x.map(|(_, fight)| fight))
                     .collect();
                 let tf = hl_ingest::teamfights::teamfights(&raw, &gs, &fight_of);
+                for t in &tf {
+                    for side in [hl_core::matchdata::Team::Red, hl_core::matchdata::Team::Blue] {
+                        let us: Vec<_> = t.arrivals.iter().filter(|a| a.team == side).collect();
+                        let them: Vec<_> = t.arrivals.iter().filter(|a| a.team != side).collect();
+                        if us.len() < hl_ingest::teamfights::MIN_SIDE || them.len() < hl_ingest::teamfights::MIN_SIDE {
+                            continue;
+                        }
+                        let first = us.iter().map(|a| a.joined_at).min().unwrap_or(0);
+                        let share = us.iter().filter(|a| a.joined_at <= first + hl_ingest::teamfights::TOGETHER_S).count()
+                            as f64
+                            / us.len() as f64;
+                        let lost = |v: &[&hl_ingest::teamfights::Arrival]| v.iter().filter(|a| a.died_at.is_some()).count();
+                        let b = ((share * 5.0) as usize).min(4);
+                        by_share[b].0 += 1;
+                        by_share[b].1 += usize::from(lost(&us) < lost(&them));
+                        by_share[b].2 += usize::from(lost(&us) > lost(&them));
+                    }
+                }
                 // Which side the owner wore, from their own kills and deaths.
                 let team = raw
                     .kills
@@ -263,6 +291,17 @@ async fn main() -> Result<()> {
             println!("fights your side turned up to {mine}");
             println!("  you were in                {joined} ({}%)", joined * 100 / mine.max(1));
             println!("  your median arrival        {}s after the first kill", med(&joins));
+            println!("\nevery side of 3+, by how much of it arrived within {}s of its first:", hl_ingest::teamfights::TOGETHER_S);
+            println!("{:<12} {:>7} {:>8} {:>8}", "together", "fights", "won", "lost");
+            for (i, (n, w, l)) in by_share.iter().enumerate() {
+                println!(
+                    "{:<12} {:>7} {:>7.1}% {:>7.1}%",
+                    format!("{}-{}%", i * 20, i * 20 + 20),
+                    n,
+                    *w as f64 * 100.0 / (*n).max(1) as f64,
+                    *l as f64 * 100.0 / (*n).max(1) as f64
+                );
+            }
             Ok(())
         }
 
@@ -309,7 +348,7 @@ async fn main() -> Result<()> {
             }
             let m = hl_ingest::maps::resolve_all(&db).await?;
             println!("round maps: {} multi-map logs, {} rounds unresolved", m.multi_map_logs, m.unresolved);
-            hl_ingest::fights::derive_all(&db, true).await?;
+            hl_ingest::fights::derive_all(&db, true, |_, _| {}).await?;
             print_stats(&stats);
             rate(&db, &db_path).await
         }
@@ -538,6 +577,13 @@ async fn main() -> Result<()> {
                 }
                 return Ok(());
             }
+            // Q17: what a capture was worth, by how much was left to stop it.
+            if rest.contains(&"--caps") {
+                let c = hl_ingest::situation::cap_worth(&db).await?;
+                print!("{c}");
+                println!("({:.1}s)", started.elapsed().as_secs_f64());
+                return Ok(());
+            }
             let t = hl_ingest::situation::measure(&db).await?;
             if rest.contains(&"--toml") || rest.contains(&"--swing") {
                 let (outcome, table) = if rest.contains(&"--round") { ("round", &t.round) } else { ("fight", &t.fight) };
@@ -566,7 +612,7 @@ async fn main() -> Result<()> {
             let me = db.get_me().await?.context("no owner set")?;
             let started = std::time::Instant::now();
             let all = command.contains(&"--all");
-            let s = hl_ingest::aim::derive_all(&db, me, all, |done, total| {
+            let s = hl_ingest::aim::derive_all(&db, me, all, |done, total, _log_id| {
                 print!("\r  reading demos {done}/{total}          ");
                 let _ = std::io::Write::flush(&mut std::io::stdout());
             })
@@ -601,15 +647,22 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string(&report)?);
                 return Ok(());
             }
-            let kills = &report.kills;
+            // An STV demo answers for all eighteen players (Q16b), so the
+            // default stays "your kills" and --all opens it up.
+            let everyone = rest.contains(&"--everyone");
+            let kills: Vec<&hl_ingest::aim::AimKill> =
+                report.kills.iter().filter(|k| everyone || k.shooter == me.account_id()).collect();
             if kills.is_empty() {
                 println!("No aim to read: no demo is linked to this match, or you are not in it.");
+                if !everyone && !report.kills.is_empty() {
+                    println!("The demo answered for {} kills by other players; try --everyone.", report.kills.len());
+                }
                 return Ok(());
             }
             println!(
-                "{} of your {} kills in this match are in the demo, read in {:.1}s{}\n",
+                "{} of {} kills in this match are in the demo, read in {:.1}s{}\n",
                 kills.len(),
-                report.log_kills,
+                if everyone { report.kills.len() } else { report.log_kills },
                 started.elapsed().as_secs_f64(),
                 if report.other_matches > 0 {
                     format!(
@@ -621,10 +674,10 @@ async fn main() -> Result<()> {
                 }
             );
             println!(
-                "{:<18} {:<9} {:>7} {:>7} {:>7} {:>7} {:>7}  weapon",
-                "victim", "class", "error", "1s", "flick", "range", "height"
+                "{:<18} {:<18} {:<9} {:>7} {:>7} {:>7} {:>7} {:>7}  weapon",
+                "killer", "victim", "class", "error", "1s", "flick", "range", "height"
             );
-            for k in kills {
+            for k in &kills {
                 let name: String = k
                     .victim_name
                     .clone()
@@ -632,9 +685,23 @@ async fn main() -> Result<()> {
                     .chars()
                     .take(17)
                     .collect();
-                let seen = if k.shot.victim_seen { "" } else { "  (not carried by the demo)" };
+                let killer: String = k
+                    .shooter_name
+                    .clone()
+                    .unwrap_or_else(|| k.shot.shooter.clone())
+                    .chars()
+                    .take(17)
+                    .collect();
+                // A shooter the demo lost has angles from wherever it last
+                // saw them, which is not a reading of anything.
+                let seen = match (k.shot.shooter_seen, k.shot.victim_seen) {
+                    (true, true) => "",
+                    (false, _) => "  (the killer was not carried by the demo)",
+                    _ => "  (not carried by the demo)",
+                };
                 println!(
-                    "{:<18} {:<9} {:>6.1}° {:>6.1}° {:>6.1}° {:>7.0} {:>7.0}  {}{}",
+                    "{:<18} {:<18} {:<9} {:>6.1}° {:>6.1}° {:>6.1}° {:>7.0} {:>7.0}  {}{}",
+                    killer,
                     name,
                     k.victim_class.clone().unwrap_or_default(),
                     k.shot.error_deg,
@@ -646,9 +713,10 @@ async fn main() -> Result<()> {
                     seen
                 );
             }
-            let seen: Vec<_> = kills.iter().filter(|k| k.shot.victim_seen).collect();
+            let seen: Vec<_> = kills.iter().filter(|k| k.shot.victim_seen && k.shot.shooter_seen).collect();
             if !seen.is_empty() {
-                let mean = |f: fn(&&hl_ingest::aim::AimKill) -> f32| seen.iter().map(f).sum::<f32>() / seen.len() as f32;
+                let mean =
+                    |f: fn(&&&hl_ingest::aim::AimKill) -> f32| seen.iter().map(f).sum::<f32>() / seen.len() as f32;
                 println!(
                     "\n{} kills with both players on screen: crosshair {:.1}° off at the shot, {:.1}° a second before, {:.1}° of flick, {:.0} units away.",
                     seen.len(),
@@ -708,10 +776,10 @@ async fn main() -> Result<()> {
                         "log {:<9} {:<22} {:>3} min  {} players  {}-{}",
                         p.log_id,
                         p.map.as_deref().unwrap_or("?"),
-                        d.duration_s / 60,
-                        d.players.len(),
-                        d.red_score,
-                        d.blue_score
+                        d.detail.duration_s / 60,
+                        d.detail.players.len(),
+                        d.detail.red_score,
+                        d.detail.blue_score
                     ),
                     None => println!("log {:<9} {:<22} not fetched (use --fetch)", p.log_id, p.map.as_deref().unwrap_or("?")),
                 }
@@ -789,6 +857,168 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["timeline", path, rest @ ..] => {
+            // A file on disk and nothing else: no database is opened, so this
+            // is safe to run while the app is up.
+            let stride = flag_value::<u32>(rest, "--stride")?.unwrap_or(hl_demos::timeline::DEFAULT_STRIDE);
+            let owner = flag_value::<String>(rest, "--owner")?.unwrap_or_default();
+            let file = std::path::Path::new(path);
+            let bytes = std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+            let header = hl_demos::DemoHeader::parse(&bytes)?;
+            // An unreadable rate means a broken header; TF2 servers run at 66.67.
+            let rate = header.tick_rate().unwrap_or(66.67);
+            let started = std::time::Instant::now();
+            let (pass, tl) = hl_demos::aim::pass_recording(file, &owner, rate, Some(stride), &mut |_| {})?;
+            let walked = started.elapsed().as_secs_f64();
+            let tl = tl.context("the pass was asked for a timeline and gave none")?;
+            let started = std::time::Instant::now();
+            let stored = tl.encode()?;
+            let encoded = started.elapsed().as_secs_f64();
+            let started = std::time::Instant::now();
+            let back = hl_demos::timeline::Timeline::decode(&stored)?;
+            let decoded = started.elapsed().as_secs_f64();
+
+            let samples: usize = tl.tracks.iter().map(|t| t.samples.len()).sum();
+            let changes: usize = tl.tracks.iter().map(|t| t.changes.len()).sum();
+            let mb = |b: usize| b as f64 / 1e6;
+            println!(
+                "{} · {} ticks at {rate:.1}/s · stride {stride} · walked in {walked:.1}s, encoded in {encoded:.2}s, decoded in {decoded:.2}s",
+                header.map, header.ticks
+            );
+            println!("{} people · {} stretch(es) · {samples} samples · {changes} changes · {} objects · {} events", tl.people.len(), tl.seams.len(), tl.objects.len(), tl.events.len());
+            println!(
+                "stored {:.2} MB (from {:.2} MB raw): samples {:.2} · changes {:.2} · objects {:.2} · events {:.2} · head {:.3}",
+                mb(stored.stored_bytes()),
+                mb(stored.raw_bytes),
+                mb(stored.samples.len()),
+                mb(stored.changes.len()),
+                mb(stored.objects.len()),
+                mb(stored.events.len()),
+                mb(stored.head.len())
+            );
+
+            // Stored and read back, nothing may have moved beyond rounding.
+            let same = back.people == tl.people
+                && back.objects == tl.objects
+                && back.events.len() == tl.events.len()
+                && back.tracks.iter().zip(&tl.tracks).all(|(a, b)| a.changes == b.changes && a.samples.len() == b.samples.len());
+            println!("round trip: {}", if same { "identical" } else { "DIFFERS" });
+            // How the demo was written: a server records every tick, a
+            // client only as often as it was sent updates.
+            if let Some(track) = tl.tracks.iter().max_by_key(|t| t.samples.len()) {
+                let mut gaps: Vec<u32> = track.samples.windows(2).map(|w| w[1].t - w[0].t).filter(|g| *g <= 8).collect();
+                gaps.sort_unstable();
+                if let Some(mid) = gaps.get(gaps.len() / 2) {
+                    let ones = gaps.iter().filter(|g| **g == 1).count() as f64 / gaps.len() as f64;
+                    println!("ticks between frames: median {mid}, {:.0}% of frames one tick apart", ones * 100.0);
+                }
+            }
+
+            let agree = hl_demos::aim::agreement(&pass, &back);
+            println!(
+                "crosshair a second before the kill, recomputed from the timeline: {} kills, mean difference {:.3}°, worst {:.3}° ({} not comparable)",
+                agree.shots_compared, agree.before_mean_diff, agree.before_max_diff, agree.shots_skipped
+            );
+            let worst = agree.scoped.iter().map(|(_, a, b)| (a - b).abs()).fold(0.0, f64::max);
+            let snipers: Vec<_> = agree.scoped.iter().filter(|(_, a, _)| *a > 0.05).collect();
+            println!("scoped share, pass against timeline: {} players, worst difference {:.4}", agree.scoped.len(), worst);
+            for (who, a, b) in snipers {
+                println!("  {who:<22} {:>6.1}% {:>6.1}%", a * 100.0, b * 100.0);
+            }
+            Ok(())
+        }
+
+        ["kept", rest @ ..] => {
+            // Q3: what the database holds of demos, read without the files.
+            use hl_demos::timeline::{GameEvent, PlayerCondition as C, Stored, Timeline};
+            let db = Db::connect(&db_path).await?;
+            let totals = db.timeline_totals().await?;
+            println!(
+                "{} demos kept as timelines, {:.1} MB; {} of them without their file",
+                totals.demos,
+                totals.stored_bytes as f64 / 1e6,
+                totals.file_gone
+            );
+            let Some(id) = rest.first().and_then(|s| s.parse::<i64>().ok()) else {
+                for (id, file, bytes, gone) in db.timeline_list().await? {
+                    println!("{id:>6}  {:>6.1} MB  {file}{}", bytes as f64 / 1e6, if gone { "  (file gone)" } else { "" });
+                }
+                println!("Pass a demo id to read one back.");
+                return Ok(());
+            };
+            let row = db.timeline(id).await?.with_context(|| format!("demo {id} has no timeline"))?;
+            let started = std::time::Instant::now();
+            let tl = Timeline::decode(&Stored {
+                version: row.version,
+                tick_rate: row.tick_rate,
+                stride: row.stride as u32,
+                head: row.head,
+                samples: row.samples,
+                changes: row.changes,
+                objects: row.objects,
+                events: row.events,
+                raw_bytes: row.raw_bytes as usize,
+            })?;
+            println!(
+                "demo {id}: {} people, {:.0} min, read back in {:.2}s",
+                tl.people.len(),
+                tl.seconds(tl.end()) / 60.0,
+                started.elapsed().as_secs_f64()
+            );
+
+            // None of these is measured anywhere else in the app: each is a
+            // few lines over the stored timeline, which is the point.
+            const CLASSES: [&str; 10] = ["?", "scout", "sniper", "soldier", "demoman", "medic", "heavy", "pyro", "spy", "engineer"];
+            let pops = |slot: usize| {
+                tl.events
+                    .iter()
+                    .filter(|(_, e)| matches!(e, GameEvent::PlayerChargeDeployed(c) if tl.slot_of_user(c.user_id) == Some(slot)))
+                    .count()
+            };
+            println!(
+                "\n{:<20} {:<9} {:>6} {:>7} {:>7} {:>7} {:>7} {:>5}",
+                "player", "class", "alive", "ubered", "burning", "scoped", "healing", "pops"
+            );
+            for (slot, p) in tl.people.iter().enumerate() {
+                let live = tl.ticks_where(slot, |_| true);
+                if live == 0 {
+                    continue;
+                }
+                let class = (1u8..=9).max_by_key(|c| tl.ticks_where(slot, |n| n.class == *c)).unwrap_or(0);
+                let pct = |ticks: u32| format!("{:.0}%", 100.0 * f64::from(ticks) / f64::from(live));
+                let name: String = p.name.chars().take(19).collect();
+                println!(
+                    "{:<20} {:<9} {:>5.1}m {:>6.0}s {:>6.0}s {:>7} {:>7} {:>5}",
+                    name,
+                    CLASSES[usize::from(class)],
+                    tl.seconds(live) / 60.0,
+                    tl.seconds(tl.ticks_where(slot, |n| n.has(C::Invulnerable))),
+                    tl.seconds(tl.ticks_where(slot, |n| n.has(C::Burning))),
+                    if class == 2 { pct(tl.ticks_where(slot, |n| n.has(C::Zoomed))) } else { "-".into() },
+                    if class == 5 { pct(tl.ticks_where(slot, |n| n.heal_target.is_some())) } else { "-".into() },
+                    if class == 5 { pops(slot).to_string() } else { "-".into() },
+                );
+            }
+
+            // The cart: how far it went. A jump of more than a few hundred
+            // units is a round resetting it, not the cart moving.
+            let mut travelled = 0.0f64;
+            let mut last: std::collections::HashMap<u32, [i32; 3]> = std::collections::HashMap::new();
+            for o in tl.objects.iter().filter(|o| o.kind == "cart") {
+                if let Some(p) = last.insert(o.entity, o.pos) {
+                    let d = ((0..3).map(|k| f64::from(o.pos[k] - p[k]).powi(2)).sum::<f64>()).sqrt();
+                    if d < 400.0 {
+                        travelled += d;
+                    }
+                }
+            }
+            let caps = tl.events.iter().filter(|(_, e)| matches!(e, GameEvent::TeamPlayPointCaptured(_))).count();
+            // Every movement, rolling back included: distance, not progress.
+            // Progress is Q11's question, and needs the track, not just this.
+            println!("\ncart travelled {travelled:.0} units, back and forth · {caps} points captured · {} events kept", tl.events.len());
+            Ok(())
+        }
+
         ["owner", rest @ ..] => {
             let db = Db::connect(&db_path).await?;
             let me = db.get_me().await?.context("no owner set")?;
@@ -842,7 +1072,7 @@ async fn main() -> Result<()> {
             let db = Db::connect(&db_path).await?;
             let me = db.get_me().await?.context("no owner set")?;
             let started = std::time::Instant::now();
-            let d = hl_ingest::fights::derive_all(&db, rest.contains(&"--all")).await?;
+            let d = hl_ingest::fights::derive_all(&db, rest.contains(&"--all"), print_fight_progress).await?;
             println!("{} of {} logs read in {:.1}s", d.derived, d.total, started.elapsed().as_secs_f64());
             let class = rest.iter().find(|a| !a.starts_with("--")).copied().unwrap_or("sniper");
             if rest.contains(&"--json") {
@@ -1291,6 +1521,13 @@ fn flag_value<T: std::str::FromStr>(args: &[&str], flag: &str) -> Result<Option<
     }
 }
 
+/// `hl fights` runs the pass on its own, so it prints its own line.
+fn print_fight_progress(done: usize, total: usize) {
+    use std::io::Write;
+    print!("\rfights {done}/{total}          ");
+    let _ = std::io::stdout().flush();
+}
+
 /// Overwrites one terminal line so a thousand-log sync stays readable.
 fn print_progress(p: Progress) {
     use std::io::Write;
@@ -1308,6 +1545,12 @@ fn print_progress(p: Progress) {
         Progress::Etf2l { done, total } => print!("\rETF2L matches {done}/{total}          "),
         Progress::RawLogs { done, total } => print!("\rraw logs {done}/{total}          "),
         Progress::Parts { done, total } => print!("\rparts {done}/{total}          "),
+        Progress::Stage { what } => print!("\r{what}...          "),
+        Progress::Fights { done, total } => print!("\rfights {done}/{total}          "),
+        Progress::ReadingDemos { done, total, log_id } => match log_id {
+            Some(id) => print!("\rreading demos {done}/{total}  (log {id})          "),
+            None => print!("\rreading demos {done}/{total}          "),
+        },
         Progress::SourceFailed { source, error } => println!("
   ! {source}: {error}"),
         Progress::GaveUp { source, done, total } => {

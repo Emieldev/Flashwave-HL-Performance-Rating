@@ -74,3 +74,33 @@ application data" box takes the backups folder with it.
 4. Put the newest good one back, and re-derive. Ratings, round maps, fights
    and demo links all rebuild from the stored logs; only the logs themselves
    are irreplaceable, and they are the part that is backed up.
+
+## The dev build has its own folder
+
+`npm run dev` (any debug build) keeps its database, backups and language
+files in `dev-data/` at the top of the repository, never in the installed
+app's `%APPDATA%\gg.highlander.rating`. Two reasons, both found on 27
+September 2026:
+
+- **Shared, the two builds fight.** A dev build adds migrations the installed
+  version has never heard of; the installed app then fails to open the file
+  and moves it aside as broken, which looks exactly like losing everything.
+- **A packaged host redirects new files.** The Claude desktop app is an MSIX
+  package, and anything it launches has new files under AppData silently
+  written to `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\...`
+  instead. The database file stayed put, but its `-wal` (the latest
+  changes), its lock and the `lang` folder went to the private copy, where
+  Explorer and the installed app never see them. Processes started from
+  there, the CLI included, see the merged view, so nothing looks wrong from
+  inside.
+
+To start the dev folder from real data, with no app running:
+`hl copy dev-data/hl.sqlite3`. It reads the installed app's database
+(through the same merged view, so the hidden `-wal` is included) and writes a
+consistent copy. `dev-data/` is ignored by git.
+
+Copy the map images too: `overviews/*.png` from the installed app's folder
+into `dev-data/overviews/`. They sit beside the database, not in it, and
+without them every kill map falls back to the outline drawn from kills --
+which is what happened the first time, and looked like one map being
+misdetected.

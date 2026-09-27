@@ -62,11 +62,8 @@ pub fn run() {
             // Errors are stringified rather than passed through as `anyhow`:
             // Tauri's setup wants a `Box<dyn Error>`, and `{:#}` keeps the
             // whole cause chain in the message.
-            let db_path = app
-                .path()
-                .app_data_dir()
-                .map_err(|e| format!("resolving the application data directory: {e}"))?
-                .join("hl.sqlite3");
+            let db_path = data_dir(app)?.join("hl.sqlite3");
+            tracing::info!(dir = %db_path.parent().map(|p| p.display().to_string()).unwrap_or_default(), "data folder");
 
             // Hold the database for as long as this window is open, so no
             // other tool can write to it at the same time. Two writers on one
@@ -140,7 +137,7 @@ pub fn run() {
                         Ok(s) => tracing::info!(multi_map = s.multi_map_logs, unresolved = s.unresolved, "round maps resolved"),
                         Err(e) => tracing::warn!(error = %format!("{e:#}"), "round map pass failed"),
                     }
-                    match hl_ingest::fights::derive_all(&db, false).await {
+                    match hl_ingest::fights::derive_all(&db, false, |_, _| {}).await {
                         Ok(s) => tracing::info!(derived = s.derived, total = s.total, "fights derived"),
                         Err(e) => tracing::warn!(error = %format!("{e:#}"), "fights pass failed"),
                     }
@@ -191,6 +188,8 @@ pub fn run() {
             commands::detect_tf_path,
             commands::set_tf_path,
             commands::reveal_path,
+            commands::language_files,
+            commands::save_language_file,
             commands::restore_backup,
             commands::decline_restore,
             sync_commands::sync_start,
@@ -212,6 +211,10 @@ pub fn run() {
             sync_commands::get_parts,
             sync_commands::fetch_part,
             sync_commands::get_paths,
+            sync_commands::downloaded_demos,
+            sync_commands::auto_delete_demos,
+            sync_commands::set_auto_delete_demos,
+            sync_commands::delete_downloaded_demos,
             sync_commands::all_history,
             sync_commands::set_all_history,
             sync_commands::list_backups,
@@ -231,4 +234,34 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");
+}
+
+/// Where this build keeps its database, backups and language files.
+///
+/// A debug build (`npm run dev`) uses `dev-data/` in the repository, never
+/// the installed app's AppData folder. Both lessons are from 27 September
+/// 2026:
+///
+/// - The two builds shared one database. A dev build's newer migrations make
+///   the installed app refuse the file as unopenable and move it aside, and
+///   the two never saw each other's lock.
+/// - Started from a packaged host -- the Claude desktop app is an MSIX
+///   package -- Windows redirects every *new* file under AppData into the
+///   package's private copy. The database stayed where it was, but its -wal
+///   (the latest changes), its lock and the lang folder landed where Explorer
+///   and the installed app could not see them.
+///
+/// `dev-data/` is outside AppData, so nothing redirects it, and it is
+/// ignored by git.
+fn data_dir(app: &tauri::App) -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(PathBuf::from)
+            .ok_or("the repository folder could not be worked out")?;
+        return Ok(repo.join("dev-data"));
+    }
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("resolving the application data directory: {e}"))
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AimRow } from "../../api/types";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * The kills on a target, seen down your own scope (PLAN §14).
@@ -52,26 +53,17 @@ export function AimBoard({ kills }: { kills: AimRow[] }) {
 
   return (
     <figure className="aim-fig">
-      <figcaption>
-        Where your crosshair sat
-        <span className="aim-fig-sub">
-          centre is the head you killed; right of centre means you were aiming to their right
-        </span>
-        <label className="check board-trails" title="Draw the second before each kill as a line into the dot">
-          <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} /> trails
-        </label>
-        <span className="board-when segmented" role="tablist" aria-label="Moment">
-          <button role="tab" aria-selected={when === "shot"} className={when === "shot" ? "seg active" : "seg"} onClick={() => setWhen("shot")}>
-            At the shot
-          </button>
-          <button role="tab" aria-selected={when === "before"} className={when === "before" ? "seg active" : "seg"} onClick={() => setWhen("before")}>
-            A second before
-          </button>
+      <figcaption>{t("Where your crosshair sat")}<span className="aim-fig-sub">{t("centre is the head you killed; right of centre means you were aiming to their right")}</span>
+        <label className="check board-trails" title={t("Draw the second before each kill as a line into the dot")}>
+          <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />{" "}{t("trails")}</label>
+        <span className="board-when segmented" role="tablist" aria-label={t("Moment")}>
+          <button role="tab" aria-selected={when === "shot"} className={when === "shot" ? "seg active" : "seg"} onClick={() => setWhen("shot")}>{t("At the shot")}</button>
+          <button role="tab" aria-selected={when === "before"} className={when === "before" ? "seg active" : "seg"} onClick={() => setWhen("before")}>{t("A second before")}</button>
         </span>
       </figcaption>
 
       <div className="board-wrap">
-        <svg viewBox={`0 0 ${S} ${S}`} className="aim-board" role="img" aria-label={`${inside} of ${seen.length} kills within ${MAX_DEG} degrees of the head`}>
+        <svg viewBox={`0 0 ${S} ${S}`} className="aim-board" role="img" aria-label={t("{inside} of {seen} kills within {MAX_DEG} degrees of the head", { inside: inside, seen: seen.length, MAX_DEG: MAX_DEG })}>
           {RINGS.map((deg) => (
             <g key={deg}>
               <circle cx={c} cy={c} r={radius(deg)} className="board-ring" />
@@ -105,8 +97,7 @@ export function AimBoard({ kills }: { kills: AimRow[] }) {
             return (
               <circle key={k.tick} cx={x} cy={y} r={4.5} fill={k.headshot ? BUSY : "none"} stroke={k.headshot ? BUSY : CALM} strokeWidth={1.8} opacity={0.9}>
                 <title>
-                  {p.d.toFixed(1)}° off ({fmt(p.x)}, {fmtY(p.y)}), {k.rangeUnits.toFixed(0)} units away
-                  {k.headshot ? ", headshot" : ""}
+                  {tx("{0}° off ({1}, {2}), {3} units away{4}", { "0": p.d.toFixed(1), "1": fmt(p.x), "2": fmtY(p.y), "3": k.rangeUnits.toFixed(0), "4": k.headshot ? t(", headshot") : "" })}
                 </title>
               </circle>
             );
@@ -120,8 +111,7 @@ export function AimBoard({ kills }: { kills: AimRow[] }) {
               <g className="board-bias">
                 <line x1={x - 7} x2={x + 7} y1={y} y2={y} />
                 <line x1={x} x2={x} y1={y - 7} y2={y + 7} />
-                <title>
-                  On average {d.toFixed(1)}° off: {fmt(bias.x)}, {fmtY(bias.y)}
+                <title>{tx("On average {0}° off: {1}, {2}", { "0": d.toFixed(1), "1": fmt(bias.x), "2": fmtY(bias.y) })}
                 </title>
               </g>
             );
@@ -129,32 +119,26 @@ export function AimBoard({ kills }: { kills: AimRow[] }) {
         </svg>
 
         <dl className="board-read">
-          <dt>Usually off by</dt>
+          <dt>{t("Usually off by")}</dt>
           <dd>
             {Math.hypot(bias.x, bias.y).toFixed(1)}° — {fmt(bias.x)}, {fmtY(bias.y)}
           </dd>
-          <dt>On the head</dt>
+          <dt>{t("On the head")}</dt>
           <dd>
-            {seen.filter((k) => at(k).d <= headDeg).length} of {seen.length} kills, inside the {headDeg.toFixed(1)}° the head
-            covers at {medianRange.toFixed(0)} units
-          </dd>
-          <dt>Off the board</dt>
+            {tx("{length} of {seen} kills, inside the {2}° the head covers at {3} units", { "2": headDeg.toFixed(1), "3": medianRange.toFixed(0), length: seen.filter((k) => at(k).d <= headDeg).length, seen: seen.length })}</dd>
+          <dt>{t("Off the board")}</dt>
           <dd>
-            {seen.length - inside} kills were more than {MAX_DEG}° away and sit on the rim
-          </dd>
+            {tx("{0} kills were more than {MAX_DEG}° away and sit on the rim", { "0": seen.length - inside, MAX_DEG: MAX_DEG })}</dd>
         </dl>
       </div>
 
       <ul className="aim-legend">
         <li>
-          <span className="aim-dot" style={{ background: BUSY }} aria-hidden /> headshot
-        </li>
+          {tx("{0} headshot", { "0": <span className="aim-dot" style={{ background: BUSY }} aria-hidden /> })}</li>
         <li>
-          <span className="aim-dot aim-dot-open" style={{ borderColor: CALM }} aria-hidden /> body shot
-        </li>
+          {tx("{0} body shot", { "0": <span className="aim-dot aim-dot-open" style={{ borderColor: CALM }} aria-hidden /> })}</li>
         <li>
-          <span className="aim-dot board-dot-bias" aria-hidden /> where you usually were
-        </li>
+          {tx("{0} where you usually were", { "0": <span className="aim-dot board-dot-bias" aria-hidden /> })}</li>
       </ul>
     </figure>
   );

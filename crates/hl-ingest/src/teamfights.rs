@@ -29,6 +29,10 @@ use std::collections::HashMap;
 /// Arrivals this far apart or less counted as arriving together.
 pub const TOGETHER_S: i64 = 3;
 
+/// The share of a side that has to be in together for the side to count as
+/// having arrived as one.
+pub const TOGETHER_SHARE: f64 = 0.75;
+
 /// A fight with fewer players than this a side is a skirmish, not a teamfight,
 /// and saying who collapsed on it is noise.
 pub const MIN_SIDE: usize = 3;
@@ -73,9 +77,30 @@ impl Teamfight {
         })
     }
 
-    /// Whether this side arrived as one.
+    /// The share of a side that was in within [`TOGETHER_S`] of that side's
+    /// own first arrival. `None` for a side too small to say anything about.
+    ///
+    /// This is the measure that means something, and `collapse` is not. The
+    /// gap between a side's first and last arrival is set by whoever comes
+    /// last, and with eight or nine a side there is nearly always one who
+    /// does -- a Sniper at the back, a respawn -- so over the whole history
+    /// it called 1% of teamfights together. The share, across 48,074
+    /// side-fights: a side 80-100% in together won 53.2% and lost 32.8% of
+    /// them; one 0-20% in together won 35.3% and lost 52.2%; and every step
+    /// between runs the same way.
+    pub fn share_together(&self, team: Team) -> Option<f64> {
+        let times: Vec<i64> =
+            self.arrivals.iter().filter(|a| a.team == team).map(|a| a.joined_at).collect();
+        (times.len() >= MIN_SIDE).then(|| {
+            let first = times.iter().min().copied().unwrap_or(0);
+            times.iter().filter(|&&t| t <= first + TOGETHER_S).count() as f64 / times.len() as f64
+        })
+    }
+
+    /// Whether this side arrived as one: three quarters of it or more in
+    /// together.
     pub fn together(&self, team: Team) -> Option<bool> {
-        self.collapse(team).map(|spread| spread <= TOGETHER_S)
+        self.share_together(team).map(|s| s >= TOGETHER_SHARE)
     }
 }
 
@@ -227,6 +252,19 @@ mod tests {
         assert_eq!(f.together(Team::Blue), Some(true));
         // One player is not a side: nothing to say about RED.
         assert_eq!(f.collapse(Team::Red), None);
+    }
+
+    /// Seven in at once and a Sniper arriving eleven seconds later is a
+    /// collapse. The first-to-last gap called this apart, which is how it
+    /// ended up calling 1% of every teamfight in the history together.
+    #[test]
+    fn one_straggler_does_not_undo_a_collapse() {
+        let mut side: Vec<(u32, Team, i64)> = (1..=7).map(|i| (i, Team::Blue, 0)).collect();
+        side.push((8, Team::Blue, 11));
+        let f = fight(0, &side);
+        assert_eq!(f.collapse(Team::Blue), Some(11), "the gap is the straggler's");
+        assert_eq!(f.share_together(Team::Blue), Some(7.0 / 8.0));
+        assert_eq!(f.together(Team::Blue), Some(true));
     }
 
     #[test]

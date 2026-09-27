@@ -37,8 +37,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView,
-} from "./types";
+  SeasonsView, StvStage } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -292,6 +291,7 @@ const fakeStats = (pending: number): IndexStats => ({
 
 // The full-history setting, for the Settings panel's dialog.
 let allHistory = false;
+let autoDelete = false;
 
 let handlers: SyncHandlers | null = null;
 let stvHandlers: StvHandlers | null = null;
@@ -299,6 +299,27 @@ const stvQueue: number[] = [];
 
 function announceStv() {
   stvQueue.forEach((logId, position) => stvHandlers?.onQueued({ logId, position }));
+}
+
+/**
+ * What the backend does once the file is down, at a watchable pace: link it,
+ * read your recording and the server's (each then kept as a timeline), save.
+ */
+function afterDownload(logId: number, then: () => void) {
+  const steps: Array<Partial<StvStage> & { step: StvStage["step"] }> = [{ step: "linking" }];
+  for (const [demo, kind] of [[1, "pov"], [2, "stv"]] as const) {
+    for (let pct = 0; pct <= 95; pct += 5) steps.push({ step: "reading", demo, of: 2, kind, pct });
+    steps.push({ step: "keeping", demo, of: 2 });
+  }
+  steps.push({ step: "saving" });
+  let i = 0;
+  const next = () => {
+    const s = steps[i++];
+    if (!s) return then();
+    stvHandlers?.onStage({ logId, demo: null, of: null, kind: null, pct: null, ...s });
+    setTimeout(next, s.step === "reading" ? 90 : 500);
+  };
+  next();
 }
 
 /** Download whatever is at the head of the queue, then move on to the next. */
@@ -314,10 +335,12 @@ function runStv() {
       setTimeout(step, 150);
       return;
     }
-    stvHandlers?.onDone({ logId, demoId: 999, fileName: "match-20260823-1956-pl_upward_f12.dem", bytes, logShare: 0.37 });
-    stvQueue.shift();
-    announceStv();
-    runStv();
+    afterDownload(logId, () => {
+      stvHandlers?.onDone({ logId, demoId: 999, fileName: "match-20260823-1956-pl_upward_f12.dem", bytes, logShare: 0.37 });
+      stvQueue.shift();
+      announceStv();
+      runStv();
+    });
   };
   setTimeout(step, 150);
 }
@@ -452,7 +475,7 @@ export const mockApi: Api = {
   getSeasons: (cls: string) => delay({ ...(seasonsSniper as unknown as SeasonsView), class: cls }),
 
   // One real analysis (the TWS official on Upward); every match opens it.
-  getAim: (logId: number) => {
+  getAim: (logId: number, player?: number) => {
     // Plausible readings so the tab can be worked on in a browser: mostly
     // held angles, a few flicks, Sniper ranges.
     const r = rng(logId);
@@ -479,6 +502,7 @@ export const mockApi: Api = {
       });
       return {
         demoId: 1,
+        shooter: player ?? 139131191,
         path,
         tick: 5_000 + i * 1_800,
         atRaw: null,
@@ -494,6 +518,7 @@ export const mockApi: Api = {
         rangeUnits: 300 + r() * 1_900,
         height: Math.round((r() - 0.5) * 600),
         victimSeen: r() > 0.1,
+        shooterSeen: true,
         headshot: r() > 0.45,
       };
     });
@@ -511,6 +536,7 @@ export const mockApi: Api = {
     };
     const deaths = Array.from({ length: 11 }, (_, i) => ({
       demoId: 1,
+      who: player ?? 139131191,
       tick: 6_000 + i * 2_600,
       atRaw: null,
       roundNum: 1 + (i % 5),
@@ -522,6 +548,7 @@ export const mockApi: Api = {
       nearestMate: 100 + r() * 1_400,
       matesNear: r() < 0.15 ? 0 : 1 + Math.floor(r() * 3),
       scoped: r() < 0.5,
+      seen: true,
     }));
     const life = {
       scopedShare: 0.24,
@@ -534,6 +561,8 @@ export const mockApi: Api = {
     };
     return delay(
       {
+        player: player ?? 139131191,
+        stv: true,
         kills,
         deaths,
         totals,
@@ -576,7 +605,10 @@ export const mockApi: Api = {
         map: p.map,
         playedAt: p.playedAt,
         durationS: p.durationS,
-        detail: i < 2 && d ? ({ ...d, logId: p.logId, map: p.map, parts: [] } as MatchDetail) : null,
+        // A part is one map, so it has no segments -- the mock used to
+        // inherit the combined log's three, which is why the browser never
+        // reproduced the crash the built app had.
+        detail: i < 2 && d ? ({ ...d, logId: p.logId, map: p.map, parts: [], segments: [] } as MatchDetail) : null,
         // Two rounds per part, as a real combined log splits them.
         parentRounds: [i * 2 + 1, i * 2 + 2],
       })),
@@ -585,8 +617,35 @@ export const mockApi: Api = {
   },
   fetchPart: (partId: number) => {
     const d = FIXTURES[0];
-    return delay({ ...d, logId: partId, parts: [] } as MatchDetail, 600);
+    return delay({ ...d, logId: partId, parts: [], segments: [] } as MatchDetail, 600);
   },
+
+  // Stateful, so the checkbox behaves in a browser the way it behaves in
+  // the app. A mock that always answers "off" makes a working toggle look
+  // broken, which is exactly the trap the parts fixture set with segments.
+  autoDeleteDemos: () => delay(autoDelete),
+  setAutoDeleteDemos: (on: boolean) => {
+    autoDelete = on;
+    return delay(on);
+  },
+
+  // Four downloaded STVs, one of them not finished with, so the panel's
+  // "left alone" path is reachable in a browser.
+  downloadedDemos: () =>
+    delay([
+      { demoId: 11, fileName: "stv_upward_2026-09-17.dem", sizeBytes: 82_400_000, map: "pl_upward_f12", startUtc: 1758100000, logs: 1, read: true },
+      { demoId: 12, fileName: "stv_product_2026-09-14.dem", sizeBytes: 74_100_000, map: "koth_product_final", startUtc: 1757800000, logs: 2, read: true },
+      { demoId: 13, fileName: "stv_vigil_2026-09-10.dem", sizeBytes: 69_800_000, map: "pl_vigil_rc9", startUtc: 1757400000, logs: 1, read: true },
+      { demoId: 14, fileName: "stv_steel_2026-09-09.dem", sizeBytes: 91_200_000, map: "cp_steel_f12", startUtc: 1757300000, logs: 1, read: false },
+    ]),
+
+  deleteDownloadedDemos: (only: number | null = null, force = false) =>
+    delay(
+      only === null
+        ? { deleted: force ? 4 : 3, bytes: force ? 317_500_000 : 226_300_000, skipped: force ? 0 : 1 }
+        : { deleted: 1, bytes: 82_400_000, skipped: 0 },
+      400,
+    ),
 
   getPaths: (logId: number) => {
     // A lap of a small loop, so the layer has something to draw in a browser.
@@ -639,6 +698,21 @@ export const mockApi: Api = {
         { path: "…\hl-20260919-201112.sqlite3", bytes: 182_100_000, madeAt: Math.floor(Date.now() / 1000) - 90_000 },
       ],
     }),
+  // Files to try the Reload path with, from localStorage "hl.mock.langFiles"
+  // as [{ id, text }]; none by default.
+  languageFiles: () => {
+    let files: Array<{ id: string; text: string }> = [];
+    try {
+      files = JSON.parse(localStorage.getItem("hl.mock.langFiles") ?? "[]");
+    } catch {
+      // Not valid JSON: try it with none.
+    }
+    return delay({ dir: "C:\\Users\\you\\AppData\\Roaming\\gg.highlander.rating\\lang", files });
+  },
+  saveLanguageFile: (id: string, text: string) => {
+    console.info("would save", `${id}.lang`, `${text.length} characters`);
+    return delay({ path: `C:\\Users\\you\\AppData\\Roaming\\gg.highlander.rating\\lang\\${id}.lang`, created: true });
+  },
   revealPath: (path: string) => {
     console.info("would reveal", path);
     return delay(undefined as void);
@@ -707,7 +781,8 @@ export const mockApi: Api = {
 
   scanDemos: () =>
     delay({ scanned: 101, unreadable: 0, removed: 0, logsPlaced: 759, links: 26, demosLinked: 25, matchesWithDemo: 23, markers: 883 }),
-  demoStats: () => delay({ demos: 101, linked: 25, stv: 0, markers: 883, matchesWithDemo: 23 }),
+  demoStats: () =>
+    delay({ demos: 101, linked: 25, stv: 0, markers: 883, matchesWithDemo: 23, timelines: 24, timelineBytes: 71_400_000, timelinesFileGone: 3 }),
 
   // Simulates a download, one at a time, so the queue UI can be exercised
   // in a browser: ask for three and the second and third wait their turn.

@@ -1,6 +1,7 @@
 import { AimBoard } from "./AimBoard";
 import { DeathBoard } from "./DeathBoard";
 import type { AimRow, DeathRow } from "../../api/types";
+import { t as tr, tx, k } from "../../lib/i18n";
 
 /**
  * Three pictures of the same kills, so the numbers in the table mean
@@ -47,16 +48,14 @@ export function AimCharts({ kills, deaths }: { kills: AimRow[]; deaths: DeathRow
 /** One bar: how the crosshair got there, kill by kill. */
 function Setup({ kills }: { kills: AimRow[] }) {
   const bands = [
-    { label: "Angle held", hint: `already within ${HELD_DEG}° a second before`, color: CALM, rows: kills.filter((k) => k.beforeDeg <= HELD_DEG) },
-    { label: "Adjusted", hint: `${HELD_DEG}–${FLICK_DEG}° to travel`, color: MID, rows: kills.filter((k) => k.beforeDeg > HELD_DEG && k.beforeDeg <= FLICK_DEG) },
-    { label: "Flicked", hint: `over ${FLICK_DEG}° to travel`, color: BUSY, rows: kills.filter((k) => k.beforeDeg > FLICK_DEG) },
+    { label: k("Angle held"), hint: tr("already within {deg}° a second before", { deg: HELD_DEG }), color: CALM, rows: kills.filter((k) => k.beforeDeg <= HELD_DEG) },
+    { label: k("Adjusted"), hint: tr("{held}–{flick}° to travel", { held: HELD_DEG, flick: FLICK_DEG }), color: MID, rows: kills.filter((k) => k.beforeDeg > HELD_DEG && k.beforeDeg <= FLICK_DEG) },
+    { label: k("Flicked"), hint: tr("over {deg}° to travel", { deg: FLICK_DEG }), color: BUSY, rows: kills.filter((k) => k.beforeDeg > FLICK_DEG) },
   ];
 
   return (
     <figure className="aim-fig">
-      <figcaption>
-        How each kill was set up
-        <span className="aim-fig-sub">where the crosshair was one second before the shot</span>
+      <figcaption>{tx("How each kill was set up{0}", { "0": <span className="aim-fig-sub">{tr("where the crosshair was one second before the shot")}</span> })}
       </figcaption>
       <div className="setup-bar" role="img" aria-label={bands.map((b) => `${b.label}: ${b.rows.length} kills`).join(", ")}>
         {bands.map((b) =>
@@ -65,7 +64,7 @@ function Setup({ kills }: { kills: AimRow[] }) {
               key={b.label}
               className="setup-seg"
               style={{ flexGrow: b.rows.length, background: b.color }}
-              title={`${b.label}: ${b.rows.length} of ${kills.length} kills, ${b.hint}`}
+              title={tr("{label}: {rows} of {kills} kills, {hint}", { label: tr(b.label), rows: b.rows.length, kills: kills.length, hint: tr(b.hint) })}
             >
               {b.rows.length / kills.length > 0.12 && (
                 <span className="setup-in">{Math.round((b.rows.length / kills.length) * 100)}%</span>
@@ -78,7 +77,7 @@ function Setup({ kills }: { kills: AimRow[] }) {
         {bands.map((b) => (
           <li key={b.label}>
             <span className="aim-dot" style={{ background: b.color }} aria-hidden />
-            <b>{b.label}</b> <span className="muted">{b.hint}</span> — {b.rows.length}
+            <b>{tr(b.label)}</b> <span className="muted">{tr(b.hint)}</span> — {b.rows.length}
           </li>
         ))}
       </ul>
@@ -100,11 +99,9 @@ function Scatter({ kills }: { kills: AimRow[] }) {
 
   return (
     <figure className="aim-fig">
-      <figcaption>
-        Every kill: how far, and how far off
-        <span className="aim-fig-sub">a dot low and right is a long shot with the crosshair already on the head</span>
+      <figcaption>{tx("Every kill: how far, and how far off{0}", { "0": <span className="aim-fig-sub">{tr("a dot low and right is a long shot with the crosshair already on the head")}</span> })}
       </figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} className="aim-svg" role="img" aria-label="Range against crosshair error, one dot per kill">
+      <svg viewBox={`0 0 ${W} ${H}`} className="aim-svg" role="img" aria-label={tr("Range against crosshair error, one dot per kill")}>
         {yTicks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} className="aim-grid" />
@@ -130,22 +127,17 @@ function Scatter({ kills }: { kills: AimRow[] }) {
             strokeWidth={2}
           >
             <title>
-              {k.rangeUnits.toFixed(0)} units away, {k.errorDeg.toFixed(1)}° off at the shot,{" "}
-              {k.beforeDeg.toFixed(1)}° a second before{k.headshot ? ", headshot" : ""}
+              {tx("{0} units away, {1}° off at the shot,{2}{3}° a second before{4}", { "0": k.rangeUnits.toFixed(0), "1": k.errorDeg.toFixed(1), "2": " ", "3": k.beforeDeg.toFixed(1), "4": k.headshot ? tr(", headshot") : "" })}
             </title>
           </circle>
         ))}
-        <text x={W - pad.r} y={H - 4} className="aim-axis" textAnchor="end">
-          distance in map units
-        </text>
+        <text x={W - pad.r} y={H - 4} className="aim-axis" textAnchor="end">{tr("distance in map units")}</text>
       </svg>
       <ul className="aim-legend">
         <li>
-          <span className="aim-dot" style={{ background: BUSY }} aria-hidden /> headshot
-        </li>
+          {tx("{0} headshot", { "0": <span className="aim-dot" style={{ background: BUSY }} aria-hidden /> })}</li>
         <li>
-          <span className="aim-dot aim-dot-open" style={{ borderColor: CALM }} aria-hidden /> body shot
-        </li>
+          {tx("{0} body shot", { "0": <span className="aim-dot aim-dot-open" style={{ borderColor: CALM }} aria-hidden /> })}</li>
       </ul>
     </figure>
   );
@@ -164,16 +156,13 @@ function Cover({ deaths }: { deaths: DeathRow[] }) {
 
   return (
     <figure className="aim-fig">
-      <figcaption>
-        Who was near when you died
-        <span className="aim-fig-sub">distance to your nearest living teammate</span>
+      <figcaption>{tx("Who was near when you died{0}", { "0": <span className="aim-fig-sub">{tr("distance to your nearest living teammate")}</span> })}
       </figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} className="aim-svg" role="img" aria-label="Distance to the nearest teammate at each death">
+      <svg viewBox={`0 0 ${W} ${H}`} className="aim-svg" role="img" aria-label={tr("Distance to the nearest teammate at each death")}>
         <line x1={pad.l} x2={W - pad.r} y1={H - pad.b} y2={H - pad.b} className="aim-axis-line" />
         <line x1={x(COVER_UNITS)} x2={x(COVER_UNITS)} y1={pad.t - 8} y2={H - pad.b} className="aim-cover-line" />
         <text x={x(COVER_UNITS) + 6} y={pad.t - 2} className="aim-axis">
-          {COVER_UNITS} units: within reach
-        </text>
+          {tx("{COVER_UNITS} units: within reach", { COVER_UNITS: COVER_UNITS })}</text>
         {known.map((d, i) => (
           <circle
             key={d.tick}
@@ -183,9 +172,7 @@ function Cover({ deaths }: { deaths: DeathRow[] }) {
             fill={d.matesNear === 0 ? BUSY : CALM}
             fillOpacity={0.85}
           >
-            <title>
-              nearest teammate {(d.nearestMate ?? 0).toFixed(0)} units away, {d.matesNear} within {COVER_UNITS}
-              {d.scoped ? ", scoped" : ""}
+            <title>{tx("nearest teammate {0} units away, {matesNear} within {COVER_UNITS}{3}", { "0": (d.nearestMate ?? 0).toFixed(0), "3": d.scoped ? tr(", scoped") : "", matesNear: d.matesNear, COVER_UNITS: COVER_UNITS })}
             </title>
           </circle>
         ))}
@@ -197,12 +184,9 @@ function Cover({ deaths }: { deaths: DeathRow[] }) {
       </svg>
       <ul className="aim-legend">
         <li>
-          <span className="aim-dot" style={{ background: BUSY }} aria-hidden /> nobody within {COVER_UNITS} — {alone} of{" "}
-          {known.length} deaths
-        </li>
+          {tx("{0} nobody within {COVER_UNITS} — {alone} of{3}{known} deaths", { "0": <span className="aim-dot" style={{ background: BUSY }} aria-hidden />, "3": " ", COVER_UNITS: COVER_UNITS, alone: alone, known: known.length })}</li>
         <li>
-          <span className="aim-dot" style={{ background: CALM }} aria-hidden /> someone close by
-        </li>
+          {tx("{0} someone close by", { "0": <span className="aim-dot" style={{ background: CALM }} aria-hidden /> })}</li>
       </ul>
     </figure>
   );

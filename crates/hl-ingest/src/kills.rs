@@ -209,10 +209,10 @@ pub fn impacts_for(
 
 /// Add each player's fight counts (from `Db::fight_counts`) to their impact,
 /// creating an entry for players with no kills.
-pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 11])]) {
+pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 13])]) {
     for &(
         account,
-        [opening_kills, opening_deaths, kills, traded_kills, deaths, traded_deaths, flank_deaths, stationary_deaths, fights_present, fights_kast, fights_kast_engaged],
+        [opening_kills, opening_deaths, kills, traded_kills, deaths, traded_deaths, flank_deaths, stationary_deaths, fights_present, fights_kast, fights_kast_engaged, caps_contested, caps_mates_dead],
     ) in rows
     {
         impacts.entry(account).or_default().fights = Some(hl_rating::FightCounts {
@@ -227,7 +227,41 @@ pub fn attach_fights(impacts: &mut HashMap<u32, Impact>, rows: &[(u32, [u32; 11]
             fights_present,
             fights_kast,
             fights_kast_engaged,
+            caps_contested,
+            caps_mates_dead,
         });
+    }
+}
+
+/// Add each player's shared fight swing (Q6b) to their impact.
+///
+/// Kept beside `impacts_for` rather than inside it, as `attach_fights` is:
+/// the credits come from the fights pass and every caller already holds
+/// the kills and situations this needs. A kill with no stored credits --
+/// a log the pass has not read at version 6 -- credits its killer alone,
+/// which is exactly the unshared swing.
+pub fn attach_shared_swing(
+    impacts: &mut HashMap<u32, Impact>,
+    kills: &[StoredKill],
+    situations: Option<&HashMap<i64, (i8, i8)>>,
+    credits: Option<&HashMap<i64, Vec<(u32, f64)>>>,
+    w: &Weights,
+) {
+    let Some(situations) = situations else { return };
+    for (seq, k) in kills.iter().enumerate() {
+        if !(k.live && k.custom.as_deref() != Some("feign_death")) {
+            continue;
+        }
+        let Some(&(d, a)) = situations.get(&(seq as i64)) else { continue };
+        let Some(s) = w.swing(d, a) else { continue };
+        match credits.and_then(|c| c.get(&(seq as i64))) {
+            Some(shares) => {
+                for &(who, share) in shares {
+                    *impacts.entry(who).or_default().swing_shared.get_or_insert(0.0) += s * share;
+                }
+            }
+            None => *impacts.entry(k.killer).or_default().swing_shared.get_or_insert(0.0) += s,
+        }
     }
 }
 

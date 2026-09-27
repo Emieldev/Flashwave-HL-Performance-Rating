@@ -1,4 +1,5 @@
 import type { Analysis, StateSeries } from "../../api/types";
+import { k, t, tx } from "../../lib/i18n";
 
 /** Row heights, in pixels. */
 const ALIVE_H = 36;
@@ -8,7 +9,19 @@ const GAP = 8;
 /** A difference this big fills the alive row's half-height. */
 const ALIVE_MAX = 4;
 
-const STRIP_H = ALIVE_H + GAP + UBER_H * 2 + GAP + AD_H + 4;
+export const STRIP_H = ALIVE_H + GAP + UBER_H * 2 + GAP + AD_H + 4;
+
+/**
+ * Where each row sits, for a caller that puts the labels beside the strip
+ * rather than in its right margin (the round cards, whose lane labels are on
+ * the left).
+ */
+export const STATE_ROWS: Array<{ label: string; top: number; height: number }> = [
+  { label: k("Players ±"), top: 0, height: ALIVE_H },
+  { label: k("Your uber"), top: ALIVE_H + GAP, height: UBER_H },
+  { label: k("Their uber"), top: ALIVE_H + GAP + UBER_H, height: UBER_H },
+  { label: k("Advantage"), top: ALIVE_H + GAP + UBER_H * 2 + GAP, height: AD_H },
+];
 
 /** The chosen side's view of the state series: "mine" is the chosen player's team. */
 export function sides(s: StateSeries, mine: "Red" | "Blue") {
@@ -46,8 +59,13 @@ export function StateStrip(props: {
   width: number;
   hoverT: number | null;
   onHover: (t: number | null) => void;
+  /** Row labels in the right margin; off when the caller draws its own. */
+  labels?: boolean;
+  /** The sentence under the strip; off where a card says it another way. */
+  summary?: boolean;
 }) {
   const { a, mine, t0, t1, x, left, plotW, width, hoverT, onHover } = props;
+  const showLabels = props.labels ?? true;
   const s = sides(a.state, mine);
   const i0 = Math.max(0, Math.floor(t0));
   const i1 = Math.min(s.alive.length, Math.ceil(t1));
@@ -97,12 +115,13 @@ export function StateStrip(props: {
     return Math.max(t0, Math.min(t1, t0 + ((mx - left) / plotW) * (t1 - t0)));
   };
 
-  const label = (y: number, text: string) => (
-    // In the right margin: the left one is too narrow for words.
-    <text x={left + plotW + 8} y={y} className="tl-axis" dominantBaseline="middle">
-      {text}
-    </text>
-  );
+  const label = (y: number, text: string) =>
+    showLabels && (
+      // In the right margin: the left one is too narrow for words.
+      <text x={left + plotW + 8} y={y} className="tl-axis" dominantBaseline="middle">
+        {text}
+      </text>
+    );
 
   return (
     <div className="ss">
@@ -110,7 +129,7 @@ export function StateStrip(props: {
         width={width}
         height={STRIP_H}
         role="img"
-        aria-label={`Game state: up players ${up}% of the time, down ${down}%. Uber advantage yours ${adMine}%, theirs ${adTheirs}%.`}
+        aria-label={t("Game state: up players {up}% of the time, down {down}%. Uber advantage yours {adMine}%, theirs {adTheirs}%.", { up: up, down: down, adMine: adMine, adTheirs: adTheirs })}
         onMouseMove={(e) => onHover(tFromEvent(e))}
         onMouseLeave={() => onHover(null)}
       >
@@ -121,7 +140,7 @@ export function StateStrip(props: {
             <line x1="0" y1="0" x2="0" y2="4" className="ss-hatch-line" />
           </pattern>
         </defs>
-        {label(mid, "Players ±")}
+        {label(mid, t("Players ±"))}
         <line x1={left} x2={left + plotW} y1={mid} y2={mid} className="tl-grid" />
         {runs(diff).map((r) => {
           if (r.v === 0) return null;
@@ -138,12 +157,12 @@ export function StateStrip(props: {
           );
         })}
 
-        {label(uberTop + UBER_H / 2, "Your uber")}
+        {label(uberTop + UBER_H / 2, t("Your uber"))}
         {uberRow(s.charge, uberTop, "m")}
-        {label(uberTop + UBER_H * 1.5, "Their uber")}
+        {label(uberTop + UBER_H * 1.5, t("Their uber"))}
         {uberRow(s.theirCharge, uberTop + UBER_H, "t")}
 
-        {label(adTop + AD_H / 2, "Advantage")}
+        {label(adTop + AD_H / 2, t("Advantage"))}
         <rect x={left} width={plotW} y={adTop} height={AD_H} className="ss-ad-none" />
         {runs(s.advantage).map((r) =>
           r.v === 0 ? null : (
@@ -158,11 +177,8 @@ export function StateStrip(props: {
           ))}
         {hoverT !== null && <line x1={x(hoverT)} x2={x(hoverT)} y1={0} y2={adTop + AD_H} className="tl-cross" />}
       </svg>
-      <p className="hint ss-summary">
-        <span className="km-key km-key-kill ss-key" /> ahead <span className="km-key ss-key ss-key-down" /> behind ·{" "}
-        Up a player or more {up}% of the time, down {down}%. Uber advantage: yours {adMine}%, theirs {adTheirs}%.
-        Charge between two known moments (ready, used, death) is interpolated.
-      </p>
+      {(props.summary ?? true) && <p className="hint ss-summary">
+        {tx("{0} ahead {1} behind ·{2}Up a player or more {up}% of the time, down {down}%. Uber advantage: yours {adMine}%, theirs {adTheirs}%. Charge between two known moments (ready, used, death) is interpolated.", { "0": <span className="km-key km-key-kill ss-key" />, "1": <span className="km-key ss-key ss-key-down" />, "2": " ", up: up, down: down, adMine: adMine, adTheirs: adTheirs })}</p>}
     </div>
   );
 }

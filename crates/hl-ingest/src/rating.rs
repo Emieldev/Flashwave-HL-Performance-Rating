@@ -124,9 +124,11 @@ pub async fn rate_logs(db: &Db, w: &Weights, log_ids: &[i64]) -> Result<usize> {
         // Per log rather than the whole corpus: this runs between fetches.
         let kills = db.kills_for_log(log_id).await?;
         let situations = db.kill_situations(log_id).await?;
+        let credits = db.kill_credits(log_id).await?;
         let windows = db.round_windows(log_id).await?;
         let mut impact =
             crate::kills::impacts_for(&kills, Some(&situations), &windows, log.map.as_deref(), w);
+        crate::kills::attach_shared_swing(&mut impact, &kills, Some(&situations), Some(&credits), w);
         let fights = db.fight_counts(Some(log_id)).await?;
         crate::kills::attach_fights(&mut impact, fights.get(&log_id).map_or(&[][..], |f| f.as_slice()));
 
@@ -168,6 +170,7 @@ pub async fn collect_performances(
     let windows = db.all_round_windows().await?;
     let fights = db.fight_counts(None).await?;
     let situations = db.all_kill_situations().await?;
+    let credits = db.all_kill_credits().await?;
     let mut perfs: Vec<(i64, Performance)> = Vec::new();
     for (i, log_id) in ids.iter().copied().enumerate() {
         if i % 25 == 0 {
@@ -183,13 +186,15 @@ pub async fn collect_performances(
         };
         let Ok(log) = normalize(log_id, &value) else { continue };
         let pool_map = log.map.as_deref().map(hl_core::maps::map_base);
+        let log_kills = kills.get(&log_id).map_or(&[][..], |k| k.as_slice());
         let mut impact = crate::kills::impacts_for(
-            kills.get(&log_id).map_or(&[][..], |k| k.as_slice()),
+            log_kills,
             situations.get(&log_id),
             windows.get(&log_id).map_or(&[][..], |k| k.as_slice()),
             log.map.as_deref(),
             w,
         );
+        crate::kills::attach_shared_swing(&mut impact, log_kills, situations.get(&log_id), credits.get(&log_id), w);
         crate::kills::attach_fights(&mut impact, fights.get(&log_id).map_or(&[][..], |f| f.as_slice()));
         perfs.extend(
             log.players

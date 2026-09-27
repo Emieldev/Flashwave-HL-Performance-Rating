@@ -4,13 +4,14 @@ import { clock } from "../../lib/format";
 import { useMeasuredWidth } from "../../lib/measure";
 import { inSlice, roundClock, type Slice } from "./common";
 import { chargeLabel, sides, StateStrip } from "./StateStrip";
+import { t as tr, tx, k } from "../../lib/i18n";
 
 type Metric = "kills" | "deaths" | "damage";
 
 const METRICS: Array<[Metric, string]> = [
-  ["kills", "Kills"],
-  ["deaths", "Deaths"],
-  ["damage", "Damage"],
+  ["kills", k("Kills")],
+  ["deaths", k("Deaths")],
+  ["damage", k("Damage")],
 ];
 
 const H = 300;
@@ -114,10 +115,10 @@ export function TimelineChart(props: {
   return (
     <div className="tlc">
       <div className="tlc-controls">
-        <div className="segmented" role="tablist" aria-label="Measure">
+        <div className="segmented" role="tablist" aria-label={tr("Measure")}>
           {METRICS.map(([m, label]) => (
             <button key={m} role="tab" aria-selected={metric === m} className={metric === m ? "seg active" : "seg"} onClick={() => setMetric(m)}>
-              {label}
+              {tr(label)}
             </button>
           ))}
         </div>
@@ -126,23 +127,19 @@ export function TimelineChart(props: {
             <svg width="18" height="8" aria-hidden>
               <line x1="1" y1="4" x2="17" y2="4" className="tl-sel" />
             </svg>
-            {me?.name ?? "chosen player"}
+            {me?.name ?? tr("chosen player")}
           </span>
           <span>
             <svg width="18" height="8" aria-hidden>
               <line x1="1" y1="4" x2="17" y2="4" className="tl-mate" />
-            </svg>
-            their team
-          </span>
+            </svg>{tr("their team")}</span>
           <span>
             <svg width="18" height="8" aria-hidden>
               <line x1="1" y1="4" x2="17" y2="4" className="tl-foe" />
-            </svg>
-            other team
-          </span>
+            </svg>{tr("other team")}</span>
         </span>
         <button className="linkish" onClick={() => setAsTable((t) => !t)}>
-          {asTable ? "Show chart" : "Show as table"}
+          {asTable ? tr("Show chart") : tr("Show as table")}
         </button>
       </div>
 
@@ -151,7 +148,7 @@ export function TimelineChart(props: {
           <table className="match-table">
             <thead>
               <tr>
-                <th>Player</th>
+                <th>{tr("Player")}</th>
                 <th className="num">{METRICS.find(([m]) => m === metric)![1]}</th>
               </tr>
             </thead>
@@ -160,7 +157,7 @@ export function TimelineChart(props: {
                 <tr key={s.p.accountId} className="clickable" onClick={() => onPick(s.p.accountId)}>
                   <td className={`team-${s.p.team.toLowerCase()}`}>
                     {s.p.name}
-                    {s.p.accountId === player && <span className="muted"> · chosen</span>}
+                    {s.p.accountId === player && <span className="muted">{" "}{tr("· chosen")}</span>}
                   </td>
                   <td className="num">{fmt(s.final)}</td>
                 </tr>
@@ -174,7 +171,7 @@ export function TimelineChart(props: {
             width={width}
             height={H}
             role="img"
-            aria-label={`${METRICS.find(([m]) => m === metric)![1]} over the match, one line per player`}
+            aria-label={tr("{0} over the match, one line per player", { "0": METRICS.find(([m]) => m === metric)![1] })}
             onMouseMove={(e) => setHoverT(tFromEvent(e))}
             onMouseLeave={() => setHoverT(null)}
             onClick={(e) => {
@@ -275,15 +272,14 @@ function niceTicks(max: number, whole: boolean): number[] {
 }
 
 /** The game state at one moment, for the hover tip. */
-function StateLine({ a, mine, t }: { a: Analysis; mine: "Red" | "Blue"; t: number }) {
+export function StateLine({ a, mine, t }: { a: Analysis; mine: "Red" | "Blue"; t: number }) {
   const s = sides(a.state, mine);
   const i = Math.min(Math.floor(t), s.alive.length - 1);
   if (i < 0) return null;
   const ad = s.advantage[i] > 0 ? " · uber advantage yours" : s.advantage[i] < 0 ? " · uber advantage theirs" : "";
   return (
     <div className="tip-meta">
-      {s.alive[i]} v {s.theirAlive[i]} alive · uber {chargeLabel(s.charge[i])} v {chargeLabel(s.theirCharge[i])}
-      {ad}
+      {tx("{0} v {1} alive · uber {2} v {3}{ad}", { "0": s.alive[i], "1": s.theirAlive[i], "2": chargeLabel(s.charge[i]), "3": chargeLabel(s.theirCharge[i]), ad: ad })}
     </div>
   );
 }

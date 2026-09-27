@@ -99,6 +99,9 @@ pub struct DemoView {
     /// True when tick positions are estimated rather than derived from exact
     /// file times (STV demos, placed from their upload time).
     pub approximate: bool,
+    /// The file was deleted to save space (Q23). Everything read from it is
+    /// still here; playing it back needs it downloaded again.
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

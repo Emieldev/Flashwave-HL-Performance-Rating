@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Analysis } from "../../api/types";
-import { CLASS_ORDER, CLASS_SHORT, DEATH, KILL, playerMap, sliceLabel, type Slice } from "./common";
+import { CLASS_ORDER, DEATH, KILL, classLabel, playerMap, sliceLabel, type Slice } from "./common";
 import { ClassIcon } from "../ClassIcon";
+import { t as tr, tx } from "../../lib/i18n";
 
 /**
  * Who the player hurt and who hurt them, class by class: back-to-back bars
@@ -34,34 +35,31 @@ export function Spread({ a, player, slice }: { a: Analysis; player: number; slic
     <div className="spread">
       <div className="spread-head">
         <p className="hint">
-          {p?.name ?? "The player"} against each enemy class, {sliceLabel(slice)}.
-          {!a.damageCapped && " This log predates logs.tf's 450-per-hit cap, so backstabs count in full."}
+          {tx("{0} against each enemy class, {1}.{2}", { "0": p?.name ?? tr("The player"), "1": sliceLabel(slice), "2": !a.damageCapped && tr(" This log predates logs.tf's 450-per-hit cap, so backstabs count in full.") })}
         </p>
         <button className="linkish" onClick={() => setAsTable((t) => !t)}>
-          {asTable ? "Show bars" : "Show as table"}
+          {asTable ? tr("Show bars") : tr("Show as table")}
         </button>
       </div>
       <div className="spread-grid">
         <Butterfly
-          title="Damage spread"
-          leftLabel="Damage taken"
-          rightLabel="Damage dealt"
+          title={tr("Damage spread")}
+          leftLabel={tr("Damage taken")}
+          rightLabel={tr("Damage dealt")}
           rows={dmg}
           asTable={asTable}
           format={(n) => n.toLocaleString()}
         />
         <Butterfly
-          title="Kill spread"
-          leftLabel="Deaths"
-          rightLabel="Kills"
+          title={tr("Kill spread")}
+          leftLabel={tr("Deaths")}
+          rightLabel={tr("Kills")}
           rows={kills}
           asTable={asTable}
           format={(n) => String(n)}
         />
       </div>
-      <p className="hint spread-foot">
-        On combined logs, damage taken can differ from logs.tf&apos;s figure.
-      </p>
+      <p className="hint spread-foot">{tr("On combined logs, damage taken can differ from logs.tf's figure.")}</p>
     </div>
   );
 }
@@ -97,7 +95,7 @@ function Butterfly(props: {
         <table className="match-table bf-table">
           <thead>
             <tr>
-              <th>Class</th>
+              <th>{tr("Class")}</th>
               <th className="num">{leftLabel}</th>
               <th className="num">{rightLabel}</th>
             </tr>
@@ -105,7 +103,7 @@ function Butterfly(props: {
           <tbody>
             {rows.map((r) => (
               <tr key={r.cls}>
-                <td>{CLASS_SHORT[r.cls]}</td>
+                <td>{classLabel(r.cls, true)}</td>
                 <td className="num">{format(r.left)}</td>
                 <td className="num">{format(r.right)}</td>
               </tr>
@@ -113,9 +111,9 @@ function Butterfly(props: {
           </tbody>
         </table>
       ) : (
-        <div className="bf-rows" role="img" aria-label={`${title} ${leftLabel} and ${rightLabel} by class`}>
+        <div className="bf-rows" role="img" aria-label={tr("{title} {leftLabel} and {rightLabel} by class", { title: title, leftLabel: leftLabel, rightLabel: rightLabel })}>
           {rows.map((r) => (
-            <div className="bf-row" key={r.cls} title={`${CLASS_SHORT[r.cls]}: ${leftLabel} ${format(r.left)}, ${rightLabel} ${format(r.right)}`}>
+            <div className="bf-row" key={r.cls} title={`${classLabel(r.cls, true)}: ${leftLabel} ${format(r.left)}, ${rightLabel} ${format(r.right)}`}>
               <span className="bf-val bf-val-l">{r.left > 0 ? format(r.left) : ""}</span>
               <span className="bf-side bf-l">
                 <span className="bf-bar" style={{ width: `${(r.left / max) * 100}%`, background: DEATH }} />

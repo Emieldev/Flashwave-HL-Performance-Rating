@@ -11,6 +11,7 @@ import { StvPrompt } from "./StvPrompt";
 import { AnalysisPanel } from "../analysis/AnalysisPanel";
 import { Matchups } from "./Matchups";
 import { RoundTimeline } from "./RoundTimeline";
+import { t, tx } from "../../lib/i18n";
 
 export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void }) {
   const q = useQuery({ queryKey: ["match", logId], queryFn: () => api.getMatch(logId) });
@@ -52,14 +53,12 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
 
   return (
     <div className="match-page">
-      <button className="linkish back" onClick={onBack}>
-        ← All matches
-      </button>
+      <button className="linkish back" onClick={onBack}>{t("← All matches")}</button>
 
-      {q.isPending && <p className="hint">Loading match…</p>}
+      {q.isPending && <p className="hint">{t("Loading match…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
       {q.data === null && (
-        <p className="hint">This log is not stored yet. Run a sync, then open it again.</p>
+        <p className="hint">{t("This log is not stored yet. Run a sync, then open it again.")}</p>
       )}
       {q.data && shown && (
         <>
@@ -119,19 +118,18 @@ function PartPicker(props: {
   return (
     <div className="part-picker">
       <label className="an-field">
-        <span className="an-label">Reading</span>
+        <span className="an-label">{t("Reading")}</span>
         <select value={part ?? ""} onChange={(e) => onPick(e.target.value === "" ? null : Number(e.target.value))}>
-          <option value="">The whole match · {d.parts.length} logs combined</option>
+          <option value="">{tx("The whole match · {parts} logs combined", { parts: d.parts.length })}</option>
           {rows.map((p) => (
             <option key={p.logId} value={p.logId}>
-              {capitalize(splitMap(p.map).name ?? "unknown")} · log {p.logId}
-              {"detail" in p && p.detail ? "" : " (fetches)"}
+              {tx("{0} · log {logId}{2}", { "0": capitalize(splitMap(p.map).name ?? "unknown"), "2": "detail" in p && p.detail ? "" : t(" (fetches)"), logId: p.logId })}
             </option>
           ))}
         </select>
       </label>
-      {fetching && <span className="hint">Fetching…</span>}
-      {part !== null && !fetching && <span className="hint">this log alone</span>}
+      {fetching && <span className="hint">{t("Fetching…")}</span>}
+      {part !== null && !fetching && <span className="hint">{t("this log alone")}</span>}
       {error && <p className="error">{error}</p>}
     </div>
   );
@@ -140,7 +138,14 @@ function PartPicker(props: {
 function Header({ d }: { d: MatchDetail }) {
   // The resolved maps: a combined log's own map field is whatever its
   // uploader typed.
-  const maps = [...new Set(d.segments.map((s) => s.map).filter((m): m is string => m !== null))];
+  //
+  // `?? []` because this page is handed two different objects: the whole
+  // match, and one part of a combined log. They came from two commands that
+  // built their own shapes, and the part's had no `segments` at all -- so
+  // picking a half threw here and took the page with it. The commands agree
+  // now (`MatchView`), and this stays as the belt: a scoreboard the server
+  // could describe is worth drawing even if a list is missing from it.
+  const maps = [...new Set((d.segments ?? []).map((s) => s.map).filter((m): m is string => m !== null))];
   const { mode, name } = splitMap(maps.length === 1 ? maps[0] : d.map);
   const mine = d.myTeam;
   const [myScore, theirScore] = mine === "Blue" ? [d.blueScore, d.redScore] : [d.redScore, d.blueScore];
@@ -163,19 +168,19 @@ function Header({ d }: { d: MatchDetail }) {
             ) : (
               <>
                 {mode && <span className={`mode mode-${mode}`}>{mode}</span>}
-                <h1>{name ?? "Unknown map"}</h1>
+                <h1>{name ?? t("Unknown map")}</h1>
               </>
             )}
           </div>
           {maps.length > 1 && <MapResults d={d} />}
           <p className="muted mh-sub">
             {formatDate(d.playedAt, true)} · {minutes(d.durationS)}
-            {d.title && <> · {d.title}</>}
+            {d.title && <> · {t(d.title)}</>}
           </p>
         </div>
 
         <div className="mh-score">
-          {d.result && <span className={`mh-result result-${d.result}`}>{d.result === "W" ? "Win" : d.result === "L" ? "Loss" : "Tie"}</span>}
+          {d.result && <span className={`mh-result result-${d.result}`}>{d.result === "W" ? t("Win") : d.result === "L" ? t("Loss") : t("Tie")}</span>}
           {mine ? (
             <span className="mh-numbers">
               {myScore}
@@ -189,7 +194,7 @@ function Header({ d }: { d: MatchDetail }) {
               <span className="team-blue">{d.blueScore} {teamLabel("Blue")}</span>
             </span>
           )}
-          {mine && <span className={`muted team-${mine.toLowerCase()}`}>you played {teamLabel(mine)}</span>}
+          {mine && <span className={`muted team-${mine.toLowerCase()}`}>{tx("you played {0}", { "0": teamLabel(mine) })}</span>}
         </div>
       </div>
 
@@ -198,14 +203,14 @@ function Header({ d }: { d: MatchDetail }) {
       <div className="mh-foot">
         <div>
           {!d.context && d.league && <span className="badge badge-league">{d.league.toUpperCase()}</span>}
-          {d.demos.some((x) => x.kind === "pov") && <span className="badge badge-pov">POV demo</span>}
-          {d.demosTfId && <span className="badge badge-demo">STV demo</span>}
+          {d.demos.some((x) => x.kind === "pov") && <span className="badge badge-pov">{t("POV demo")}</span>}
+          {d.demosTfId && <span className="badge badge-demo">{t("STV demo")}</span>}
           {d.format && d.format !== "highlander" && <span className="badge">{d.format}</span>}
         </div>
         <div className="mh-links">
           {links.map(([label, url]) => (
             <button key={label} className="linkish" onClick={() => void api.openExternal(url)}>
-              {label} ↗
+              {t(label)} ↗
             </button>
           ))}
         </div>
@@ -232,13 +237,12 @@ function ContextLine({ c, logScore }: { c: MatchContext; logScore: [number, numb
       {sides && <strong className="mh-sides">{sides}</strong>}
       {parts.length > 0 && <span className="muted">{parts.join(" · ")}</span>}
       {o?.score && !(logScore && o.score[0] === logScore[0] && o.score[1] === logScore[1]) && (
-        <span className="muted" title="ETF2L's score for the match. In stopwatch this is not the same as rounds won.">
-          ETF2L result <strong className={o.score[0] > o.score[1] ? "result-W" : o.score[0] < o.score[1] ? "result-L" : ""}>{o.score[0]}–{o.score[1]}</strong>
+        <span className="muted" title={t("ETF2L's score for the match. In stopwatch this is not the same as rounds won.")}>{tx("ETF2L result {0}", { "0": <strong className={o.score[0] > o.score[1] ? "result-W" : o.score[0] < o.score[1] ? "result-L" : ""}>{o.score[0]}–{o.score[1]}</strong> })}
         </span>
       )}
-      {o?.defaultWin && <span className="warn-text">default win</span>}
+      {o?.defaultWin && <span className="warn-text">{t("default win")}</span>}
       {c.kind !== "official" && <span className="hint">{kindReason(c)}</span>}
-      {c.linkMethod === "roster" && <span className="hint">found by roster; trends.tf had not tagged it</span>}
+      {c.linkMethod === "roster" && <span className="hint">{t("found by roster; trends.tf had not tagged it")}</span>}
     </div>
   );
 }
@@ -251,16 +255,16 @@ function ContextLine({ c, logScore }: { c: MatchContext; logScore: [number, numb
 function MapResults({ d }: { d: MatchDetail }) {
   return (
     <p className="mh-maps">
-      {d.segments.map((s, i) => {
+      {(d.segments ?? []).map((s, i) => {
         const [a, b] = d.myTeam === "Blue" ? [s.blueWins, s.redWins] : [s.redWins, s.blueWins];
         const cls = d.myTeam ? (a > b ? "result-W" : a < b ? "result-L" : "") : "";
         return (
-          <span key={i} className="mh-map-result" title={`Rounds ${s.firstRound}–${s.lastRound}`}>
+          <span key={i} className="mh-map-result" title={t("Rounds {firstRound}–{lastRound}", { firstRound: s.firstRound, lastRound: s.lastRound })}>
             {capitalize(splitMap(s.map).name ?? "unknown")} <strong className={cls}>{a}–{b}</strong>
           </span>
         );
       })}
-      <span className="hint">rounds won{d.myTeam ? ", yours first" : ", RED–BLU"}</span>
+      <span className="hint">{tx("rounds won{0}", { "0": d.myTeam ? t(", yours first") : t(", RED–BLU") })}</span>
     </p>
   );
 }

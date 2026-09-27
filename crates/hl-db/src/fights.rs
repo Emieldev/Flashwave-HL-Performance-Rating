@@ -7,7 +7,7 @@ use sqlx::Row;
 use std::collections::HashMap;
 
 /// The counted columns of `fight_stat`, in order.
-pub const FIGHT_COLUMNS: [&str; 25] = [
+pub const FIGHT_COLUMNS: [&str; 27] = [
     "rounds",
     "kills",
     "deaths",
@@ -33,12 +33,14 @@ pub const FIGHT_COLUMNS: [&str; 25] = [
     "fights_present",
     "fights_kast",
     "fights_kast_engaged",
+    "caps_contested",
+    "caps_mates_dead",
 ];
 
 /// One player's counts in one match, in [`FIGHT_COLUMNS`] order.
 pub struct FightRow {
     pub account_id: u32,
-    pub values: [i64; 25],
+    pub values: [i64; 27],
 }
 
 /// Summed counts over a set of rated performances.
@@ -128,6 +130,48 @@ impl Db {
         Ok(())
     }
 
+    /// Replace one log's kill credits (Q6b): `(seq, account, share)`.
+    pub async fn replace_kill_credits(&self, log_id: i64, rows: &[(i64, u32, f64)]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        sqlx::query("DELETE FROM kill_credit WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
+        for &(seq, account, share) in rows {
+            sqlx::query("INSERT OR REPLACE INTO kill_credit (log_id, seq, account_id, share) VALUES (?1, ?2, ?3, ?4)")
+                .bind(log_id)
+                .bind(seq)
+                .bind(i64::from(account))
+                .bind(share)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// One log's kill credits: `seq -> [(account, share)]`.
+    pub async fn kill_credits(&self, log_id: i64) -> Result<HashMap<i64, Vec<(u32, f64)>>> {
+        let rows: Vec<(i64, i64, f64)> =
+            sqlx::query_as("SELECT seq, account_id, share FROM kill_credit WHERE log_id = ?1")
+                .bind(log_id)
+                .fetch_all(self.pool())
+                .await?;
+        let mut out: HashMap<i64, Vec<(u32, f64)>> = HashMap::new();
+        for (seq, acc, share) in rows {
+            out.entry(seq).or_default().push((acc as u32, share));
+        }
+        Ok(out)
+    }
+
+    /// Every stored kill credit: per log, `seq -> [(account, share)]`.
+    pub async fn all_kill_credits(&self) -> Result<HashMap<i64, HashMap<i64, Vec<(u32, f64)>>>> {
+        let rows: Vec<(i64, i64, i64, f64)> =
+            sqlx::query_as("SELECT log_id, seq, account_id, share FROM kill_credit").fetch_all(self.pool()).await?;
+        let mut out: HashMap<i64, HashMap<i64, Vec<(u32, f64)>>> = HashMap::new();
+        for (log, seq, acc, share) in rows {
+            out.entry(log).or_default().entry(seq).or_default().push((acc as u32, share));
+        }
+        Ok(out)
+    }
+
     /// Every stored kill situation: per log, `seq -> (diff, adv)`.
     pub async fn all_kill_situations(&self) -> Result<HashMap<i64, HashMap<i64, (i8, i8)>>> {
         let rows: Vec<(i64, i64, i64, i64)> = sqlx::query_as("SELECT log_id, seq, diff, adv FROM kill_situation")
@@ -196,17 +240,18 @@ impl Db {
     /// `(account, [opening kills, opening deaths, kills, traded kills, deaths,
     /// traded deaths, deaths to flankers, stationary deaths, fights present,
     /// KAST fights, engaged KAST fights])`.
-    pub async fn fight_counts(&self, log_id: Option<i64>) -> Result<std::collections::HashMap<i64, Vec<(u32, [u32; 11])>>> {
+    pub async fn fight_counts(&self, log_id: Option<i64>) -> Result<std::collections::HashMap<i64, Vec<(u32, [u32; 13])>>> {
         let rows = sqlx::query(
             "SELECT log_id, account_id, opening_kills, opening_deaths, kills, traded_kills,
                     deaths, traded_deaths, deaths_to_flank, stationary_deaths,
-                    fights_present, fights_kast, fights_kast_engaged
+                    fights_present, fights_kast, fights_kast_engaged,
+                    caps_contested, caps_mates_dead
              FROM fight_stat WHERE ?1 IS NULL OR log_id = ?1",
         )
         .bind(log_id)
         .fetch_all(self.pool())
         .await?;
-        let mut out: std::collections::HashMap<i64, Vec<(u32, [u32; 11])>> = std::collections::HashMap::new();
+        let mut out: std::collections::HashMap<i64, Vec<(u32, [u32; 13])>> = std::collections::HashMap::new();
         for r in rows {
             let n = |c: &str| r.get::<i64, _>(c) as u32;
             out.entry(r.get("log_id")).or_default().push((
@@ -223,6 +268,8 @@ impl Db {
                     n("fights_present"),
                     n("fights_kast"),
                     n("fights_kast_engaged"),
+                    n("caps_contested"),
+                    n("caps_mates_dead"),
                 ],
             ));
         }

@@ -57,6 +57,34 @@ pub struct Analysis {
     pub fights: Vec<FightStats>,
     /// The first kill of each round.
     pub first_picks: Vec<FirstPickView>,
+    /// Who turned up to each fight, and when (Q7b, Taiga's ask). Only fights
+    /// with at least one side of three: a two-on-two is a skirmish, and
+    /// saying who "collapsed" on it is noise.
+    pub teamfights: Vec<TeamfightView>,
+}
+
+/// One teamfight, in game time.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamfightView {
+    /// Game seconds at the fight's first kill.
+    pub t: f64,
+    pub round_num: i64,
+    /// Everyone who took part. Their side is read from `players`, which is
+    /// in stable teams: a stopwatch half's colour swap is already undone
+    /// there and would not be here.
+    pub arrivals: Vec<ArrivalView>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrivalView {
+    pub account_id: u32,
+    /// Seconds after the first kill that they first dealt or took damage,
+    /// killed or died. Negative when they were already trading before it.
+    pub joined_s: i64,
+    /// Seconds after the first kill that they died, if they did.
+    pub died_s: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -455,6 +483,31 @@ pub fn build(
             .collect()
     };
 
+    // Teamfights, from the same fight grouping the situation pass uses.
+    let fight_of: Vec<Option<usize>> = crate::situation::kill_states(raw, &gs, &fights.tags)
+        .into_iter()
+        .map(|x| x.map(|(_, f)| f))
+        .collect();
+    let teamfights = crate::teamfights::teamfights(raw, &gs, &fight_of)
+        .into_iter()
+        .filter(|tf| {
+            let side = |t: Team| tf.arrivals.iter().filter(|a| a.team == t).count();
+            side(Team::Red) >= crate::teamfights::MIN_SIDE || side(Team::Blue) >= crate::teamfights::MIN_SIDE
+        })
+        .filter_map(|tf| {
+            let (t, round_num) = clock.game(tf.at)?;
+            Some(TeamfightView {
+                t,
+                round_num,
+                arrivals: tf
+                    .arrivals
+                    .iter()
+                    .map(|a| ArrivalView { account_id: a.account_id, joined_s: a.joined_at, died_s: a.died_at })
+                    .collect(),
+            })
+        })
+        .collect();
+
     let state = StateSeries::new(&gs, &clock, log);
     // First picks in game time. The raw log's round numbers run in file
     // order; the game clock knows each round by its start.
@@ -471,6 +524,7 @@ pub fn build(
         state,
         fights: fights.players,
         first_picks,
+        teamfights,
         segments: map_segments,
         log_id: log.log_id,
         map: log.map.clone(),

@@ -151,6 +151,12 @@ export type Progress =
   | { kind: "rating"; done: number; total: number }
   | { kind: "etf2l"; done: number; total: number }
   | { kind: "rawLogs"; done: number; total: number }
+  /** A short stage with no count: named, with an indeterminate bar. */
+  | { kind: "stage"; what: string }
+  /** Fights: who was in each one, and what each kill's state was. */
+  | { kind: "fights"; done: number; total: number }
+  /** Demos being read for aim, routes and deaths. The slowest phase there is. */
+  | { kind: "readingDemos"; done: number; total: number; logId: number | null }
   /** The per-map logs a combined log was built from. */
   | { kind: "parts"; done: number; total: number }
   /** A source could not be reached; the sync carries on without it. */
@@ -394,6 +400,9 @@ export interface DemoView {
   markers: number;
   /** Ticks are estimated (STV), not derived from exact file times. */
   approximate: boolean;
+  /** The file was deleted to save space (Q23). Everything read from it is
+   *  still on the page; watching it needs it downloaded again. */
+  deleted: boolean;
 }
 
 export interface DemoStats {
@@ -402,6 +411,10 @@ export interface DemoStats {
   stv: number;
   markers: number;
   matchesWithDemo: number;
+  /** Demos kept as timelines (Q3), their size, and how many lost the file. */
+  timelines: number;
+  timelineBytes: number;
+  timelinesFileGone: number;
 }
 
 export interface DemoIndexSummary {
@@ -484,6 +497,21 @@ export interface Imported {
 export interface StvQueued {
   logId: number;
   position: number;
+}
+
+/**
+ * A step after a demo's last byte (stv://stage): linking it to its match,
+ * reading it (with how far), keeping it as a timeline, saving what it held.
+ */
+export interface StvStage {
+  logId: number;
+  step: "linking" | "reading" | "keeping" | "saving";
+  /** Which of the match's demos, and of how many: 1 of 2 with a POV and an STV. */
+  demo: number | null;
+  of: number | null;
+  /** "pov" or "stv". */
+  kind: string | null;
+  pct: number | null;
 }
 
 export interface StvProgress {
@@ -761,6 +789,21 @@ export interface RoundSpan {
   endS: number;
 }
 
+/** One teamfight, in game time (Q7b). */
+export interface TeamfightView {
+  /** Game seconds at the first kill. */
+  t: number;
+  roundNum: number;
+  arrivals: ArrivalView[];
+}
+
+export interface ArrivalView {
+  accountId: number;
+  /** Seconds after the first kill that they joined; negative if before. */
+  joinedS: number;
+  diedS: number | null;
+}
+
 export interface AnalysisPlayer {
   accountId: number;
   name: string;
@@ -899,6 +942,9 @@ export interface Analysis {
   state: StateSeries;
   fights: FightStats[];
   firstPicks: FirstPickView[];
+  /** Who turned up to each fight, and when (Q7b). Fights with a side of
+   *  three or more only. Optional so an older payload still renders. */
+  teamfights?: TeamfightView[];
 }
 
 /** One value per game second; index i covers [i, i + 1). */
@@ -957,6 +1003,8 @@ export interface MapView {
 /** One kill, as the demo saw it. Angles in degrees, distances in map units. */
 export interface AimRow {
   demoId: number;
+  /** Whose kill it was. */
+  shooter: number;
   /** The demo's own kill tick. */
   tick: number;
   /** The matching kill in the log's clock, where the log had one. */
@@ -979,8 +1027,10 @@ export interface AimRow {
   flickDeg: number;
   rangeUnits: number;
   height: number;
-  /** The demo carried both players throughout; if not, the numbers are stale. */
+  /** The demo carried the victim throughout; if not, the numbers are stale. */
   victimSeen: boolean;
+  /** And the shooter, whose angles these are. */
+  shooterSeen: boolean;
   headshot: boolean;
 }
 
@@ -1000,6 +1050,8 @@ export interface AimTotals {
 /** One death, as the demo saw it. */
 export interface DeathRow {
   demoId: number;
+  /** Who died. */
+  who: number;
   tick: number;
   atRaw: number | null;
   /** The round it happened in, where the log's rounds cover it. */
@@ -1016,6 +1068,8 @@ export interface DeathRow {
   matesNear: number;
   /** Scoped in at some point in the second before dying. */
   scoped: boolean;
+  /** The demo carried them across the whole window. */
+  seen: boolean;
 }
 
 export interface LifeTotals {
@@ -1032,6 +1086,12 @@ export interface LifeTotals {
 }
 
 export interface AimResponse {
+  /** Whose aim this is: the player asked for, or the owner. */
+  player: number;
+  /** The match has an STV demo, which is the only kind that carries all
+   *  eighteen players' angles. Without one there is nothing for anyone but
+   *  the owner, and the tab has to say so rather than look empty. */
+  stv: boolean;
   kills: AimRow[];
   deaths: DeathRow[];
   totals: AimTotals | null;
@@ -1039,6 +1099,29 @@ export interface AimResponse {
   /** The same averages over every match with a demo. */
   career: AimTotals | null;
   careerLife: LifeTotals | null;
+}
+
+/** One STV demo the app downloaded and still holds on disk (Q23). */
+export interface DownloadedDemo {
+  demoId: number;
+  fileName: string;
+  sizeBytes: number;
+  map: string | null;
+  /** Recording start, unix seconds. */
+  startUtc: number | null;
+  /** Matches this demo is linked to. */
+  logs: number;
+  /** Every one of those matches has been read at the current pass version,
+   *  so the app is finished with the file. */
+  read: boolean;
+}
+
+/** What one round of demo cleanup did. */
+export interface Cleaned {
+  deleted: number;
+  bytes: number;
+  /** Left alone because the app has not finished reading them. */
+  skipped: number;
 }
 
 /** A copy of the database, kept beside it. */
@@ -1085,3 +1168,9 @@ export interface PartScore {
   /** The combined log's rounds this part covers, matched by start time. */
   parentRounds: number[];
 }
+
+/** The user's lang folder and the `.lang` files in it, as text. */
+export type LanguageFiles = { dir: string; files: Array<{ id: string; text: string }> };
+
+/** Where a language was saved for editing; `created` is false when a file of that name was already there and was left alone. */
+export type SavedLanguageFile = { path: string; created: boolean };

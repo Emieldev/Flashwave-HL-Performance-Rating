@@ -10,7 +10,7 @@ import {
   type OppositionBand,
   type Profile,
 } from "../../api/types";
-import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
+import { formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
 import { KIND_LABEL, KIND_PLURAL } from "../ContextBadge";
 import { bounds, usePeriod } from "../../lib/period";
 import { PeriodPicker } from "../PeriodPicker";
@@ -21,6 +21,8 @@ import { TrendChart } from "./TrendChart";
 import { ClassIcon } from "../ClassIcon";
 import { Fold } from "../Fold";
 import "./profile.css";
+import { t, tx, k } from "../../lib/i18n";
+import { classLabel } from "../analysis/common";
 
 /** Below this many rated games a profile is shown, but flagged as thin. */
 const THIN_SAMPLE = 20;
@@ -40,7 +42,7 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
   const lastSplit = useRef<ContextSplit[]>([]);
   if (q.data?.profile) lastSplit.current = q.data.profile.contexts;
 
-  if (q.isPending) return <div className="profile-page"><p className="hint">Loading profile…</p></div>;
+  if (q.isPending) return <div className="profile-page"><p className="hint">{t("Loading profile…")}</p></div>;
   if (q.isError) return <div className="profile-page"><p className="error">{errorMessage(q.error)}</p></div>;
 
   const { classes, profile, fights } = q.data;
@@ -50,10 +52,8 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
     return (
       <div className="profile-page">
         <div className="panel">
-          <h2>No ratings yet</h2>
-          <p className="hint" style={{ marginTop: 6 }}>
-            Press Sync, or Rebuild in Settings.
-          </p>
+          <h2>{t("No ratings yet")}</h2>
+          <p className="hint" style={{ marginTop: 6 }}>{t("Press Sync, or Rebuild in Settings.")}</p>
         </div>
       </div>
     );
@@ -61,7 +61,7 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
 
   return (
     <div className={q.isPlaceholderData ? "profile-page refetching" : "profile-page"}>
-      <nav className="class-tabs" aria-label="Class">
+      <nav className="class-tabs" aria-label={t("Class")}>
         {classes.map(([c, n]) => (
           <button
             key={c}
@@ -70,9 +70,9 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
               setCls(c);
               lastSplit.current = [];
             }}
-            title={n < THIN_SAMPLE ? `Only ${n} rated games — read with care` : undefined}
+            title={n < THIN_SAMPLE ? t("Only {n} rated games — read with care", { n: n }) : undefined}
           >
-            <ClassIcon cls={c} size={20} /> {capitalize(c)} <span className="count">{n}</span>
+            <ClassIcon cls={c} size={20} /> {classLabel(c)} <span className="count">{n}</span>
           </button>
         ))}
       </nav>
@@ -86,10 +86,7 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
         <ProfileBody p={profile} onOpenMatch={onOpenMatch} onKind={setKind} />
       ) : (
         <div className="panel">
-          <p className="hint">
-            No rated {active} {kind ? KIND_PLURAL[kind].toLowerCase() : "games"}
-            {period.kind !== "all" ? " in this period" : ""}.
-          </p>
+          <p className="hint">{tx("No rated {active} {1}{2}.", { "1": kind ? t(KIND_PLURAL[kind]).toLowerCase() : t("games"), "2": period.kind !== "all" ? t(" in this period") : "", active: classLabel(active) })}</p>
         </div>
       )}
 
@@ -120,14 +117,14 @@ function KindFilter(props: { kind: ContextKind | null; onChange: (k: ContextKind
   const count = (k: ContextKind) => split.find((s) => s.kind === k)?.games;
   const total = split.reduce((n, s) => n + s.games, 0);
   const opts: Array<[ContextKind | null, string, number | undefined]> = [
-    [null, "All games", total || undefined],
+    [null, k("All games"), total || undefined],
     ["official", KIND_PLURAL.official, count("official")],
     ["scrim", KIND_PLURAL.scrim, count("scrim")],
     ["pug", KIND_PLURAL.pug, count("pug")],
   ];
   return (
     <div className="kind-filter">
-      <div className="segmented" role="tablist" aria-label="Kind of game">
+      <div className="segmented" role="tablist" aria-label={t("Kind of game")}>
         {opts.map(([k, label, n]) => (
           <button
             key={label}
@@ -136,12 +133,12 @@ function KindFilter(props: { kind: ContextKind | null; onChange: (k: ContextKind
             className={kind === k ? "seg active" : "seg"}
             onClick={() => onChange(k)}
           >
-            {label}
+            {t(label)}
             {n !== undefined && <span className="count"> {n}</span>}
           </button>
         ))}
       </div>
-      {kind && <span className="hint">Everything below counts {KIND_PLURAL[kind].toLowerCase()} only.</span>}
+      {kind && <span className="hint">{tx("Everything below counts {0} only.", { "0": t(KIND_PLURAL[kind]).toLowerCase() })}</span>}
     </div>
   );
 }
@@ -157,8 +154,8 @@ function KindSplit(props: { split: ContextSplit[]; active: ContextKind | null; o
   return (
     <section className="panel kind-split">
       <header>
-        <h2>Officials, scrims and pugs</h2>
-        <p className="hint">Average rating by kind of game, over every game on this class. Click one to filter.</p>
+        <h2>{t("Officials, scrims and pugs")}</h2>
+        <p className="hint">{t("Average rating by kind of game, over every game on this class. Click one to filter.")}</p>
       </header>
       <div className="ks-rows">
         {split.map((s) => (
@@ -168,15 +165,14 @@ function KindSplit(props: { split: ContextSplit[]; active: ContextKind | null; o
             onClick={() => onKind(active === s.kind ? null : s.kind)}
             aria-pressed={active === s.kind}
           >
-            <span className="ks-label">{KIND_PLURAL[s.kind]}</span>
+            <span className="ks-label">{t(KIND_PLURAL[s.kind])}</span>
             <span className="ks-track" aria-hidden>
               <span className="comp-mid" />
               <span className={`ks-fill ks-${s.kind}`} style={{ width: `${ratingPercent(s.avg)}%` }} />
             </span>
             <span className="ks-value">{rating(s.avg)}</span>
             <span className="ks-meta muted">
-              {s.games} game{s.games === 1 ? "" : "s"}
-              {s.winRate !== null && ` · ${s.winRate.toFixed(0)}% won`}
+              {tx("{games} game{1}{2}", { "1": s.games === 1 ? "" : "s", "2": s.winRate !== null && t(" · {0}% won", { "0": s.winRate.toFixed(0) }), games: s.games })}
             </span>
           </button>
         ))}
@@ -202,17 +198,15 @@ function KindSplit(props: { split: ContextSplit[]; active: ContextKind | null; o
 function Opposition({ bands }: { bands: OppositionBand[] }) {
   if (bands.length < 2) return null;
   const label: Record<OppositionBand["band"], string> = {
-    weaker: "Weaker opponents",
-    even: "An even match",
-    stronger: "Stronger opponents",
+    weaker: t("Weaker opponents"),
+    even: t("An even match"),
+    stronger: t("Stronger opponents"),
   };
   return (
     <section className="panel kind-split">
       <header>
-        <h2>Who you played</h2>
-        <p className="hint">
-          Your rating by how good the opposite number was, averaged over their other games.
-        </p>
+        <h2>{t("Who you played")}</h2>
+        <p className="hint">{t("Your rating by how good the opposite number was, averaged over their other games.")}</p>
       </header>
       <div className="ks-rows">
         {bands.map((b) => (
@@ -223,9 +217,7 @@ function Opposition({ bands }: { bands: OppositionBand[] }) {
               <span className={`ks-fill ks-${b.band}`} style={{ width: `${ratingPercent(b.avg)}%` }} />
             </span>
             <span className="ks-value">{rating(b.avg)}</span>
-            <span className="ks-meta muted">
-              vs {rating(b.opponentAvg)} · {b.games} game{b.games === 1 ? "" : "s"}
-              {b.winRate !== null && ` · ${b.winRate.toFixed(0)}% won`}
+            <span className="ks-meta muted">{tx("vs {0} · {games} game{2}{3}", { "0": rating(b.opponentAvg), "2": b.games === 1 ? "" : "s", "3": b.winRate !== null && t(" · {0}% won", { "0": b.winRate.toFixed(0) }), games: b.games })}
             </span>
           </div>
         ))}
@@ -242,47 +234,43 @@ function ProfileBody(props: {
   const { p, onOpenMatch, onKind } = props;
   const delta = p.prevFormAvg === null ? null : p.formAvg - p.prevFormAvg;
   const thin = p.games < THIN_SAMPLE;
-  const scope = p.filter ? KIND_PLURAL[p.filter].toLowerCase() : "games";
+  const scope = p.filter ? t(KIND_PLURAL[p.filter]).toLowerCase() : t("games");
 
   return (
     <>
       {thin && (
-        <p className="thin-note">
-          Only {p.games} rated {capitalize(p.class)} {scope}. Treat these numbers as a rough sketch, not a
-          verdict.
-        </p>
+        <p className="thin-note">{tx("Only {games} rated {1} {scope}. Treat these numbers as a rough sketch, not a verdict.", { "1": classLabel(p.class), games: p.games, scope: scope })}</p>
       )}
 
       <section className="kpis">
         <div className="kpi hero">
-          <span className="kpi-label">Form · last {Math.min(p.formWindow, p.games)} {scope}</span>
+          <span className="kpi-label">{tx("Form · last {0} {scope}", { "0": Math.min(p.formWindow, p.games), scope: scope })}</span>
           <span className="kpi-value">{rating(p.formAvg)}</span>
           {delta !== null && (
             <span className={delta >= 0 ? "kpi-delta up" : "kpi-delta down"}>
-              {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(2)} vs the {p.formWindow} before
-            </span>
+              {tx("{0} {1} vs the {formWindow} before", { "0": delta >= 0 ? "▲" : "▼", "1": Math.abs(delta).toFixed(2), formWindow: p.formWindow })}</span>
           )}
         </div>
         <div className="kpi">
-          <span className="kpi-label">Career</span>
+          <span className="kpi-label">{t("Career")}</span>
           <span className="kpi-value">{rating(p.careerAvg)}</span>
           <span className="kpi-sub">
-            {p.games} rated {scope}
+            {tx("{games} rated {scope}", { games: p.games, scope: scope })}
           </span>
         </div>
         {p.winRate !== null && (
           <div className="kpi">
-            <span className="kpi-label">Win rate</span>
+            <span className="kpi-label">{t("Win rate")}</span>
             <span className="kpi-value">{p.winRate.toFixed(0)}%</span>
-            <span className="kpi-sub">ties excluded</span>
+            <span className="kpi-sub">{t("ties excluded")}</span>
           </div>
         )}
         {/* Career records span every kind of game, so they only show unfiltered. */}
         {p.filter === null && p.extras.map((e) => (
-          <div className="kpi" key={e.label} title={e.hint ?? undefined}>
-            <span className="kpi-label">{e.label}</span>
+          <div className="kpi" key={e.label} title={e.hint ? extraText(e.hint) : undefined}>
+            <span className="kpi-label">{extraText(e.label)}</span>
             <span className="kpi-value">{e.value}</span>
-            {e.detail && <span className="kpi-sub">{e.detail}</span>}
+            {e.detail && <span className="kpi-sub">{extraText(e.detail)}</span>}
           </div>
         ))}
       </section>
@@ -300,8 +288,8 @@ function ProfileBody(props: {
       </Fold>
 
       <section className="games-grid">
-        <GameList title="Best games" games={p.best} onOpen={onOpenMatch} />
-        <GameList title="Worst games" games={p.worst} onOpen={onOpenMatch} />
+        <GameList title={t("Best games")} games={p.best} onOpen={onOpenMatch} />
+        <GameList title={t("Worst games")} games={p.worst} onOpen={onOpenMatch} />
       </section>
     </>
   );
@@ -321,18 +309,14 @@ function Components({ items, formWindow }: { items: ComponentSummary[]; formWind
     <section className="panel comps">
       <header className="comps-head">
         <div>
-          <h2>What the rating is made of</h2>
-          <p className="hint">
-            Percentile against the players you face, 0–100. Deaths are flipped: higher always means better.
-          </p>
+          <h2>{t("What the rating is made of")}</h2>
+          <p className="hint">{t("Percentile against the players you face, 0–100. Deaths are flipped: higher always means better.")}</p>
         </div>
         <div className="legend">
           <span>
-            <span className="swatch-bar" /> last {formWindow} games
-          </span>
+            {tx("{0} last {formWindow} games", { "0": <span className="swatch-bar" />, formWindow: formWindow })}</span>
           <span>
-            <span className="swatch-tick" /> career
-          </span>
+            {tx("{0} career", { "0": <span className="swatch-tick" /> })}</span>
         </div>
       </header>
 
@@ -340,15 +324,15 @@ function Components({ items, formWindow }: { items: ComponentSummary[]; formWind
         {items.map((c) => (
           <div className="comp-row" key={c.component}>
             <div className="comp-label">
-              <span>{c.label}</span>
-              {c === weakest && <span className="tag weak">weakest</span>}
-              {c === strongest && <span className="tag strong">strongest</span>}
+              <span>{t(c.label)}</span>
+              {c === weakest && <span className="tag weak">{t("weakest")}</span>}
+              {c === strongest && <span className="tag strong">{t("strongest")}</span>}
             </div>
             <span className="comp-weight muted">{Math.round(c.weight * 100)}%</span>
             <div
               className="comp-track"
               role="img"
-              aria-label={`${c.label}: ${c.formPct.toFixed(0)} recently, ${c.careerPct.toFixed(0)} career`}
+              aria-label={t("{label}: {1} recently, {2} career", { "1": c.formPct.toFixed(0), "2": c.careerPct.toFixed(0), label: t(c.label) })}
             >
               <span className="comp-mid" />
               <span className="comp-fill" style={{ width: `${c.formPct}%` }} />
@@ -356,7 +340,7 @@ function Components({ items, formWindow }: { items: ComponentSummary[]; formWind
             </div>
             <span className="comp-value">{c.formPct.toFixed(0)}</span>
             <span className="comp-raw muted">
-              {fmtRaw(c)} <span className="unit">{c.unit}</span>
+              {fmtRaw(c)} <span className="unit">{t(c.unit)}</span>
             </span>
           </div>
         ))}
@@ -381,12 +365,12 @@ function GameList(props: { title: string; games: GameRef[]; onOpen: (logId: numb
                   <td className="muted nowrap">{formatDate(g.playedAt, true)}</td>
                   <td className="nowrap" title={g.map ?? undefined}>
                     {mode && <span className="mode">{mode}</span>}
-                    {name ?? <span className="muted">unknown</span>}
+                    {name ?? <span className="muted">{t("unknown")}</span>}
                   </td>
                   <td>{g.result && <span className={`result result-${g.result}`}>{g.result}</span>}</td>
                   <td>
                     {g.kind ? (
-                      <span className={`badge badge-${g.kind}`}>{g.kind === "official" ? "ETF2L" : KIND_LABEL[g.kind].toUpperCase()}</span>
+                      <span className={`badge badge-${g.kind}`}>{g.kind === "official" ? t("ETF2L") : KIND_LABEL[g.kind].toUpperCase()}</span>
                     ) : (
                       g.league && <span className="badge badge-league">{g.league.toUpperCase()}</span>
                     )}
@@ -405,4 +389,21 @@ function fmtRaw(c: ComponentSummary): string {
   if (c.component === "headshot_share" || c.component === "untraded") return `${c.formRaw.toFixed(0)}%`;
   if (c.component === "heal" || c.component === "dpm") return c.formRaw.toFixed(0);
   return c.formRaw.toFixed(2);
+}
+
+/**
+ * The career cards come from Rust with their numbers and class already in
+ * the text (rating.rs, career extras), so the few shapes it builds are
+ * recognised here and translated whole. Anything else is looked up as is.
+ */
+function extraText(s: string): string {
+  let m = /^([\d.]+) per game$/.exec(s);
+  if (m) return t("{0} per game", { "0": m[1] });
+  m = /^([+-]?\d+) net$/.exec(s);
+  if (m) return t("{0} net", { "0": m[1] });
+  m = /^vs enemy (\w+), career$/.exec(s);
+  if (m) return t("vs enemy {0}, career", { "0": classLabel(m[1]) });
+  m = /^Your kills on the enemy (\w+) against their kills on you, across every rated game as \w+\.$/.exec(s);
+  if (m) return t("Your kills on the enemy {0} against their kills on you, across every rated game as {0}.", { "0": classLabel(m[1]) });
+  return t(s);
 }

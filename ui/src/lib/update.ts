@@ -26,6 +26,9 @@ import { noteError } from "./problems";
 export type UpdateState =
   | { state: "idle" }
   | { state: "checking" }
+  /** A check you asked for found nothing newer. The startup check stays
+   *  "idle" instead, so it never puts up a card to say nothing happened. */
+  | { state: "current" }
   | { state: "available"; version: string; notes: string; update: Update }
   | { state: "downloading"; version: string; got: number; total: number | null }
   | { state: "ready"; version: string }
@@ -55,7 +58,7 @@ export async function checkForUpdate(manual = false) {
   try {
     const update = await check();
     if (!update) {
-      set({ state: "idle" });
+      set(manual ? { state: "current" } : { state: "idle" });
       return;
     }
     set({

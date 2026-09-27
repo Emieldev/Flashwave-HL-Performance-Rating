@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { errorMessage, type RestoreOffer } from "../api/types";
 import { formatDate } from "../lib/format";
+import { t, tx } from "../lib/i18n";
 
 /**
  * Something is wrong with the database, and it is worth saying so before the
@@ -54,49 +55,32 @@ export function RestoreBanner({ offer, onSettled }: { offer: RestoreOffer; onSet
       <div className="restore-body">
         <h2>
           {broken
-            ? "This database could not be opened."
-            : "This database is empty, but a backup is not."}
+            ? t("This database could not be opened.")
+            : t("This database is empty, but a backup is not.")}
         </h2>
 
         {broken && (
-          <p>
-            It has been moved aside and a new one put in its place. Nothing was
-            deleted — a file this app cannot read is still the only copy of
-            whatever was in it.
-          </p>
+          <p>{t("It has been moved aside and a new one put in its place. Nothing was deleted — a file this app cannot read is still the only copy of whatever was in it.")}</p>
         )}
 
         {offer.backup ? (
-          <p>
-            A copy made <strong>{formatDate(offer.backup.madeAt, true)}</strong> holds{" "}
-            <strong>{offer.backup.matches.toLocaleString()}</strong> matches
-            <span className="muted"> ({(offer.backup.bytes / 1_000_000).toFixed(0)} MB)</span>.
-            Putting it back takes a second and restarts the app; downloading it all again takes
-            an hour.
-          </p>
+          <p>{tx("A copy made {0} holds{1}{2} matches{3}. Putting it back takes a second and restarts the app; downloading it all again takes an hour.", { "0": <strong>{formatDate(offer.backup.madeAt, true)}</strong>, "1": " ", "2": <strong>{offer.backup.matches.toLocaleString()}</strong>, "3": <span className="muted">{" "}{tx("({0} MB)", { "0": (offer.backup.bytes / 1_000_000).toFixed(0) })}</span> })}</p>
         ) : (
-          <p>
-            There is no backup to go back to, so this starts over. Copies are made before every
-            sync from now on, and Settings says where they live.
-          </p>
+          <p>{t("There is no backup to go back to, so this starts over. Copies are made before every sync from now on, and Settings says where they live.")}</p>
         )}
 
         {offer.backup && (
           <p className="restore-path">
             <code>{offer.backup.path}</code>
-            <button className="linkish" onClick={() => void api.revealPath(offer.backup!.path)}>
-              Show me
-            </button>
+            <button className="linkish" onClick={() => void api.revealPath(offer.backup!.path)}>{t("Show me")}</button>
           </p>
         )}
 
         {broken && movedTo && (
           <p className="restore-path">
-            <span className="muted">The old one:</span>
+            <span className="muted">{t("The old one:")}</span>
             <code title={why}>{movedTo}</code>
-            <button className="linkish" onClick={() => void api.revealPath(movedTo)}>
-              Show me
-            </button>
+            <button className="linkish" onClick={() => void api.revealPath(movedTo)}>{t("Show me")}</button>
           </p>
         )}
 
@@ -110,13 +94,13 @@ export function RestoreBanner({ offer, onSettled }: { offer: RestoreOffer; onSet
             onClick={() => void restore(offer.backup!.path)}
             disabled={busy !== null}
           >
-            {busy === "restore" ? "Restarting…" : "Put it back"}
+            {busy === "restore" ? t("Restarting…") : t("Put it back")}
           </button>
         )}
         {/* The database in front of you is kept either way — declining only
             stops the asking, so this is never the irreversible choice. */}
         <button onClick={() => void decline()} disabled={busy !== null}>
-          {offer.backup ? "Start fresh" : "Carry on"}
+          {offer.backup ? t("Start fresh") : t("Carry on")}
         </button>
       </div>
     </div>

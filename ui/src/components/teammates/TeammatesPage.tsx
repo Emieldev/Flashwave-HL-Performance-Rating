@@ -4,15 +4,16 @@ import { api } from "../../api/client";
 import { errorMessage, type TeamEra, type Teammate } from "../../api/types";
 import { capitalize, formatDate, signed } from "../../lib/format";
 import "./teammates.css";
+import { t as tr, tx, k } from "../../lib/i18n";
 
 type SortKey = "games" | "officials" | "winRate" | "lastPlayed" | "delta";
 
 const SORTS: Array<{ key: SortKey; label: string; title: string; num?: boolean }> = [
-  { key: "games", label: "Games", title: "Games on the same side", num: true },
-  { key: "officials", label: "Officials", title: "ETF2L officials together", num: true },
-  { key: "winRate", label: "Record", title: "Wins and losses together; ties left out", num: true },
-  { key: "lastPlayed", label: "Together", title: "First and last game together" },
-  { key: "delta", label: "Your rating with them", title: "Your average rating in games with them, and the difference from your other games", num: true },
+  { key: "games", label: k("Games"), title: k("Games on the same side"), num: true },
+  { key: "officials", label: k("Officials"), title: k("ETF2L officials together"), num: true },
+  { key: "winRate", label: k("Record"), title: k("Wins and losses together; ties left out"), num: true },
+  { key: "lastPlayed", label: k("Together"), title: k("First and last game together") },
+  { key: "delta", label: k("Your rating with them"), title: k("Your average rating in games with them, and the difference from your other games"), num: true },
 ];
 
 const winRate = (m: { wins: number; losses: number }) =>
@@ -52,7 +53,7 @@ export function TeammatesPage() {
     return [...list].sort((a, b) => key(b) - key(a) || b.games - a.games);
   }, [q.data, currentOnly, sort]);
 
-  if (q.isPending) return <div className="mates-page"><p className="hint">Loading teammates…</p></div>;
+  if (q.isPending) return <div className="mates-page"><p className="hint">{tr("Loading teammates…")}</p></div>;
   if (q.isError) return <div className="mates-page"><p className="error">{errorMessage(q.error)}</p></div>;
   const d = q.data;
 
@@ -60,23 +61,17 @@ export function TeammatesPage() {
     <div className={q.isPlaceholderData ? "mates-page refetching" : "mates-page"}>
       <header className="mates-head">
         <div>
-          <h2>Teams and teammates</h2>
-          <p className="hint">
-            From {d.games.toLocaleString()} {all ? "games, pugs included" : "officials and scrims"}.
-          </p>
+          <h2>{tr("Teams and teammates")}</h2>
+          <p className="hint">{tx("From {0} {1}.", { "0": d.games.toLocaleString(), "1": all ? tr("games, pugs included") : tr("officials and scrims") })}</p>
         </div>
-        <div className="segmented" role="tablist" aria-label="Which games">
-          <button role="tab" aria-selected={!all} className={!all ? "seg active" : "seg"} onClick={() => setAll(false)}>
-            Officials and scrims
-          </button>
-          <button role="tab" aria-selected={all} className={all ? "seg active" : "seg"} onClick={() => setAll(true)}>
-            Including pugs
-          </button>
+        <div className="segmented" role="tablist" aria-label={tr("Which games")}>
+          <button role="tab" aria-selected={!all} className={!all ? "seg active" : "seg"} onClick={() => setAll(false)}>{tr("Officials and scrims")}</button>
+          <button role="tab" aria-selected={all} className={all ? "seg active" : "seg"} onClick={() => setAll(true)}>{tr("Including pugs")}</button>
         </div>
       </header>
 
       {d.teams.length > 0 && (
-        <section className="team-grid" aria-label="Your ETF2L teams">
+        <section className="team-grid" aria-label={tr("Your ETF2L teams")}>
           {d.teams.map((t) => (
             <TeamCard key={t.teamId} t={t} />
           ))}
@@ -86,43 +81,37 @@ export function TeammatesPage() {
       <section className="panel">
         <header className="mates-table-head">
           <div>
-            <h2>Regular teammates</h2>
-            <p className="hint">
-              Everyone with {d.minGames} or more games on your side. &quot;Your rating with them&quot; compares your
-              games together with your other games: it shows who you played well alongside, not who made you play
-              well.
-            </p>
+            <h2>{tr("Regular teammates")}</h2>
+            <p className="hint">{tx("Everyone with {minGames} or more games on your side. \"Your rating with them\" compares your games together with your other games: it shows who you played well alongside, not who made you play well.", { minGames: d.minGames })}</p>
           </div>
           <label className="check">
-            <input type="checkbox" checked={currentOnly} onChange={(e) => setCurrentOnly(e.target.checked)} />
-            Played together in the last two months
-          </label>
+            <input type="checkbox" checked={currentOnly} onChange={(e) => setCurrentOnly(e.target.checked)} />{tr("Played together in the last two months")}</label>
         </header>
 
         {rows.length === 0 ? (
           <p className="hint" style={{ marginTop: 12 }}>
-            {currentOnly ? "Nobody recent yet." : "No regular teammates yet. Sync to pull your history."}
+            {currentOnly ? tr("Nobody recent yet.") : tr("No regular teammates yet. Sync to pull your history.")}
           </p>
         ) : (
           <div className="table-wrap" style={{ marginTop: 14 }}>
             <table className="match-table mates-table">
               <thead>
                 <tr>
-                  <th>Player</th>
-                  <th>Class</th>
+                  <th>{tr("Player")}</th>
+                  <th>{tr("Class")}</th>
                   {SORTS.map((s) => (
-                    <th key={s.key} className={s.num ? "num" : undefined} title={s.title}>
+                    <th key={s.key} className={s.num ? "num" : undefined} title={tr(s.title)}>
                       <button
                         className={sort === s.key ? "sort active" : "sort"}
                         onClick={() => setSort(s.key)}
                         aria-pressed={sort === s.key}
                       >
-                        {s.label}
+                        {tr(s.label)}
                         {sort === s.key && " ↓"}
                       </button>
                     </th>
                   ))}
-                  <th>Teams</th>
+                  <th>{tr("Teams")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,32 +135,32 @@ function TeamCard({ t }: { t: TeamEra }) {
   return (
     <article className="panel team-card">
       <header>
-        <h3>{t.name || "Unnamed team"}</h3>
+        <h3>{t.name || tr("Unnamed team")}</h3>
         <span className="muted">{span}</span>
       </header>
       <dl className="team-stats">
         <div>
-          <dt>Games</dt>
+          <dt>{tr("Games")}</dt>
           <dd>
             {t.games}
-            {t.officials > 0 && <span className="muted"> · {t.officials} official</span>}
+            {t.officials > 0 && <span className="muted">{" "}{tx("· {officials} official", { officials: t.officials })}</span>}
           </dd>
         </div>
         <div>
-          <dt>Record</dt>
+          <dt>{tr("Record")}</dt>
           <dd>
             {t.wins}–{t.losses}
             {wr !== null && <span className="muted"> · {wr.toFixed(0)}%</span>}
           </dd>
         </div>
         <div>
-          <dt>Your rating</dt>
+          <dt>{tr("Your rating")}</dt>
           <dd>{t.myAvg === null ? <span className="muted">—</span> : t.myAvg.toFixed(0)}</dd>
         </div>
       </dl>
-      <ul className="core" aria-label="Most frequent teammates">
+      <ul className="core" aria-label={tr("Most frequent teammates")}>
         {t.core.map((c) => (
-          <li key={c.accountId} title={`${c.games} games together`}>
+          <li key={c.accountId} title={tr("{games} games together", { games: c.games })}>
             <span className="core-name">{c.name}</span>
             {c.mainClass && <span className="muted"> {c.mainClass}</span>}
           </li>
@@ -188,12 +177,12 @@ function MateRow({ m }: { m: Teammate }) {
     <tr
       className="clickable"
       tabIndex={0}
-      title="Open their logs.tf profile"
+      title={tr("Open their logs.tf profile")}
       onClick={open}
       onKeyDown={(e) => e.key === "Enter" && open()}
     >
       <td className="nowrap mate-name">
-        {m.current && <span className="dot ok" title="Played together in the last two months" />}
+        {m.current && <span className="dot ok" title={tr("Played together in the last two months")} />}
         {m.name}
       </td>
       <td className="nowrap">{m.mainClass ? capitalize(m.mainClass) : <span className="muted">—</span>}</td>
@@ -208,7 +197,7 @@ function MateRow({ m }: { m: Teammate }) {
       </td>
       <td className="num nowrap">
         {m.myAvgWith === null ? (
-          <span className="muted" title="Too few rated games to compare">—</span>
+          <span className="muted" title={tr("Too few rated games to compare")}>—</span>
         ) : (
           <>
             {m.myAvgWith.toFixed(0)}{" "}

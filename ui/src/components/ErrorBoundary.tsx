@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { noteError } from "../lib/problems";
+import { t, tx } from "../lib/i18n";
 
 /**
  * Catches a crash so it stays inside the panel it happened in.
@@ -42,13 +43,11 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <section className="panel crash">
-        <h2>{this.props.what} stopped working</h2>
-        <p className="hint">
-          The rest of the page still works. Settings › Problems has this written down, with a button to copy it.
-        </p>
+        <h2>{tx("{what} stopped working", { what: t(this.props.what) })}</h2>
+        <p className="hint">{t("The rest of the page still works. Settings › Problems has this written down, with a button to copy it.")}</p>
         <pre className="crash-msg">{error.message || String(error)}</pre>
         <div className="row">
-          <button onClick={() => this.setState({ error: null, stack: null })}>Try again</button>
+          <button onClick={() => this.setState({ error: null, stack: null })}>{t("Try again")}</button>
           <button
             className="linkish"
             onClick={() => {
@@ -57,9 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 .join("\n\n");
               void navigator.clipboard?.writeText(text);
             }}
-          >
-            Copy the details
-          </button>
+          >{t("Copy the details")}</button>
         </div>
       </section>
     );

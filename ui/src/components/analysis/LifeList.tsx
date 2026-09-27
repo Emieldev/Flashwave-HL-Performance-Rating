@@ -1,4 +1,5 @@
 import type { PathRow } from "../../api/types";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * The lives behind the Movement layer, as a list you can pick from.
@@ -41,12 +42,9 @@ export function LifeList(props: {
   const offer =
     stv === "available" ? (
       <div className="km-stv">
-        <p className="hint">
-          This is a POV demo, so other players are only in it while the recorder could see them. The SourceTV demo on
-          demos.tf carries all eighteen.
-        </p>
+        <p className="hint">{t("This is a POV demo, so other players are only in it while the recorder could see them. The SourceTV demo on demos.tf carries all eighteen.")}</p>
         <button onClick={onFetchStv} disabled={fetching}>
-          {fetching ? "Downloading and reading…" : "Download the STV demo"}
+          {fetching ? t("Downloading and reading…") : t("Download the STV demo")}
         </button>
       </div>
     ) : null;
@@ -54,7 +52,7 @@ export function LifeList(props: {
   if (rows.length === 0) {
     return (
       <div className="km-lives">
-        <p className="hint">No movement stored for this player here.</p>
+        <p className="hint">{t("No movement stored for this player here.")}</p>
         {offer}
       </div>
     );
@@ -68,9 +66,9 @@ export function LifeList(props: {
   return (
     <div className="km-lives">
       <div className="km-lives-head">
-        <h3>{partial ? "Stretches the demo saw" : "Lives"}</h3>
+        <h3>{partial ? t("Stretches the demo saw") : t("Lives")}</h3>
         <span className="hint">
-          {rows.length > MAX_ROWS ? `longest ${MAX_ROWS} of ${rows.length}` : `${rows.length} in view`}
+          {rows.length > MAX_ROWS ? t("longest {MAX_ROWS} of {rows}", { MAX_ROWS: MAX_ROWS, rows: rows.length }) : t("{rows} in view", { rows: rows.length })}
         </span>
       </div>
       <ol className="km-lives-list">
@@ -89,11 +87,10 @@ export function LifeList(props: {
                 <span className="km-life-round">R{r.roundNum ?? "?"}</span>
                 <span className="km-life-len">{seconds(r)}s</span>
                 <span className="km-life-end">
-                  {r.died ? "died" : partial ? "lost sight" : "survived"}
+                  {r.died ? t("died") : partial ? t("lost sight") : t("survived")}
                   {r.caps.length > 0 && (
-                    <span className="km-life-caps" title={`${r.caps.length} points taken while alive`}>
-                      {" "}
-                      · {r.caps.length} cap{r.caps.length === 1 ? "" : "s"}
+                    <span className="km-life-caps" title={t("{caps} points taken while alive", { caps: r.caps.length })}>
+                      {tx("{0}· {caps} cap{2}", { "0": " ", "2": r.caps.length === 1 ? "" : "s", caps: r.caps.length })}
                     </span>
                   )}
                 </span>
@@ -102,9 +99,9 @@ export function LifeList(props: {
                 <ol className="km-caps">
                   {r.caps.map(([at, point], i) => (
                     <li key={`${at}-${i}`}>
-                      <span className="km-cap-n">{ordinal(i + 1)} cap</span>
-                      <span className="km-cap-point">point {point}</span>
-                      <span className="km-cap-at">{clock(at)} in</span>
+                      <span className="km-cap-n">{tx("{0} cap", { "0": ordinal(i + 1) })}</span>
+                      <span className="km-cap-point">{tx("point {point}", { point: point })}</span>
+                      <span className="km-cap-at">{tx("{0} in", { "0": clock(at) })}</span>
                     </li>
                   ))}
                 </ol>
@@ -115,10 +112,7 @@ export function LifeList(props: {
       </ol>
       {offer}
       {focus && (
-        <p className="hint">
-          Showing one {focus.died ? "life that ended in a death" : "life"}. Click it again, or press Escape, for all of
-          them.
-        </p>
+        <p className="hint">{tx("Showing one {0}. Click it again, or press Escape, for all of them.", { "0": focus.died ? t("life that ended in a death") : t("life") })}</p>
       )}
     </div>
   );

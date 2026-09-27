@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { noteError } from "./problems";
 import { errorMessage, type Progress, type SyncDone } from "../api/types";
+import { t } from "./i18n";
 
 /**
  * A sync, tracked app-wide rather than by the strip that started it.
@@ -73,9 +74,9 @@ export function watchSync(qc: QueryClient) {
       // sync that carried on without logs.tf succeeded, but not completely.
       const note =
         p.kind === "sourceFailed"
-          ? `${p.source} could not be reached; the sync carried on without it.`
+          ? t("{source} could not be reached; the sync carried on without it.", { source: p.source })
           : p.kind === "gaveUp"
-            ? `${p.source} stopped answering after ${p.done.toLocaleString()} of ${p.total.toLocaleString()}; the rest waits for the next sync.`
+            ? t("{source} stopped answering after {1} of {2}; the rest waits for the next sync.", { "1": p.done.toLocaleString(), "2": p.total.toLocaleString(), source: p.source })
             : null;
       // Every failure is written down with its reason. The counter alone
       // ("2 failed") was all anyone ever saw, and it cannot be acted on.
@@ -129,19 +130,19 @@ export function watchSync(qc: QueryClient) {
 export function explain(raw: string): string {
   const m = raw.toLowerCase();
   if (m.includes("10060") || m.includes("timed out") || m.includes("error sending request")) {
-    return "could not reach the server — it may be down, or the connection dropped";
+    return t("could not reach the server — it may be down, or the connection dropped");
   }
   if (m.includes("404") || m.includes("not found")) {
-    return "the server does not have this log";
+    return t("the server does not have this log");
   }
   if (m.includes("429") || m.includes("too many")) {
-    return "asked for too much too quickly; it will be retried";
+    return t("asked for too much too quickly; it will be retried");
   }
   if (m.includes("500") || m.includes("502") || m.includes("503")) {
-    return "the server answered with an error of its own";
+    return t("the server answered with an error of its own");
   }
   if (m.includes("json") || m.includes("expected")) {
-    return "the answer was not in the shape we expect";
+    return t("the answer was not in the shape we expect");
   }
   // Long chains read badly in a list; the whole thing is in the detail.
   return raw.length > 160 ? `${raw.slice(0, 157)}…` : raw;
@@ -193,6 +194,8 @@ export function fractionOf(p: Progress | null): number | null {
     case "rating":
     case "rawLogs":
     case "parts":
+    case "fights":
+    case "readingDemos":
       return p.total > 0 ? p.done / p.total : 1;
     case "etf2l":
       return p.total > 0 ? p.done / p.total : null;
@@ -203,44 +206,53 @@ export function fractionOf(p: Progress | null): number | null {
 
 /** One line saying what the sync is doing now. */
 export function labelOf(p: Progress | null): string {
-  if (!p) return "Starting…";
+  if (!p) return t("Starting…");
   const n = (x: number) => x.toLocaleString();
   switch (p.kind) {
     case "indexing":
-      return p.rows > 0 ? `Indexing ${p.source} — ${n(p.rows)} rows` : `Indexing ${p.source}…`;
+      return p.rows > 0 ? t("Indexing {source} — {rows} rows", { source: p.source, rows: n(p.rows) }) : t("Indexing {source}…", { source: p.source });
     case "indexed":
-      return `Indexed. ${p.superseded} per-round logs folded into their match.`;
+      return t("Indexed. {superseded} per-round logs folded into their match.", { superseded: p.superseded });
     case "fetching":
-      if (p.total === 0) return "Nothing new to fetch.";
+      if (p.total === 0) return t("Nothing new to fetch.");
       return (
-        `Matches ${n(p.done)} of ${n(p.total)}` +
-        (p.done < p.total ? ` — about ${eta(p.total - p.done)} left` : "")
+        t("Matches {done} of {total}", { done: n(p.done), total: n(p.total) }) +
+        (p.done < p.total ? t(" — about {0} left", { "0": eta(p.total - p.done) }) : "")
       );
     case "fetchFailed":
-      return `Log ${p.logId} failed; continuing.`;
+      return t("Log {logId} failed; continuing.", { logId: p.logId });
     case "reprocessing":
       // The card's title already says what this is.
-      return `${n(p.done)} of ${n(p.total)} matches`;
+      return t("{done} of {total} matches", { done: n(p.done), total: n(p.total) });
     case "rating":
-      return `Rating ${n(p.done)} of ${n(p.total)} matches`;
+      return t("Rating {done} of {total} matches", { done: n(p.done), total: n(p.total) });
     case "rawLogs":
-      if (p.total === 0) return "Server logs up to date.";
+      if (p.total === 0) return t("Server logs up to date.");
       return (
-        `Server logs ${n(p.done)} of ${n(p.total)}` +
-        (p.done < p.total ? ` — about ${eta(p.total - p.done)} left` : "")
+        t("Server logs {done} of {total}", { done: n(p.done), total: n(p.total) }) +
+        (p.done < p.total ? t(" — about {0} left", { "0": eta(p.total - p.done) }) : "")
       );
     case "parts":
-      return `Per-map logs ${n(p.done)} of ${n(p.total)}`;
+      return t("Per-map logs {done} of {total}", { done: n(p.done), total: n(p.total) });
+    case "stage":
+      return `${t(p.what)}…`;
+    case "fights":
+      return p.total === 0 ? t("Fights up to date.") : t("Reading fights {done} of {total}", { done: n(p.done), total: n(p.total) });
+    case "readingDemos":
+      // Around 16 s each, so the count moves slowly and the match it is on
+      // is the part worth saying.
+      if (p.total === 0) return t("Demos already read.");
+      return t("Reading demos {done} of {total}", { done: n(p.done), total: n(p.total) }) + (p.logId !== null ? t(" — log {logId}", { logId: p.logId }) : "");
     case "etf2l":
-      return p.total === 0 ? "Checking ETF2L…" : `ETF2L officials ${p.done} of ${p.total}`;
+      return p.total === 0 ? t("Checking ETF2L…") : t("ETF2L officials {done} of {total}", { done: p.done, total: p.total });
     case "sourceFailed":
-      return `${p.source} could not be reached; carrying on without it.`;
+      return t("{source} could not be reached; carrying on without it.", { source: p.source });
     case "gaveUp":
-      return `${p.source} stopped answering; the rest waits for the next sync.`;
+      return t("{source} stopped answering; the rest waits for the next sync.", { source: p.source });
   }
 }
 
 export function eta(logs: number): string {
   const mins = Math.ceil((logs * SECONDS_PER_LOG) / 60);
-  return mins <= 1 ? "1 min" : `${mins} min`;
+  return mins <= 1 ? t("1 min") : t("{mins} min", { mins: mins });
 }

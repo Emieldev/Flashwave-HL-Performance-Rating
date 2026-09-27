@@ -1901,6 +1901,7 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "chrono",
+ "flate2",
  "hl-core",
  "serde",
  "serde_json",

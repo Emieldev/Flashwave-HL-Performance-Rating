@@ -119,6 +119,17 @@ pub struct FightStats {
     /// The same, except that surviving only counts when they fired a shot
     /// during the fight: sitting a fight out is not a contribution.
     pub fights_kast_engaged: u32,
+    /// Q17 (zaag): each point this player was credited with, weighted by
+    /// how many enemies were alive to stop it. A cap onto a wiped point
+    /// adds nothing; one into a full defence adds nine. The flat `cpc`
+    /// from logs.tf pays the same for both, which is the complaint.
+    pub caps_contested: u32,
+    /// Q25 (zaag): each point this player was credited with, weighted by
+    /// how many of their own team were dead when it went in. Stored as a
+    /// count, not a penalty -- which way it should push the rating is a
+    /// question for the data (and for zaag's reading of the respawn rule),
+    /// not something to assume here.
+    pub caps_mates_dead: u32,
 }
 
 /// The first kill of each round, for the match page.
@@ -279,17 +290,109 @@ pub fn analyse(raw: &RawLog, gs: &GameState) -> Fights {
     for (account, n) in rounds_alive(gs) {
         stats.entry(account).or_insert_with(|| FightStats { account_id: account, ..Default::default() }).rounds = n;
     }
+    for (account, contested, mates_dead) in cap_costs(gs) {
+        let s = stats.entry(account).or_insert_with(|| FightStats { account_id: account, ..Default::default() });
+        s.caps_contested += contested;
+        s.caps_mates_dead += mates_dead;
+    }
 
     let mut players: Vec<FightStats> = stats.into_values().collect();
     players.sort_by_key(|s| s.account_id);
     Fights { tags, players, first_picks }
 }
 
+/// For every capture, each capper's share of what it cost: the enemies
+/// alive to stop it, and their own team's dead.
+///
+/// Read the moment *before* the point went in, the same instant
+/// `situation::cap_worth` measured. A Highlander team is nine, so both are
+/// 0..=9 per cap. Credited to every player logs.tf names as a capper,
+/// because that is who the flat count already credits.
+fn cap_costs(gs: &GameState) -> Vec<(u32, u32, u32)> {
+    let mut out = Vec::new();
+    for c in &gs.caps {
+        let Some(team) = c.team else { continue };
+        let n = gs.numbers_at(c.at - 1);
+        let alive = |t: Team| u32::from(if t == Team::Red { n[0] } else { n[1] });
+        let enemies = alive(team.other());
+        // A team has nine; anyone not alive on it is dead or waiting.
+        let mates_dead = 9u32.saturating_sub(alive(team));
+        for &capper in &c.cappers {
+            out.push((capper, enemies, mates_dead));
+        }
+    }
+    out
+}
+
+/// How far back damage on a victim earns a share of their death (Q6b).
+/// HLTV uses five seconds; so does this.
+pub const CREDIT_WINDOW_S: i64 = 5;
+
+/// The killer's share is never below this. The killing blow decides the
+/// fight in a way chip damage does not, and without a floor a kill finished
+/// with one bullet after a teammate's rocket would credit the killer with
+/// almost nothing.
+pub const KILLER_FLOOR: f64 = 0.5;
+
+/// Each counted kill's credit, for the shared fight swing (Q6b): who damaged
+/// the victim in the [`CREDIT_WINDOW_S`] before the kill, and what share of
+/// the kill that earns them. `(seq, account, share)`, with every kill's
+/// shares summing to one.
+///
+/// The killer keeps [`KILLER_FLOOR`]; the rest is split across everyone on
+/// the killer's side who damaged the victim in the window -- the killer
+/// included -- in proportion to that damage, each hit counted up to
+/// logs.tf's own cap so a backstab's 1,986 does not drown a Soldier's rocket.
+/// A kill nobody else touched is the killer's alone.
+///
+/// Stored per kill and independent of any weight, like the kill's situation,
+/// so the swing table can be retuned without re-reading a single log.
+pub fn kill_credits(raw: &RawLog) -> Vec<(i64, u32, f64)> {
+    let mut out = Vec::new();
+    for (seq, k) in raw.kills.iter().enumerate() {
+        if !k.counts() || k.killer.account == k.victim.account {
+            continue;
+        }
+        let (Some(kt), killer) = (k.killer.team, k.killer.account) else { continue };
+        let mut dealt: HashMap<u32, i64> = HashMap::new();
+        for d in &raw.damage {
+            if d.victim.account == k.victim.account
+                && d.at <= k.at
+                && d.at >= k.at - CREDIT_WINDOW_S
+                && d.attacker.team == Some(kt)
+                && d.attacker.account != k.victim.account
+            {
+                *dealt.entry(d.attacker.account).or_default() += d.amount.clamp(0, crate::rawlog::HIT_CAP);
+            }
+        }
+        let total: i64 = dealt.values().sum();
+        let others = dealt.keys().any(|a| *a != killer);
+        if total == 0 || !others {
+            out.push((seq as i64, killer, 1.0));
+            continue;
+        }
+        let pool = 1.0 - KILLER_FLOOR;
+        let mut killer_share = KILLER_FLOOR;
+        for (&who, &amount) in &dealt {
+            let share = pool * amount as f64 / total as f64;
+            if who == killer {
+                killer_share += share;
+            } else {
+                out.push((seq as i64, who, share));
+            }
+        }
+        out.push((seq as i64, killer, killer_share));
+    }
+    out
+}
+
 /// Bump to recompute every stored log's fights on the next pass.
 /// 2: deaths in context (traded, by killer group, stationary).
 /// 3: Fight KAST.
 /// 4: each kill's situation (numbers and uber advantage), PLAN §12 step 3.
-pub const VERSION: i64 = 4;
+/// 5: what each capture cost -- enemies alive, own team dead (Q17, Q25).
+/// 6: each kill's credit, shared with whoever damaged the victim (Q6b).
+pub const VERSION: i64 = 6;
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -300,11 +403,17 @@ pub struct DeriveSummary {
 
 /// Read every stored raw log the current [`VERSION`] has not read yet, or
 /// all of them with `all`, and store each player's counts. About 5 ms a log.
-pub async fn derive_all(db: &hl_db::Db, all: bool) -> anyhow::Result<DeriveSummary> {
+pub async fn derive_all(
+    db: &hl_db::Db,
+    all: bool,
+    mut progress: impl FnMut(usize, usize),
+) -> anyhow::Result<DeriveSummary> {
     let ids = db.rawlog_ids().await?;
     let done: HashSet<i64> = if all { HashSet::new() } else { db.fight_logs(VERSION).await?.into_iter().collect() };
+    let todo: Vec<i64> = ids.iter().copied().filter(|id| !done.contains(id)).collect();
     let mut derived = 0;
-    for &log_id in ids.iter().filter(|id| !done.contains(id)) {
+    for (i, log_id) in todo.iter().copied().enumerate() {
+        progress(i, todo.len());
         let Some(zip) = db.rawlog(log_id).await? else { continue };
         let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
         let gs = GameState::build(&raw);
@@ -316,8 +425,10 @@ pub async fn derive_all(db: &hl_db::Db, all: bool) -> anyhow::Result<DeriveSumma
             .filter_map(|(seq, s)| s.map(|(k, _)| (seq as i64, k.diff, k.adv)))
             .collect();
         db.replace_fight_stats(log_id, VERSION, &rows, &situations).await?;
+        db.replace_kill_credits(log_id, &kill_credits(&raw)).await?;
         derived += 1;
     }
+    progress(todo.len(), todo.len());
     Ok(DeriveSummary { derived, total: ids.len() })
 }
 
@@ -349,6 +460,8 @@ fn row(s: &FightStats) -> hl_db::FightRow {
         s.fights_present,
         s.fights_kast,
         s.fights_kast_engaged,
+        s.caps_contested,
+        s.caps_mates_dead,
     ];
     hl_db::FightRow { account_id: s.account_id, values: v.map(i64::from) }
 }

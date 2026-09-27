@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { t } from "../lib/i18n";
 
 /**
  * Your picture and name, top right. Both come from your ETF2L profile, or
@@ -20,7 +21,7 @@ export function OwnerBadge({ steamid }: { steamid: string | null }) {
   return (
     <div className="owner" title={steamid ?? undefined}>
       <div className="owner-text">
-        <span className="owner-name">{name ?? "You"}</span>
+        <span className="owner-name">{name ?? t("You")}</span>
         <code className="owner-id">{steamid}</code>
       </div>
       {o?.avatar ? (

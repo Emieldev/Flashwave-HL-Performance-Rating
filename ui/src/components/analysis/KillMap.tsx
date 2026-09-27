@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type Analysis, type KillView, type MapView, type Overview, type PathRow, type Vec3 } from "../../api/types";
 import { capitalize, splitMap, teamLabel } from "../../lib/format";
-import { DEATH, KILL, inSlice, jumpTo, playerMap, roundClock, themeColour, type Slice } from "./common";
+import { DEATH, KILL, inSlice, jumpTo, playerMap, roundClock, themeColour, type Slice, classLabel } from "./common";
 import { LifeList } from "./LifeList";
 import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { useMeasuredWidth } from "../../lib/measure";
 import type { StvInfo } from "./AnalysisPanel";
+import { t as tr, tx } from "../../lib/i18n";
 
 /**
  * Where the player's kills and deaths happened, top-down.
@@ -215,13 +216,12 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
   if (slice.map === null && slice.multiMap) {
     return (
       <p className="hint an-empty">
-        {new Set(a.segments.map((x) => x.map)).size} maps in this match — pick one above.
-      </p>
+        {tx("{size} maps in this match — pick one above.", { size: new Set(a.segments.map((x) => x.map)).size })}</p>
     );
   }
 
   if (!a.hasPositions || !frame) {
-    return <p className="hint an-empty">This log recorded no positions, so there is no map to draw.</p>;
+    return <p className="hint an-empty">{tr("This log recorded no positions, so there is no map to draw.")}</p>;
   }
 
   const { name: shortMap } = splitMap(mapName);
@@ -231,37 +231,31 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
     <div className={full ? "killmap full" : "killmap"} ref={box}>
       <div className="km-controls">
         <label className="an-field">
-          <span className="an-label">Against</span>
+          <span className="an-label">{tr("Against")}</span>
           <select value={enemy ?? ""} onChange={(e) => setEnemy(e.target.value === "" ? null : Number(e.target.value))}>
-            <option value="">Everyone</option>
+            <option value="">{tr("Everyone")}</option>
             {enemies.map((p) => (
               <option key={p.accountId} value={p.accountId}>
                 {p.name}
-                {p.mainClass ? ` · ${capitalize(p.mainClass)}` : ""}
+                {p.mainClass ? ` · ${classLabel(p.mainClass)}` : ""}
               </option>
             ))}
           </select>
         </label>
-        <div className="segmented" role="tablist" aria-label="Layer">
-          <button role="tab" aria-selected={layer === "dots"} className={layer === "dots" ? "seg active" : "seg"} onClick={() => setLayer("dots")}>
-            Each kill
-          </button>
+        <div className="segmented" role="tablist" aria-label={tr("Layer")}>
+          <button role="tab" aria-selected={layer === "dots"} className={layer === "dots" ? "seg active" : "seg"} onClick={() => setLayer("dots")}>{tr("Each kill")}</button>
           <button
             role="tab"
             aria-selected={layer === "paths"}
             className={layer === "paths" ? "seg active" : "seg"}
-            title="Where you walked, one line per life, from your own demo"
+            title={tr("Where you walked, one line per life, from your own demo")}
             onClick={() => setLayer("paths")}
-          >
-            Movement
-          </button>
-          <button role="tab" aria-selected={layer === "heat"} className={layer === "heat" ? "seg active" : "seg"} onClick={() => setLayer("heat")}>
-            Heatmap
-          </button>
+          >{tr("Movement")}</button>
+          <button role="tab" aria-selected={layer === "heat"} className={layer === "heat" ? "seg active" : "seg"} onClick={() => setLayer("heat")}>{tr("Heatmap")}</button>
         </div>
         {layer === "paths" && (
           <label className="an-field">
-            <span className="an-label">Movement of</span>
+            <span className="an-label">{tr("Movement of")}</span>
             <select
               value={pathWho === null ? String(player) : String(pathWho)}
               onChange={(e) => {
@@ -270,12 +264,11 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
               }}
               title={
                 stvLinked
-                  ? "The STV demo carries all eighteen players"
-                  : "A POV demo only holds its recorder's movement; download the STV demo for everyone else"
+                  ? tr("The STV demo carries all eighteen players")
+                  : tr("A POV demo only holds its recorder's movement; download the STV demo for everyone else")
               }
             >
-              <option value="all" disabled={!stvLinked}>
-                Everyone{stvLinked ? ` (${routeCounts.total})` : " — needs the STV demo"}
+              <option value="all" disabled={!stvLinked}>{tx("Everyone{0}", { "0": stvLinked ? ` (${routeCounts.total})` : tr(" — needs the STV demo") })}
               </option>
               {/* Grouped by side, the owner's first, so picking an opponent is
                   a deliberate act rather than a scroll through eighteen names. */}
@@ -286,8 +279,8 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
                     return (
                       <option key={p.accountId} value={p.accountId} disabled={n === 0}>
                         {p.name}
-                        {p.mainClass ? ` · ${capitalize(p.mainClass)}` : ""}
-                        {n > 0 ? ` (${n})` : stvLinked ? " (none)" : " — needs the STV demo"}
+                        {p.mainClass ? ` · ${classLabel(p.mainClass)}` : ""}
+                        {n > 0 ? ` (${n})` : stvLinked ? tr(" (none)") : tr(" — needs the STV demo")}
                       </option>
                     );
                   })}
@@ -300,44 +293,36 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
           <>
             <label className="check">
               <input type="checkbox" checked={showKills} onChange={(e) => setShowKills(e.target.checked)} />
-              <span className="km-key km-key-kill" aria-hidden /> Kills {nKills}
+              <span className="km-key km-key-kill" aria-hidden />{" "}{tr("Kills")}{" "}{nKills}
             </label>
             <label className="check">
               <input type="checkbox" checked={showDeaths} onChange={(e) => setShowDeaths(e.target.checked)} />
-              <span className="km-key km-key-death" aria-hidden /> Deaths {nDeaths}
+              <span className="km-key km-key-death" aria-hidden />{" "}{tr("Deaths")}{" "}{nDeaths}
             </label>
           </>
         ) : (
           <>
-            <div className="segmented" role="tablist" aria-label="Heatmap of">
-              <button role="tab" aria-selected={heatOf === "kills"} className={heatOf === "kills" ? "seg active" : "seg"} onClick={() => setHeatOf("kills")}>
-                Where {name} got kills
-              </button>
-              <button role="tab" aria-selected={heatOf === "deaths"} className={heatOf === "deaths" ? "seg active" : "seg"} onClick={() => setHeatOf("deaths")}>
-                Where {name} died
-              </button>
+            <div className="segmented" role="tablist" aria-label={tr("Heatmap of")}>
+              <button role="tab" aria-selected={heatOf === "kills"} className={heatOf === "kills" ? "seg active" : "seg"} onClick={() => setHeatOf("kills")}>{tx("Where {name} got kills", { name: name })}</button>
+              <button role="tab" aria-selected={heatOf === "deaths"} className={heatOf === "deaths" ? "seg active" : "seg"} onClick={() => setHeatOf("deaths")}>{tx("Where {name} died", { name: name })}</button>
             </div>
             {careerOk && (
-              <div className="segmented" role="tablist" aria-label="Over">
-                <button role="tab" aria-selected={scope === "match"} className={scope === "match" ? "seg active" : "seg"} onClick={() => setScope("match")}>
-                  This match
-                </button>
-                <button role="tab" aria-selected={scope === "career"} className={scope === "career" ? "seg active" : "seg"} onClick={() => setScope("career")}>
-                  All {view!.myGames} of your {shortMap ?? ""} matches
-                </button>
+              <div className="segmented" role="tablist" aria-label={tr("Over")}>
+                <button role="tab" aria-selected={scope === "match"} className={scope === "match" ? "seg active" : "seg"} onClick={() => setScope("match")}>{tr("This match")}</button>
+                <button role="tab" aria-selected={scope === "career"} className={scope === "career" ? "seg active" : "seg"} onClick={() => setScope("career")}>{tx("All {myGames} of your {1} matches", { "1": shortMap ?? "", myGames: view!.myGames })}</button>
               </div>
             )}
           </>
         )}
         <button className="linkish km-table-toggle" onClick={() => setAsTable((t) => !t)}>
-          {asTable ? "Show map" : "Show as table"}
+          {asTable ? tr("Show map") : tr("Show as table")}
         </button>
         <button
           className="linkish km-full-toggle"
           onClick={toggleFull}
-          title={full ? "Leave full screen (Escape)" : "Fill the window with the map"}
+          title={full ? tr("Leave full screen (Escape)") : tr("Fill the window with the map")}
         >
-          {full ? "Exit full screen" : "Full screen"}
+          {full ? tr("Exit full screen") : tr("Full screen")}
         </button>
       </div>
 
@@ -376,32 +361,30 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
           </div>
           {layer === "paths" && (
             <div className="km-scale" aria-hidden>
-              <span className="km-key km-key-path" /> a life
-              <span className="km-key km-key-path-died" /> one that ended in a death
-            </div>
+              {tx("{0} a life{1} one that ended in a death", { "0": <span className="km-key km-key-path" />, "1": <span className="km-key km-key-path-died" /> })}</div>
           )}
           {layer === "heat" && (
             <div className="km-scale" aria-hidden>
-              <span>fewer</span>
+              <span>{tr("fewer")}</span>
               <span className="km-scale-bar" style={{ background: `linear-gradient(90deg, transparent, ${heatOf === "kills" ? KILL : DEATH})` }} />
-              <span>more {heatOf === "kills" ? "kills" : "deaths"}</span>
+              <span>{tx("more {0}", { "0": heatOf === "kills" ? tr("kills") : tr("deaths") })}</span>
             </div>
           )}
           <p className="hint km-note">
             {overview
-              ? "Map image from more.tf."
+              ? tr("Map image from more.tf.")
               : view
-                ? `Map drawn from ${view.points.toLocaleString()} positions in ${view.games} stored ${shortMap ?? ""} matches; brighter is busier.`
-                : "Too few matches on this map to draw it; only this match's positions are shown."}
-            {layer === "heat" && heatOf === "kills" && " The heatmap marks where the player stood when they got the kill."}
+                ? tr("Map drawn from {0} positions in {games} stored {2} matches; brighter is busier.", { "0": view.points.toLocaleString(), "2": shortMap ?? "", games: view.games })
+                : tr("Too few matches on this map to draw it; only this match's positions are shown.")}
+            {layer === "heat" && heatOf === "kills" && tr(" The heatmap marks where the player stood when they got the kill.")}
             {layer === "paths" &&
               (pathQ.isPending
-                ? " Reading the demo's routes…"
+                ? tr(" Reading the demo's routes…")
                 : pathQ.data && pathQ.data.length > 0
                   ? stvLinked
-                    ? " One line per life, four positions a second, from this match's SourceTV demo: every player, whole lives."
-                    : " One line per life, four positions a second, from your own recording. A POV demo only holds its recorder's movement; the SourceTV demo has everyone."
-                  : " No demo is linked to this match, so there is no movement to draw.")}
+                    ? tr(" One line per life, four positions a second, from this match's SourceTV demo: every player, whole lives.")
+                    : tr(" One line per life, four positions a second, from your own recording. A POV demo only holds its recorder's movement; the SourceTV demo has everyone.")
+                  : tr(" No demo is linked to this match, so there is no movement to draw."))}
           </p>
           {layer === "dots" && <TimeStrip a={a} slice={slice} marks={marks} hover={hover} onHover={setHover} />}
         </>
@@ -581,7 +564,7 @@ function Canvas(props: {
           height={H}
           className="km-svg"
           role="img"
-          aria-label={`${marks.length} kills and deaths on the map`}
+          aria-label={tr("{marks} kills and deaths on the map", { marks: marks.length })}
           onMouseMove={(e) => onHover(nearest(e))}
           onMouseLeave={() => onHover(null)}
           onClick={(e) => {
@@ -626,7 +609,7 @@ function HoverCard({ m, a, pos, W }: { m: Mark; a: Analysis; pos: [number, numbe
     <div className="km-tip" style={{ left, top: Math.max(0, pos[1] - 10) }}>
       <div className="km-tip-head">
         <span className={m.kind === "kill" ? "km-key km-key-kill" : "km-key km-key-death"} aria-hidden />
-        <strong>{m.kind === "kill" ? "Kill" : "Death"}</strong>
+        <strong>{m.kind === "kill" ? tr("Kill") : tr("Death")}</strong>
         <span className="muted">{roundClock(k.t, a.rounds)}</span>
       </div>
       <div>
@@ -636,9 +619,9 @@ function HoverCard({ m, a, pos, W }: { m: Mark; a: Analysis; pos: [number, numbe
       <div className="muted">
         {k.weapon}
         {k.custom && ` · ${k.custom}`}
-        {k.distance !== null && ` · ${Math.round(k.distance).toLocaleString()} units`}
+        {k.distance !== null && tr(" · {0} units", { "0": Math.round(k.distance).toLocaleString() })}
       </div>
-      {k.jump && <div className="km-tip-jump">Click to copy demo_gototick {k.jump.tick}</div>}
+      {k.jump && <div className="km-tip-jump">{tx("Click to copy demo_gototick {tick}", { tick: k.jump.tick })}</div>}
     </div>
   );
 }
@@ -672,7 +655,7 @@ function TimeStrip(props: { a: Analysis; slice: Slice; marks: Mark[]; hover: Mar
         width={w}
         height={H + 16}
         role="img"
-        aria-label="Kills and deaths over the match"
+        aria-label={tr("Kills and deaths over the match")}
         onMouseMove={(e) => onHover(nearest(e))}
         onMouseLeave={() => onHover(null)}
         onClick={(e) => {
@@ -709,18 +692,18 @@ function TimeStrip(props: { a: Analysis; slice: Slice; marks: Mark[]; hover: Mar
 /** The same marks without the map: every value reachable without hovering. */
 function MarkTable({ marks, a }: { marks: Mark[]; a: Analysis }) {
   const players = playerMap(a);
-  if (marks.length === 0) return <p className="hint an-empty">Nothing to show for this filter.</p>;
+  if (marks.length === 0) return <p className="hint an-empty">{tr("Nothing to show for this filter.")}</p>;
   return (
     <div className="table-wrap">
       <table className="match-table">
         <thead>
           <tr>
-            <th>When</th>
+            <th>{tr("When")}</th>
             <th></th>
-            <th>Killer</th>
-            <th>Victim</th>
-            <th>Weapon</th>
-            <th className="num">Distance</th>
+            <th>{tr("Killer")}</th>
+            <th>{tr("Victim")}</th>
+            <th>{tr("Weapon")}</th>
+            <th className="num">{tr("Distance")}</th>
             <th></th>
           </tr>
         </thead>
@@ -730,7 +713,7 @@ function MarkTable({ marks, a }: { marks: Mark[]; a: Analysis }) {
               <td className="muted nowrap">{roundClock(m.k.t, a.rounds)}</td>
               <td>
                 <span className={m.kind === "kill" ? "km-key km-key-kill" : "km-key km-key-death"} aria-hidden />{" "}
-                {m.kind === "kill" ? "kill" : "death"}
+                {m.kind === "kill" ? tr("kill") : tr("death")}
               </td>
               <td className="nowrap">
                 {players.get(m.k.killer)?.name} <span className="muted">{m.k.killerClass}</span>
@@ -745,9 +728,7 @@ function MarkTable({ marks, a }: { marks: Mark[]; a: Analysis }) {
               <td className="num">{m.k.distance === null ? "—" : Math.round(m.k.distance).toLocaleString()}</td>
               <td>
                 {m.k.jump && (
-                  <button className="linkish" onClick={() => jumpTo(m.k.jump!, `${m.kind} at ${roundClock(m.k.t, a.rounds)}`)}>
-                    copy tick
-                  </button>
+                  <button className="linkish" onClick={() => jumpTo(m.k.jump!, `${m.kind} at ${roundClock(m.k.t, a.rounds)}`)}>{tr("copy tick")}</button>
                 )}
               </td>
             </tr>

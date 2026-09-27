@@ -5,6 +5,40 @@ use anyhow::{Context, Result};
 use hl_core::SteamId;
 use hl_db::Db;
 use hl_rating::{build_detail, MatchDetail, Weights};
+use serde::Serialize;
+
+/// A match as the page reads it: the scoreboard from the log, plus the two
+/// things that come from the database instead.
+///
+/// This type exists because those two used to be added by the Tauri command
+/// and nowhere else. `get_match` wrapped a `MatchDetail` with `context` and
+/// `segments` and flattened it, so the page received one object with all
+/// three; `get_parts` and `fetch_part` returned a bare `MatchDetail`. The
+/// TypeScript declared a single type for both and asserted it at the
+/// `invoke` boundary, where nothing checks it — so picking one half of a
+/// combined log handed the page an object whose `segments` was `undefined`,
+/// and the header's `d.segments.map(...)` threw. Building the page's shape
+/// once, here, is what stops the two paths drifting apart again.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchView {
+    #[serde(flatten)]
+    pub detail: MatchDetail,
+    /// Official, scrim or pug, with the ETF2L side of an official.
+    pub context: Option<hl_db::MatchContext>,
+    /// The maps played, in order, with rounds won on each. Empty for a log
+    /// that is one map, which is every part of a combined log.
+    pub segments: Vec<hl_db::Segment>,
+}
+
+/// Wrap a scoreboard with what the database knows about that log.
+pub async fn view_of(db: &Db, log_id: i64, detail: MatchDetail) -> Result<MatchView> {
+    Ok(MatchView {
+        context: db.match_context(log_id).await?,
+        segments: db.segments(log_id).await?,
+        detail,
+    })
+}
 
 /// Build the match page for a stored log, or `None` if it has not been fetched.
 ///
@@ -40,6 +74,8 @@ pub async fn match_detail_from(
     let windows = db.round_windows(log_id).await?;
     let situations = db.kill_situations(log_id).await?;
     let mut impact = crate::kills::impacts_for(&kills, Some(&situations), &windows, log.map.as_deref(), weights);
+    let credits = db.kill_credits(log_id).await?;
+    crate::kills::attach_shared_swing(&mut impact, &kills, Some(&situations), Some(&credits), weights);
     if let Some(rows) = db.fight_counts(Some(log_id)).await?.get(&log_id) {
         crate::kills::attach_fights(&mut impact, rows);
     }

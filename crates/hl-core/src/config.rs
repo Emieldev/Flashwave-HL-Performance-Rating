@@ -13,6 +13,12 @@ pub mod keys {
     /// Set to "1" to download every log ever played rather than the recent
     /// years plus officials. Asked for in Settings, never on by default.
     pub const ALL_HISTORY: &str = "fetch_all_history";
+    /// Set to "1" to delete a downloaded STV demo once every match it
+    /// covers has been read (PLAN Q23). Off by default, and deliberately:
+    /// the first thing a new version of the aim pass wants is the demos it
+    /// has already read, and deleting them means a match can never be
+    /// improved by a later pass without fetching the file again.
+    pub const AUTO_DELETE_DEMOS: &str = "auto_delete_demos";
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

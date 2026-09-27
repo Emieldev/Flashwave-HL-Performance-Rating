@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { errorMessage } from "../api/types";
+import { t, tx } from "../lib/i18n";
 
 /**
  * How far back a sync reaches.
@@ -47,28 +48,22 @@ export function HistoryPanel() {
 
   return (
     <div className="panel">
-      <h2>How far back</h2>
+      <h2>{t("How far back")}</h2>
       <p className="hint" style={{ marginTop: 6 }}>
         {on ? (
           <>
-            <strong>Full history.</strong> Every Highlander log you have ever played is downloaded,
-            back to your first one.
-          </>
+            {tx("{0} Every Highlander log you have ever played is downloaded, back to your first one.", { "0": <strong>{t("Full history.")}</strong> })}</>
         ) : (
           <>
-            <strong>The last {KEEP_YEARS} years, plus every official.</strong> An official counts
-            whatever its age — a season from 2019 is still a game you care about. Older scrims and
-            pugs are indexed but not downloaded, so they cost nothing and are one click away.
-          </>
+            {tx("{0} An official counts whatever its age — a season from 2019 is still a game you care about. Older scrims and pugs are indexed but not downloaded, so they cost nothing and are one click away.", { "0": <strong>{tx("The last {KEEP_YEARS} years, plus every official.", { KEEP_YEARS: KEEP_YEARS })}</strong> })}</>
         )}
       </p>
 
       {!on && (
         <dl className="kv" style={{ marginTop: 14 }}>
-          <dt>Not downloaded</dt>
+          <dt>{t("Not downloaded")}</dt>
           <dd>
-            {held.toLocaleString()} older {held === 1 ? "match" : "matches"}
-            {held > 0 && <span className="muted"> · about {eta(held)} to fetch</span>}
+            {tx("{0} older {1}{2}", { "0": held.toLocaleString(), "1": held === 1 ? t("match") : t("matches"), "2": held > 0 && <span className="muted">{" "}{tx("· about {0} to fetch", { "0": eta(held) })}</span> })}
           </dd>
         </dl>
       )}
@@ -77,12 +72,10 @@ export function HistoryPanel() {
 
       <div className="row" style={{ marginTop: 14 }}>
         {on ? (
-          <button onClick={() => void set(false)} disabled={busy}>
-            Go back to the last {KEEP_YEARS} years
-          </button>
+          <button onClick={() => void set(false)} disabled={busy}>{tx("Go back to the last {KEEP_YEARS} years", { KEEP_YEARS: KEEP_YEARS })}</button>
         ) : (
           <button onClick={() => setAsking(true)} disabled={busy || held === 0}>
-            {held === 0 ? "Nothing older to download" : "Download the full history"}
+            {held === 0 ? t("Nothing older to download") : t("Download the full history")}
           </button>
         )}
       </div>
@@ -112,27 +105,17 @@ function Dialog({
   onConfirm: () => void;
 }) {
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Download the full history">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label={t("Download the full history")}>
       <div className="modal">
-        <h3>Download the full history?</h3>
+        <h3>{t("Download the full history?")}</h3>
         <p>
-          {held.toLocaleString()} older {held === 1 ? "match is" : "matches are"} indexed but not
-          downloaded — scrims and pugs from before the last {KEEP_YEARS} years. Fetching them means
-          about {held.toLocaleString()} requests to logs.tf, plus the raw server log behind each
-          one: roughly <strong>{eta(held)}</strong>.
-        </p>
-        <p className="muted">
-          logs.tf is a community server and this app waits between requests on purpose. Nothing
-          downloads now — the next sync just has more to do, and you can keep using the app while
-          it runs.
-        </p>
+          {tx("{0} older {1} indexed but not downloaded — scrims and pugs from before the last {KEEP_YEARS} years. Fetching them means about {3} requests to logs.tf, plus the raw server log behind each one: roughly {4}.", { "0": held.toLocaleString(), "1": held === 1 ? t("match is") : t("matches are"), "3": held.toLocaleString(), "4": <strong>{eta(held)}</strong>, KEEP_YEARS: KEEP_YEARS })}</p>
+        <p className="muted">{t("logs.tf is a community server and this app waits between requests on purpose. Nothing downloads now — the next sync just has more to do, and you can keep using the app while it runs.")}</p>
         <div className="modal-actions">
           <button className="primary" onClick={onConfirm} disabled={busy}>
-            {busy ? "Saving…" : "Download everything"}
+            {busy ? t("Saving…") : t("Download everything")}
           </button>
-          <button onClick={onCancel} disabled={busy}>
-            Not now
-          </button>
+          <button onClick={onCancel} disabled={busy}>{t("Not now")}</button>
         </div>
       </div>
     </div>

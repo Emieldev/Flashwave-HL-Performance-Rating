@@ -1414,39 +1414,49 @@ from testers (function, boSe, Taiga) is marked with who asked.
 |---|---|---|---|
 | ~~Q1~~ | ~~**Filters ignored by two tabs** (function)~~ | small | **Already fixed in the code; what was left was the label lying.** Damage-and-kills and Fights both filter on the slice, verified live: picking R2 moves the damage totals from 9,319/11,997 to 1,367/1,272 and re-counts the fights table. The remaining defect was wording — a slice is one round, one *map* of a combined log, or the whole match, and the panels only knew two of those, so a seven-round map was announced as "in this round". `sliceLabel`/`sliceScope` in `common.ts` name the slice once and Spread, Fights and Aim all read it. Spread's doc comment also still claimed damage had no round split, which the code stopped being true of some time ago. |
 | ~~Q2~~ | ~~**Database backup before every sync**, and a warning about the uninstaller~~ | small | **Backups and the warning already shipped; the gap was that the warning gave no way to act.** The Backups panel said "keep one elsewhere if it matters to you" and offered no means to do it — the only copies were the automatic ones beside the database, which is exactly what the uninstaller's "delete application data" removes. **Save a copy elsewhere…** now opens a file dialog and writes one with `VACUUM INTO` (`backup::save_as`), refusing to overwrite an existing file, since this is the button people press when they are worried about losing data. |
-| Q3 | **Deep demo parse** (§14) | large | The one source of data we hold and do not read: aim, viewangles, distances, scoped time. Everything else is logs.tf's. |
+| Q3 | **Deep demo parse** (§14) | large | **Done (27 Sept): every demo read is kept whole as a timeline** (§14b): every tick's positions and angles, every state change, cart, buildings and all game events, 1-7 MB a demo, faithful to 0.05°. Later passes derive from it without the file. Found and fixed two aim bugs on the way (conditions, POV lookback). Still open: reaction time, which needs map geometry. |
 | ~~Q4~~ | ~~**Scout picks on KOTH worth more** (boSe)~~ | small | **Measured twice, not applied — and the second measurement points the other way.** Redone after Q8 across all nine models: 1.4/1.7/2.0/2.5 on koth_ maps move the nine accuracies by +0.7 (Soldier) to −0.8 (Engineer), total under half a point, no trend. Then measured *directly* with `hl situation --victims`: for every kill, how often the killer's team won the round less what the situation predicted, per victim class and mode, each mode against its own baseline (71,808 KOTH kills, 38,931 stopwatch). On KOTH the Scout is +6.0% against a +6.2% mode average — the average class to kill, well inside one standard error. On stopwatch he is +1.1% against a −1.9% average, the **best** class to kill of the nine, about four standard errors clear. The effect boSe described exists and is on the other mode; a guess at why is that on payload the Scout is who gets back to the cart. Not applied either way: the stopwatch column's label is weak (a stopwatch round is won on the clock, and its average kill scores −1.9%). The real finding is that `hl validate` cannot feel this table at all — the Medic's KOTH premium is the biggest effect in it (+10.7 vs +6.2) and applying it costs 0.4 points. Full write-up in `weights.default.toml`. |
 | ~~Q5~~ | ~~**§12 step 4: map baselines**~~ | medium | **Done, in half.** Per-map pools ship: the Sniper spread across maps halves from 0.192 to 0.097, Vigil 0.90 -> 1.02 and Product 1.10 -> 1.01, with out-of-sample accuracy unmoved at 72.4%. |
 | Q5b | **§12 step 4: the side half** | large | 80% of performances on attack/defence maps play both sides, so a performance cannot be filed under one: its components have to be split per round. **Not blocked after all** — `RawLog.damage` holds every hit with its second, attacker and victim; it is simply never stored. Time on class per round is the remaining unknown. |
 | ~~Q6~~ | ~~**§12 step 5: fight swing**~~ | large | **Built and measured; the live model is unchanged.** Alone it is the strongest single component there is (69.7% of 680, z 10.3), but fitted beside Kills in context it is "unclear" [-0.43, 0.63] — they measure the same thing from different ends. Swapping it in is *worse* out of sample (70.9% against 72.4%); only an even 0.10/0.10 split edges ahead, by 0.5 points, inside the noise. The component, the measured `[swing]` table and the `--swing` generator stay: Q7 needs the fight model anyway. |
 | Q6b | **Fight swing's credit split** | medium | HLTV gives a share to whoever damaged the victim in the 5 s before a kill; the killer currently takes the whole swing. **Not blocked** — `RawLog.damage` has every hit, so this is a pure function over data already parsed. |
 | ~~Q7~~ | ~~**Teamfights** (Taiga)~~ | medium | **Measured, not yet shown.** `teamfights.rs` says who was in each fight and when they arrived, counting damage as well as kills — a Soldier who lands two rockets and lives was in the fight, and the kill list would never say so. Collapse is the spread between a side's first and last arrival. The UI for it, and the uber-exchange half of Taiga's ask, are Q7b. |
-| Q7b | **Teamfights on the match page** | medium | The measurement exists; nothing shows it. Also Taiga's third part, uber exchanges as space, which needs Q11's cart timeline to say what the space was worth. |
+| ~~Q7b~~ | ~~**Teamfights on the match page**~~ | medium | **Done, and the measure had to change first.** Q7's definition of arriving together -- the gap between a side's first and last arrival -- was shown for the first time and called **0 of 51** teamfights together on a real match, and 1% across the whole history. With eight or nine a side there is nearly always one who arrives late for a good reason, and the gap measures them. It is now the **share of a side in within 3 s of its own first arrival**, and that one means something: across **48,074 side-fights**, a side 80-100% in together won 53.2% and lost 32.8%; 0-20% in together won 35.3% and lost 52.2%; every bucket between runs the same way. That is Taiga's claim, measured. The Fights tab gains a Teamfights section: your side's average share in together, fights won, the selected player's habit ("in 48 of 58, usually 4 s after the first kill"), and a row per fight with each side's "6 of 8", the losses and the selected player's arrival. It follows the round and map filter. `Teamfight::together` is redefined at the source with a test for the one-straggler case that broke the old one, and the mock's analysis fixtures carry real teamfights so a browser shows the real shape. **Still blocked:** Taiga's third part, uber exchanges as space, which needs Q11's cart timeline to say what the space was worth. |
 | ~~Q8~~ | ~~**Every class gets its own model** (boSe)~~ | large | **Done, and it moved every class.** `hl validate` works for all nine now — Highlander guarantees one of each class a side, so every class has ~690 pairs, as many as the Sniper. `validate::propose` turns a fit into rounded weights and five-fold cross-validation over blocks of time scores the procedure, so no model is quoted on the data it was tuned on. Cross-validated, picking the winner: scout 70.7→74.5, soldier 72.2→73.2, pyro 73.5→78.0, demoman 72.0→75.6, heavy 72.0→76.8, engineer 71.8→73.4, medic 71.1→75.4, spy 71.0→72.9, sniper 72.9→75.9. Model v7; the reasoning for each of the nine is in `weights.default.toml`. Three findings: **DPM earns its place nowhere** (added at 0.10 to every model it moves accuracy −0.6 to +0.3 — noise both ways; damage already reaches the rating as the kills it sets up and the assists it becomes, and this is the second time it has measured redundant); **the old Spy model lost to `generic`** (71.0 against 72.3), which only pairing a hand-written model against the fallback could show; and **staying alive predicts winning almost too well** — left alone the fit gave the Sniper 0.55 and the Medic 0.65 to death-shaped components, so no model may now give dying more than half its weight, a rule a test holds. The one place the fit was overruled is the Medic: it drops ubers and drops as collinear with dying, and a Medic rating that cannot see a drop is not a Medic rating. They are in at 0.15 and 0.10 and the 1.6 points are documented as the price. |
 | Q8b | **Validate more than the winner** | medium | Everything above is fitted against "did their team win", which is confounded: a player on a winning team dies less because his team is winning. It is the only label the data has, and it is why the survival cap exists at all. A second label — round win share, or a held-out human ranking of performances — would let the next model answer "how well did he play" rather than "was he on the better side". |
 | ~~Q9~~ | ~~**Opponent strength** (open item 8)~~ | medium | **Built as a view, not an adjustment — and ETF2L division turned out to be the wrong instrument.** Division is stored for every official, but that is 35 logs of 749 with a division at all, spanning Low/Mid/Open/Div 3 with exactly one High match and no Premiership. It cannot weigh a pool it labels 5% of. What can: Highlander puts one of each class a side, so every match names your opposite number, and their average over their *other* games is a strength rating available for **64% of performances**. The effect is real — facing an opponent 0.20 better costs 0.076 rating points, and the bottom against the top fifth of opposition is 1.059 against 0.945. **Not applied to the rating.** Correcting for it changes split-half reliability over 147 players with 10+ games by **0.000** (0.761 either way), because opponent strength varies *within* one player's games (sd 0.070) more than it varies *between* players (sd 0.046) — there is no standing level of difficulty to subtract, only night-to-night variation. Adjusting anyway would smuggle a prior about the player into a number that is meant to describe one game, which is the opposite of what the rating is for. So it is shown: "Who you played" on the profile, three fixed bands either side of 1.00, and `hl profile <class>` prints the same. Flashy's Sniper: 1.13 against opponents averaging 0.82, 1.01 against 1.16. |
 | ~~Q10~~ | ~~**Colour themes in settings** (function)~~ | small | **Bigger than "small", because the palette was only half in variables.** 58 `rgba()` literals and 47 hex literals across five stylesheets had to become roles first — the accent at three depths for a button gradient, the rules and tracks a table is drawn with, the surfaces under them — or a theme would have repainted the chrome and left orange gradients behind. Four dark themes ship: Gravel (the default), Dustbowl, Coldfront, Swiftwater. Two things are deliberately never themed: **RED and BLU**, because a scoreboard that recolours them is lying, and the **kill/death pair**, which was validated together for colour-blindness (CVD dE 19.7) and carries a meaning across every analysis view. The canvas in the kill map cannot parse `var()`, so it resolves the colours at draw time through `themeColour`. **No light theme**: the app is translucent light tints over dark surfaces, and inverting it is its own job rather than a fifth entry in a list. |
 | Q11 | **Cart time in a numbers advantage** (§15.1) | medium | The clearest unmeasured waste on payload: seconds in a 9v5 with nobody on the cart. Needs the demo's cart position, which nothing reads yet. |
 | Q12 | **Momentum** (§15.2) | large | Depends on Q11 and on Q6's fight model; it is the story those two tell together, so it is last of the three. |
-| Q13 | **Translations** (tenshi, with boSe on French and obi on Portuguese and Spanish) | medium | Volunteers are waiting, so the cost is the plumbing, not the words. Worth doing after the screens stop moving — every string moved twice is a string translated twice. |
+| Q13 | **Translations** (tenshi, with boSe on French and obi on Portuguese and Spanish) | medium | **Built, with draft translations in four languages.** `ui/src/lib/i18n.ts` uses the English text as the key, so a translator sees the sentence rather than an invented key and a missing entry shows the English instead of a blank. **Russian** was added on request beside French, Spanish and Portuguese (Brazilian). **147 strings** are wrapped: the nav, every panel heading, table headers, labels and buttons across twenty components, the analysis tabs, the profile filters and every notification title -- a mechanical pass limited to static single-line text inside tags with plain attributes, so nothing inside an `onClick` could be mistaken for a label. Where a file already used `t` as a local name it imports the function as `tr`, and `scripts/i18n.mjs` finds both. All four tables are filled, **147 of 147**, and render correctly including Cyrillic. **They are drafts written without a native speaker**, and the app says so in Settings rather than claiming volunteers did them; `docs/translating.md` asks the volunteers to review rather than start from nothing. **Left:** paragraph and hint text, which is most of the remaining English and the part most likely to still change. |
 | ~~Q14~~ | ~~**Look other players up** (Flashy)~~ | large | **Built, against your pool.** It needed no new model and no new fetching: every Highlander log holds seventeen other players, all of them already rated, because the pool a rating is measured against is *built* from exactly these performances. So a player's page is `load_profile` with their account instead of yours — same model, same scale, same breakdown. A **Players** tab searches by name (across every name a player has used, since people rename constantly) or any form of Steam ID, and a player's page shows: games in your matches and the span of them, previous names, on-your-team against against-you with the head-to-head record, a row per class with games and average rating, and their best and worst games, each clickable through to the match. `hl who <name or steamid>` prints the same. One asymmetry is stated in the UI rather than hidden: you are held out of your own baseline so you are never compared with yourself, and everybody else is in it. What this deliberately is not is trends.tf — it cannot see a game you were not in, so every figure says "in your matches". Fetching a stranger's whole history is Q14b and is a different size of job: seven hundred logs per lookup against somebody else's server. |
 
 | Q14b | **A looked-up player's whole history** | large | Q14 shows a player as they appear in *your* matches. Their real record needs their logs, which is ~700 fetches per lookup against logs.tf, plus somewhere to put games the owner never played and a decision about whether those games join the rating pool (they would change everyone's percentiles). Worth doing only if looking people up turns out to be something you actually use. |
 
 | ~~Q15~~ | ~~**An error console, and telling people when something fails**~~ | medium | **Done.** Three parts. An `ErrorBoundary` round every page and every `Fold`, so a thrown error is one dead panel with a message and a "try again" rather than a black window — proved by throwing on purpose: the header, the nav and every other panel stayed up. A `problems` store keeping the last 200 failures, collapsing repeats into a count. And **Settings › Problems**, which lists them with a **Copy report** button that produces markdown with the version and the counts already in it, because those are the first two questions anyone asks. Sync failures now record *why*: `explain()` turns "error sending request … (os error 10060)" into "could not reach the server", and a 404 into "the server does not have this log" — the difference between worth retrying and never will be. |
-| Q21 | **A demo appearing starts a sync** (Flashy) | medium | **Done.** `watch.rs` polls the TF2 folders every 10 s and waits for a file's size to stop moving for 20 s — a demo is written continuously while the match runs, so a filesystem event fires hundreds of times and never says "finished", which is the only thing worth knowing. A finished demo raises `demos://new`, the window starts a sync and shows a card naming the file. logs.tf is not instant, so it tries up to three times a minute and a half apart before saying so plainly rather than spinning. Only demos that appear *while the app is open* count: nobody wants last season's four hundred announced at startup. |
-| ~~Q16~~ | ~~**The Aim tab ignores the selected player** (zaag)~~ | medium | **Half done: it has stopped lying.** `AnalysisPanel` never passed `player` to `<Aim>`, so changing the player left the aim cards showing *your* numbers under their name — zaag read his own 28° crosshair error as a teammate's. It takes `player` now, and when the selection is not you it says aim is read from your own demo and names who it cannot answer for. **The other half is Q16b**: `demo_aim` has no shooter column, so there is genuinely nothing to show for anyone else. An STV carries every player's viewangles, so the data exists — it is a pass over all players and a schema change, close enough to Q3 to do with it. |
-| Q16b | **Aim for everyone, not just you** | large | Needs a `shooter` column on `demo_aim` and the aim pass run for every player in an STV rather than the owner alone. Then the player dropdown means what it implies on every tab. Until then the tab offers a **Show my aim** button rather than telling you to go and change a dropdown yourself. |
+| ~~Q21~~ | ~~**A demo appearing starts a sync** (Flashy)~~ | medium | **Done.** `watch.rs` polls the TF2 folders every 10 s and waits for a file's size to stop moving for 20 s — a demo is written continuously while the match runs, so a filesystem event fires hundreds of times and never says "finished", which is the only thing worth knowing. A finished demo raises `demos://new`, the window starts a sync and shows a card naming the file. logs.tf is not instant, so it tries up to three times a minute and a half apart before saying so plainly rather than spinning. Only demos that appear *while the app is open* count: nobody wants last season's four hundred announced at startup. |
+| ~~Q16~~ | ~~**The Aim tab ignores the selected player** (zaag)~~ | medium | **Half done: it has stopped lying.** `AnalysisPanel` never passed `player` to `<Aim>`, so changing the player left the aim cards showing *your* numbers under their name — zaag read his own 28° crosshair error as a teammate's. It takes `player` now, and when the selection is not you it says aim is read from your own demo and names who it cannot answer for. **The other half was Q16b**, now done: `demo_aim` has a shooter column and the pass reads every player an STV carried. |
+| ~~Q16b~~ | ~~**Aim for everyone, not just you**~~ | large | **Done, and measured on a real match.** The pass took a SteamID and answered for that one player; it reads every player the demo carried now, and `demo_aim`, `demo_death` and `demo_life` each gained the player they are about (migration 0024, pass version 11). On log 4122234 that is **311 kills across 17 players, up from 29** — the same file, read properly. Three things had to be decided rather than coded. **Which demo speaks for whom:** a POV demo records its own client's view angles as the player made them, while an STV takes everyone's off the wire, quantized; so a match with both is read twice, the POV for the owner and the STV for the other seventeen, and neither player gets the second-best number available. **What a demo may not vouch for:** a POV demo carries other players only while its recorder could see them, so every shot and death now records whether the demo held that player across the whole window, the averages ignore the ones it did not, and a POV demo contributes nobody but its recorder. **That crosshair error is a hitscan measure:** the per-player means make this unmissable — the two Snipers read 1.7° and 3.2° at ~1,250 units, the Scouts 9-10° at ~270, a Soldier 27.8° with the Black Box and a sentry kill 28.1°, because a rocket and a sentry never had to be on the head. The numbers are right; calling them aim for those classes would not be, so the tab says which is which. The Aim tab now answers for whoever is selected, and when a match has only your own POV it says that is why, with the STV download a click away, instead of looking empty. **Over the whole history:** 25 matches re-read in 396 s, **1,405 kills stored against 54 shooters** where there were 508 against one — the four matches with an STV give 16 to 18 players each, the twenty-one with only a POV give the owner, which is the rule working. **Found by running it:** the route code has subtracted `tick - last_seen` since pass version 7, and a recording that spans two matches restarts its tick counter. A release build wrapped the subtraction to a huge number, which closed the route and so looked correct; a debug build panics. The seam is handled for what it is now — every open route closed and the frame buffer cleared — because a route joined across a map restart draws a line between two maps. |
 | ~~Q22~~ | ~~**Ubers and numbers in the rounds panel** (Flashy)~~ | medium | **Done.** Each round now carries two strips under its lanes: who was up players and who held the uber, across that round only, on the same axis as its caps and picks — a round lost while a player down for most of it reads very differently from one lost even. The hover says the share ("up a player 42% of the round, down 23%"). It reuses the kill-by-kill panel's analysis query, so when both are open it costs one fetch, not two. |
-| Q17 | **Captures weighed by what they cost** (zaag) | medium | "Weigh captures based on enemy players alive and the class played. As it is now, sitting on the cart as Pyro when the enemy wiped gives more rating than moving forward with the team." Correct, and the machinery exists: the situation pass already knows how many were alive on each side at any moment (`GameState::numbers_at`), which is exactly the "enemy players alive" half. A cap into a live defence is worth several into an empty point. zaag's second half — different weights per gamemode, KOTH rewarding non-capping classes more than payload — fits the per-map pools from Q5, though note those are per *map*, not per gamemode. Measure first, as with Q4 and Q6: does a numbers-weighted cap predict the winner better than a flat one? |
+| ~~Q17~~ | ~~**Captures weighed by what they cost** (zaag)~~ | medium | **Done, model v8.** Measured twice. First with `hl situation --caps`, against what the numbers already predicted: on stopwatch a cap into 6+ alive is worth +32.8% over its position and one into 3-5 alive +13.8%; on KOTH there is no gradient at all; and the *class* half of the suggestion does not survive splitting by mode -- every class's captures sit at 23-30% on stopwatch. Then as a rating component: `caps_contested` counts, for every capture a player is credited with, the enemies alive to stop it, read from the raw log the moment before it went in. Beside the flat count the fit calls it "unclear" in all nine classes -- it does not *add* to caps. But *replacing* caps with it, at the same weight, in the four models that use caps, is **never worse on the full sample or the held-out one**: scout 74.0 -> 74.1 (held-out +0.5), pyro 76.6 -> 76.7 (+2.0), engineer 75.2 -> 76.0 (+1.0), medic 76.0 -> 76.3 (+0.0). Small, consistently signed, and it fixes the named unfairness -- walking onto a wiped point now adds nothing -- at no cost, so it is applied. **The price:** the component needs the raw server log, so the ~200 oldest logs that exist only on logs.tf lose it rather than keep a flat count, as `untraded_deaths` already does. `docs/rating-formula.md` is updated and still matches the TOML on all 62 weights. |
 | Q18 | **Manual demo upload** (beowulf) | large | For a match where the server had no logs.tf config, so no log exists at all. Nothing like it today: demos are found by scanning the TF2 folder and are *linked to a log*, and the whole app is built on the log being the record. A demo with no log has no scoreboard, no class times and no player list from logs.tf — all of that would have to come out of the demo itself, which is a parser this project half has (`hl-demos` reads positions, angles and kills). **To settle before building:** whether such a match joins the rating pool at all. It cannot be rated against the same components without the same inputs, and quietly rating it on fewer would break the one rule the rating has. Likely answer: import it, show the kill map and the demo-derived views, and mark it unrated. |
 | ~~Q19~~ | ~~**The match page has too much furniture** (Flashy)~~ | small | **Done.** The "Combined from N logs" panel is gone: the part logs are links in the header beside logs.tf, demos.tf and ETF2L, which is what they always were. The "Reading" select is gone as a panel too and now sits in the scoreboard's header, next to the numbers it scopes. Two panels removed from the top of every combined match. Titles trimmed where they were sentences. |
 | ~~Q20~~ | ~~**Fewer explanations, everywhere** (Flashy)~~ | small | **Done, second pass.** The long `title=` tooltips were the same prose hidden behind a hover — the matchup one was 300 characters and is now one line. Seasons, teammates, the scoreboard and the profile's empty state all lost their paragraphs. The rule stands: cut what explains the thing the reader is looking at, keep what they cannot infer. |
+
+| ~~Q23~~ | ~~**Delete downloaded demos when they have been read** (Flashy)~~ | medium | **Done.** A missing demo no longer aborts the aim pass and no longer wipes what it produced (verified: 24 of 25 matches read, the missing demo's 43 rows preserved, totals identical to a clean run). `prune_demos` used to delete the row of any demo no longer on disk, cascading its link -- which threw away the `demos_tf_id` that is the only way to fetch it back; a downloaded demo is now marked `deleted_at` and kept, while a POV demo, which has no way back, is still forgotten (its derived rows stay, orphaned and untouched, because the pass only walks linked logs). **Settings > Downloaded demos** lists what the app fetched, deletes one or all, and refuses anything the pass has not finished with; **Delete after reading** is a toggle, off by default, swept right after the aim pass. **Getting one back** reuses the existing download: a deleted STV no longer counts as one the match has, so the match page offers the demos.tf download again with its progress bar, and re-indexing the file clears `deleted_at`. `Copy playdemo` is replaced by a note for a deleted demo rather than handing over a command for a file that is not there. See §16. |
+
+| ~~Q24~~ | ~~**Say what it is doing, everywhere it does something slow** (Flashy)~~ | medium | **Done.** The aim pass's progress is spent rather than discarded -- `|_, _| {}` was eating the count of the slowest job in the product, 396 s for 25 demos, all of it after the card said "Sync finished" -- and names the match it is on. `fights::derive_all` takes a callback and reports. Five stages that ran silently now name themselves: the profile refresh, demos.tf matching, the demo folder scan, round-map resolution and the rebuild's ETF2L pass. **The folder scan keeps a name rather than a fraction on purpose:** measured at 0.6 s for 109 demos in a debug build, which is exactly the case §17's rule is for -- short work gets named, long work gets a bar. The inline-bar idea for work started from a page is dropped for now: nothing started from a page currently takes long enough to need one, and the STV download, which does, already has its own. See §17. |
+
+| Q25 | **Penalize delaying your own team's spawn** (zaag) | medium | **Measured, and the data says the opposite -- not applied.** `caps_mates_dead` counts, for every capture a player is credited with, their own teammates who were dead when it went in; it rides in the same fights pass as Q17. If capping with your people dead were costly, the player who did less of it should be on the winning side. In **eight of nine classes it is the other way round**: the team whose player capped *more* while teammates were dead won 53-60% of the time (Engineer 59.7%, Pyro 58.5%, Scout 55.2%), and in the Soldier fit the effect is clear of zero *in the rewarding direction* (-0.70 [-1.12, -0.20] on the flipped scale). A penalty would push the rating against the result. **A guess at why, to put to zaag rather than to assume:** on attack/defence a capture moves the attacking team's spawn forward, so capping while your team is dead brings them back into the fight sooner -- which would make it one of the more valuable caps, not a cost. The column stays stored and in `hl validate`; nothing is weighted by it. **Reopened 27 Sept** (boSe, ivg): count the *delay* each dead mate actually suffered, from the log's spawn lines, not the head count; only long delays are the capper's; cappers on point and the clock can make the cap worth it. Next: `hl situation --spawn-delay`, then decide. See §18b. |
+| Q26 | **Demo and Sniper valued by mode and side** (zaag) | medium | **Measured: half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, zaag is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
+| Q27 | **Spychecking as a component** (zaag) | large | Hits on a fully cloaked Spy. **Not in any log** -- cloak is a demo-only condition, and STV coverage is 4 matches of 749. See §20. |
 
 ### Reported by testers, and fixed
 
 | # | What | Reported | Cause |
 |---|---|---|---|
+| ~~B7~~ | ~~**A hook's dependency array changes length between renders**~~ | found while verifying Q23 | **Not a bug: a hot-reload artefact, closed with the evidence so nobody chases it again.** React's two arrays are two versions of `KillMap`'s canvas effect. `c2ed192` had eleven deps -- `img, view, heat, heatColor, frame, display, W, H, scale, paths, focus`; Q10 (`a3c34aa`) added `heatResolved, killColour, deathColour` right after `heatColor`, making fourteen. The logged values line up one for one: `var(--accent-2)` is `heatColor`, the three colours that appear are the three that were added, in the positions they were added, and `636, 640, 3.55` are `W, H, scale`. The browser pane served a cached pre-Q10 module and Vite swapped in the current one; React compares a hook's deps across a hot swap and complains once. The literal is a fixed fourteen, so it cannot change length in the built app or on a clean load. |
+| ~~B6~~ | ~~**Reading one half of a combined log broke the page**~~ | Flashy | `Cannot read properties of undefined (reading 'map')`. Two commands built two different shapes for the same page. `get_match` returned a private `MatchResponse` that flattened `MatchDetail` together with `context` and `segments`; `get_parts` and `fetch_part` returned a bare `MatchDetail`, with neither. The TypeScript declared one type for both and asserted it at the `invoke` boundary, where nothing is checked -- so picking a part handed the header an object whose `segments` was `undefined` and `d.segments.map(...)` threw. The mock hid it: it spread the combined log's own segments onto every part, so a browser never saw the shape the built app received. Fixed at the source -- one `MatchView` in `hl-ingest`, used by both commands, so the two paths cannot drift again -- with `?? []` left in the header as a belt and the mock corrected to give a part no segments, which is the truth. |
 | ~~B1~~ | ~~**Queued demo downloads never start**~~ | Gilaric | There was no queue. `fetch_stv` took a busy flag and *refused* a second download, while the window had already drawn a card for it — so it sat at "0 MB so far" until you cancelled and started it again, by which time the first had finished. Now there is a real queue: one at a time, in the order asked for, `stv://queued` says where each one is, and dismissing a card that has not started cancels it. |
 | ~~B2~~ | ~~**Rating over time squashes after "Show as table" twice**~~ | Anonymous | The ResizeObserver was attached in a `useEffect(..., [])` to an element the table toggle unmounts. A detached element reports 0×0, so the observer fired once with zero and the width clamped to its 320 minimum; coming back built a *new* element the observer was no longer watching, so it never recovered until a reload. Fixed by `useMeasuredWidth`, a ref callback that follows the element, ignores zero outright, and gives the chart a `viewBox` so a stale measurement scales instead of stubbing. The other three charts use it too. |
 | ~~B5~~ | ~~**Picking a season knocked the filter row out of line**~~ | Flashy | The season's date range was a plain span beside the period select, inside a flex box in a fixed grid column — so choosing a season made that cell taller and everything beside it shifted. The same defect as B4 one element along. It is now positioned in the bottom-right corner of the filter row with its line always reserved, so picking a season changes nothing about the layout: measured before and after, row height 124px both times and neither select moved a pixel. |
@@ -1467,9 +1477,17 @@ was looking, how far the shot was, how long they held the angle, how quickly
 they reacted, how much of the game they spent scoped. None of that is in any
 log, and the demos are already on the machine (101 here, 25 linked to matches).
 
-**What is read today.** Only the 1072-byte header, for the map name, duration
-and tick count, plus Demo Support `.json` sidecars for killstreak ticks. No
-packet is parsed.
+**What is read today.** More than this section once described. The 1072-byte
+header gives the map, duration and tick count, and Demo Support `.json`
+sidecars give killstreak ticks — but the body is parsed too, through
+`tf-demo-parser`. `hl-demos::aim` walks every tick and, for **every player
+the demo carried** (Q16b, not only the recorder), reports the crosshair error
+at each kill and a second before, the flick, the range and height, where the
+killer stood relative to the victim's view, who was near enough to help, the
+share of time scoped, and a route per life. What is still unread from the
+list below is **reaction time** — the moment a victim first became visible —
+which needs line of sight against the map's geometry rather than against the
+demo alone.
 
 **What a parse gives.** A TF2 demo holds the server's snapshots: every
 player's position, view angles, health, class and weapon, tick by tick (66 or
@@ -1507,6 +1525,66 @@ parsed.
 teammate positions are partial. Old demos may use protocol versions the parser
 does not know. Both are checked in the spike before anything is built on top.
 
+
+### 14b. The demo, kept (built 27 Sept 2026)
+
+**The shift.** Every pass above asks the demo one question and keeps only
+the answer; the next question means reading the file again, and a demo
+deleted to save space (Q23) can never be asked anything new. So the aim
+pass now records the whole demo in the same walk, once, into
+`demo_timeline`, and later passes are derived from that. `hl-demos/src/
+timeline.rs` has the format; in short:
+
+- **Samples**, every tick, for every player alive and carried: position and
+  view angles, as per-player deltas, deflated.
+- **Changes**, at the exact tick: health, class, team, alive, carried, the
+  full condition bits, Medic charge, medigun and heal target, Spy cloak and
+  disguise.
+- **Objects** on change (the cart, every building) and **every game event**
+  exactly as the parser decoded it (hurts, deaths, captures, spawns, charges).
+- One time counter across a recording's restarts, with seams back to the
+  demo's own ticks.
+
+Reading it back: `Timeline::decode`, then `now(slot, t)`, `stretches(slot)`
+(a player's match as spans of unchanging state), `ticks_where(slot, test)`,
+`sample_near(slot, t)`, and the events. `hl kept [DEMO_ID]` lists what is
+kept and derives from one with no file: uber time, time burning, scoped
+share, Medic heal uptime and pops, captures.
+
+**Chosen by measurement** (`hl timeline <file> --stride N`, three demos):
+
+| every | stored (72 MB STV) | "a second before", timeline vs demo |
+|---|---|---|
+| 1 tick | 2.8 MB | 0.05° mean, 0.8° worst |
+| 2 ticks | 2.1 MB | 0.9° mean, 124° worst |
+| 4 ticks | 1.4 MB | 1.5° mean, 124° worst |
+| 8 ticks | 1.0 MB | 2.1° mean, 29° worst |
+
+Every tick: the questions still to come (reaction time, flicks) live in
+exactly the ticks a coarser record drops. Scoped share from the timeline
+matches the demo's to 0.0000 on STVs and 0.0016 on a POV demo. Across all 25
+matches with a demo: 28 kept, 92 MB, 1-7 MB each; the whole pass takes 91 s.
+
+**Two bugs found on the way, both fixed (aim pass version 12):**
+
+- `tf-demo-parser`'s `has_condition` tests `byte >> bit == 1`, true only when
+  that condition is the highest one set in its byte: scoped + teleported read
+  as not scoped, cloaked + ubered as visible. `hl-demos/src/deep.rs` reads
+  the condition props off the wire alongside the parser and tests bits
+  properly.
+- "A second before" and the flick counted *frames* back. A POV demo is
+  written at the client's update rate and skips ticks (15% of frames on one
+  of ours), so there it read further back than a second. Both now look back
+  by ticks, and each shot records the tick it used.
+
+**Kept, not dropped.** A demo with a timeline whose file disappears is marked
+deleted rather than removed, whoever put it there -- your own recording
+included -- so its links to matches survive. Auto-delete (Q23) now also
+waits for the timeline before a demo counts as finished with.
+
+**Not yet:** reaction time still needs line of sight against map geometry,
+which no demo holds. Projectiles are not kept (thousands per match, nothing
+asked of them yet); add them with a version bump when something needs them.
 
 ---
 
@@ -1603,3 +1681,350 @@ language end to end (French, since boSe offered) before opening the rest.
 **The numbers are not strings.** Dates, thousands separators and decimals
 already go through `toLocaleString`; the rating's two decimals are deliberate
 and should stay a full stop in every language, because it is HLTV's number.
+
+
+---
+
+## 16. Deleting downloaded demos (Q23)
+
+**Why.** An STV demo is read once and never needed again. On this machine:
+
+| | count | on disk |
+|---|---|---|
+| POV, your own recordings | 101 | 3.53 GB |
+| STV | 8 | 632 MB |
+| ...of those, downloaded by the app | 4 | — |
+
+About **80 MB each**. Downloading a season of officials is ~3 GB of files
+whose only job was to be parsed once.
+
+### What may be deleted, and what may not
+
+Only `kind = 'stv' AND demos_tf_id IS NOT NULL` — files the app put on disk
+itself, and which it can fetch again.
+
+**Never a POV demo.** TF2 wrote those, not us; they are the player's own
+recordings, sitting in their own folder, and some are the only copy of a
+match that predates the app. Q16b also made them load-bearing: a POV demo
+is the only source of the owner's own view angles as they made them, where
+an STV has everyone's quantized for the wire. A cleanup feature that eats
+3.5 GB of irreplaceable recordings to save 600 MB of replaceable ones has
+the ratio exactly backwards.
+
+**Never an STV the app did not download.** No `demos_tf_id` means no way to
+get it back, which makes it somebody's own file too.
+
+### The blocker, which is a bug on its own
+
+`aim::pass` opens the file with `std::fs::read(path)?`. That error travels
+up through `for_log` to `derive_all`, which propagates it — so **one missing
+demo aborts the whole aim pass**, and every match queued behind it goes
+unread. Deleting a demo today would quietly break syncing.
+
+This is worth fixing whether or not the rest gets built: a demo the player
+moved, renamed, or cleaned up by hand does the same thing right now. A file
+that is gone is "nothing to read here", not a failure.
+
+### What makes it safe: deletion is reversible
+
+`demos_tf_id` lives on the `demo` row, not in the file. Delete the file,
+keep the row, and the existing download code can fetch it again from the
+same id. So this is not "destroy data", it is "evict a cache" — which is
+the difference between a feature and a footgun.
+
+- `ALTER TABLE demo ADD COLUMN deleted_at INTEGER` (unix seconds, nullable).
+- The scan must not resurrect the row when the file is absent, nor drop it.
+- The match page keeps working throughout: everything it draws — routes,
+  aim, deaths — is already derived and in the database.
+
+### When a demo is finished with
+
+When every log it is linked to has been read at the current pass version:
+`aim_log.version = aim::VERSION` for all of them. That table already exists
+and already records the version. Auto-delete fires only then.
+
+### What is actually lost, and must be said out loud
+
+1. **A future pass version cannot re-read it.** Pass versions bump often —
+   11 of them so far, the last one today — and each bump re-reads every
+   demo to improve what is stored. A deleted demo's rows stay frozen at the
+   version that read them. `aim_log` knows which, so the app can say
+   "read at v11, re-download to improve", and the re-download is a click.
+2. **`Copy playdemo` stops working** for that match (`DemoPanel`). The
+   button should offer to fetch the demo back rather than hand over a
+   command for a file that is not there.
+
+### The order to build it
+
+1. A missing demo file is not an error. *(Bug fix, stands alone.)*
+2. `deleted_at`, and a scan that respects it.
+3. `delete_downloaded_demos` command; a **Downloaded demos** panel in
+   Settings: count, total size, a row per match with its size and date,
+   delete one or delete all.
+4. A **Delete after reading** toggle, off by default. Off is the right
+   default: the first thing a new pass version wants is the demos.
+5. Re-download from the match page and from the panel.
+
+Steps 1-3 are the feature the ask describes. 4 and 5 are what stop it being
+a one-way door.
+
+
+---
+
+## 17. Progress, everywhere it is missing (Q24)
+
+**The finding, before any design.** The aim pass already counts its work and
+hands it to a callback. The app passes `|_, _| {}`:
+
+```rust
+match hl_ingest::aim::derive_all(&db, me, false, |_, _| {}).await {
+```
+
+That is the longest job in the product. Twenty-five demos took **396 s** on
+this machine, about 16 s each, and every second of it is silent — the sync
+card has already said "Sync finished" while the window carries on parsing.
+The CLI prints `reading demos 7/25`. The app had the same number available
+and dropped it on the floor.
+
+### What reports today, and what does not
+
+`Progress` has eleven variants; `fractionOf` gives a determinate bar to six
+of them. Per stage of a sync:
+
+| Stage | Reports? | Cost |
+|---|---|---|
+| Indexing trends.tf / logs.tf | yes, row counts | seconds |
+| Fetching logs | yes, with an ETA | the bulk of a first sync |
+| Raw server logs, per-map parts | yes | minutes |
+| ETF2L officials | yes | seconds |
+| `owner::refresh` | **no** | one request |
+| `demostf::index` | **no** | a network round trip |
+| `index_demos` (scan the TF2 folder) | **no** | 109 demo headers |
+| `maps::resolve_all` | **no** | seconds |
+| `fights::derive_all` | **no** — takes no callback | tens of seconds |
+| `aim::derive_all` | **counts, and is discarded** | **~16 s per demo** |
+| `rate_all` | yes | seconds |
+
+A rebuild has the same holes: `etf2l::derive_context`, `maps::resolve_all`
+and `fights::derive_all` all run silently between two stages that do report,
+so the bar stalls at a number and nothing says why.
+
+Downloading an STV does report (`EV_STV_PROGRESS`, bytes and total, with a
+queue position) — that one is already right, and is the model for the rest.
+
+### What to build
+
+1. **Spend the number that already exists.** `derive_all`'s callback becomes
+   a `Progress::ReadingDemos { done, total }`, emitted like every other
+   phase. One line of Rust, and the worst offender is fixed. *This lands on
+   its own, before anything else here.*
+
+2. **Give `fights::derive_all` a callback**, the same shape as
+   `kills::rederive_all` which already has one.
+
+3. **Name the short silent stages.** `owner::refresh`, `demostf::index`,
+   `index_demos`, `maps::resolve_all` do not need percentages — they need
+   `Progress::Stage { what }` so the card can say "Matching demos.tf" and
+   the bar can run indeterminate rather than appear stuck. `index_demos`
+   knows its file count, so it can report `done/total` properly.
+
+4. **A per-demo line, not just a count.** "Reading gullywash, 3 of 7" beats
+   "3 of 7": a demo takes 16 s and naming it is the difference between
+   waiting and wondering.
+
+5. **Two places, not one.** The corner card already carries sync, downloads,
+   the demo watcher and updates. Long work started *from a page* — opening
+   a match whose demo has not been read, re-rating after a weights change —
+   should show its own inline bar where it was started, and the corner card
+   stays the place for background work.
+
+### The rule to hold
+
+An indeterminate spinner is a last resort, not a default. Every stage above
+either knows its total (report a fraction) or is short enough not to need
+one (name it and move on). The one honest use of a sliding bar is a
+download with no `content-length`, which is already how `DownloadCard`
+behaves.
+
+### What not to do
+
+Not a progress bar per row, per panel, per query. The match page loads in
+well under a second and a spinner there is noise. This is about the four
+places that take **tens of seconds to minutes** — reading demos, fetching
+logs, rebuilding, and re-rating — and about the stages between them that
+currently look like the app has hung.
+
+\n
+
+---
+
+## 18. Penalizing spawn delays (Q25, zaag)
+
+> "delaying/denying a spawn should penalize the rating. easily detected by
+> checking cappers when teammates are dead. order it similarly to the frag
+> impacts; delaying an engie is less penalizing than delaying demo/sniper"
+
+**Confirm the mechanic before building anything.** The component's sign
+depends entirely on which way the respawn interaction runs, and that is a
+TF2 rules question, not a data question -- ask zaag to state it plainly. The
+design below assumes his reading: taking a point while your own people are
+dead extends their wait, so it is a cost the capper should carry, and the
+cost scales with who is stuck in spawn.
+
+**The data is already in hand, and it is the same data as Q17.** `gs.caps`
+gives the moment, the team and the cappers; `gs.alive_at(at)` gives who was
+alive and on which class. So "who was dead on the capping team when the
+point went in, and what were they" is one query away. **Build it with Q17**:
+both ask what the state was when a point was taken, both read the same three
+structures, and splitting them means walking every raw log twice.
+
+**Weighting.** zaag asks for the frag-impact ordering, which already exists
+as `[victim_value]` -- Medic 3.0, Demo 2.2, Sniper 1.8, down to Engineer 1.1.
+Reusing that table rather than inventing a second ordering is the whole
+point of having it.
+
+**Measure it the way Q17 was measured.** Excess over what the numbers
+already predicted, because the confound is severe and obvious: capping while
+your teammates are dead is capping while you are *down players*, and a team
+down players loses more rounds whatever it does. The numbers baseline
+already knows that. The question is whether, having controlled for it, the
+cap still reads worse than a cap made at full strength. If it does not, this
+is a real-feeling effect that the data does not support, and it joins Q4 and
+Q6 in the measured-but-not-applied pile.
+
+**Expect interference with Q17.** "Enemies alive when you capped" and "your
+own players dead when you capped" are two cuts of the same moment. Measure
+both, then check whether either survives once the other is known.
+
+### 18b. The discussion continued (27 Sept 2026, boSe and ivg)
+
+> boSe: "sometimes teams agree on delaying, also a 2 second delay when a guy
+> dies right before cap and a 10 second delay when someone was about to
+> respawn does not have the same impact, the first scenario should not
+> penalize the capper but the guy that dies off-timing"
+>
+> ivg: "A stat to look at when deciding if it was intentional or not is
+> enemy time / cappers on point. If 4 people cap it's less penalizing
+> compared to one or two. And when the enemy is in ot or <30s time I'd say
+> capping is more important"
+
+**This explains the first measurement better than the guess did.** The
+existing column counts *dead teammates*, which lumps together a mate who
+died two seconds ago (a small delay, and his fault) with one who was about
+to walk out of spawn (a long delay, the capper's choice). Averaged together,
+it is no surprise the column reads as noise-to-rewarding. Four things change:
+
+1. **Measure the delay itself, not the head count.** The raw log carries
+   every `spawned as` line, and the parser already reads them. So for each
+   teammate dead at the cap, the delay is known exactly: when they actually
+   came back, against when a player killed at that moment on that map and
+   side usually comes back. No guessing at respawn rules -- the log shows
+   what the cap did to the timer, and if a cap turns out *not* to lengthen
+   waits on some mode, that mode drops out on its own.
+2. **Blame the right player.** boSe's split: a mate who died just before the
+   cap (seconds, not a full wave) is the one who died off-timing; a mate who
+   was about to respawn and got pushed back a wave is the capper's cost. The
+   delay measure separates these for free -- the first case has a short
+   delay, the second a long one -- so only the long ones count, and only
+   against the capper.
+3. **Context that makes the cap worth it anyway.** ivg: many cappers (the
+   point goes faster, so it was a push, not a mistake), and the clock --
+   enemy in overtime or under 30 s left, where taking the point now is
+   worth more than a respawn. Both are already known at the cap: cappers
+   from the cap line, the clock from the round's time. Measure each as a
+   modifier rather than assuming it.
+4. **Agreed delays.** "Sometimes teams agree on delaying" -- a team that
+   decides to wait for a full wave and then caps is doing the opposite of
+   the thing being penalized, and that shows as *no* dead teammates at the
+   cap. Nothing to build; noted so nobody tries.
+
+**Order of work, measure first as with every rating change:**
+
+- `hl situation --spawn-delay`: for every cap, each dead teammate's actual
+  wait against the usual wait, bucketed by delay (0-3 s, 3-8 s, 8 s+), by
+  number of cappers, and by time left. Read it before deciding anything.
+- If long delays still go with *winning*, stop there: the cap is doing what
+  a cap should, and the answer to zaag is "the data says the push was worth
+  it". If they go with losing, add `spawn_delay_s` (long delays only, the
+  victim-value ordering zaag asked for, softened by cappers and clock) to
+  the fights pass beside `caps_mates_dead`, and A/B it the usual way:
+  applied only if never worse on the full set and the held-out one.
+
+---
+
+## 19. Demo and Sniper by mode and side (Q26, zaag)
+
+> "arguably demo = sniper on product, teams can still hold while being down
+> one of those 2 classes. the nuance comes with payload, when defending a
+> demo pick is arguably more important than a sniper pick. and when
+> attacking a sniper pick is generally better"
+
+**Most of this is already built, and unused.** `weights.default.toml` has a
+layered `victim_value`: general, then `[victim_value.defending]`, then
+`[victim_value.map.<map>]`, then `[victim_value.map.<map>.defending]`, with
+lookup running most specific first. Side is resolved through the
+`[attack_defend]` map list. What is missing is narrow:
+
+1. **A per-mode layer.** There is per-map and per-side but no per-gamemode,
+   which is what "on KOTH" means. Either add `[victim_value.koth]` or accept
+   that KOTH is a map prefix and use the existing per-map layer with a
+   prefix match, which it already does.
+2. **Numbers to put in it.** `hl situation --victims` (Q4) already prints
+   what killing each class was worth per mode. It has not been read for the
+   Demo/Sniper question specifically.
+3. **A side cut in that measurement.** `victim_worth` splits by mode, not by
+   whether the victim was attacking or defending. The raw log has every kill
+   with its round, and `[attack_defend]` says which side was which, so this
+   is an extra dimension on a table that already exists.
+
+**Say the likely outcome first.** Q4 measured this family of adjustments and
+found `hl validate` cannot feel them: the Medic's KOTH premium is the
+largest effect in the whole victim table (+10.7% against a +6.2% average)
+and applying it cost 0.4 points of accuracy. Because the rating is a
+percentile against the pool, a multiplier that applies to every Sniper on
+payload only moves payload games relative to other maps -- it does not
+change who was the better Sniper in the game you are reading. So the honest
+expectation is that zaag is describing something true about TF2 that the
+rating is structurally unable to reward. Worth measuring, worth writing
+down, and probably not worth applying.
+
+---
+
+## 20. Spychecking (Q27, zaag)
+
+> "number of spy hits when he is fully cloaked and not blinking / on fire...
+> This should also have a slight cooldown to prevent repetitive hits (like
+> when tracking with pistol/shotgun/minigun) from counting as multiple
+> spychecks"
+
+**The blocker, stated before the design: cloak is not in any log.** logs.tf
+and the raw server log record a damage event with attacker, victim, weapon
+and time, and nothing whatever about whether the victim was cloaked. It is a
+player condition, and the only place conditions exist is a demo. The aim
+pass already reads one of them -- `PlayerCondition::Zoomed`, for scoped
+share -- so the mechanism is proven; the coverage is the problem.
+
+**Coverage is the whole decision.** An STV demo carries every player's
+conditions. There are **4 STV demos against 749 rated matches**. A component
+that exists for half a percent of the pool cannot be in the rating: the
+percentile it would be scored against would be built from almost nobody.
+
+So the shape this takes is not a rating component:
+
+- **A match-page stat** where a demo exists, beside the aim numbers. "Six
+  spychecks" is interesting on its own and needs no pool.
+- **A rating component only if STV coverage becomes normal**, which would
+  mean downloading an STV for every match -- and Q23 is about deleting
+  those, so the two need deciding together.
+
+**The spike, before anything else.** Confirm `tf-demo-parser` exposes the
+cloak condition at all, and that it distinguishes fully cloaked from
+blinking. Count spychecks in one STV by hand against the demo. If the number
+is not sane, nothing else matters.
+
+**The rules, once the data is confirmed.** A spycheck is a damage event on a
+Spy who is cloaked, not blinking (no recent damage of his own), and not on
+fire (`PlayerCondition::OnFire`, already the same enum). Cooldown per
+attacker per Spy, about two seconds, so a minigun held on a cloaked Spy is
+one spycheck and not thirty -- zaag's own correction, and the difference
+between measuring a read and measuring a fire rate.

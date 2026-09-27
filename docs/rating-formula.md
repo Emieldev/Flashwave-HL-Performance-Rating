@@ -1,6 +1,6 @@
 # How the Flashwave.tf rating works
 
-**Model v7. Written to be argued with** — if something here is wrong about
+**Model v8. Written to be argued with** — if something here is wrong about
 how Highlander is played, it is wrong in the app too, and the numbers in it
 are the place to say so.
 
@@ -100,7 +100,8 @@ less. No other state adjustment survived testing.
 | `untraded` | share of *your* kills the enemy did not trade back | % of kills |
 | `opening` | first kills of a fight, minus first deaths | net per 10 min |
 | `fight_kast_engaged` | share of fights with a kill, assist, survival or traded death | % of fights |
-| `caps` | points/cart captured | per 10 min |
+| `fight_swing_shared` | the win chance a kill added, shared with everyone who damaged the victim in the 5 s before | win % per 10 min |
+| `caps_contested` | each capture weighted by the enemies alive to stop it (0-9) | defenders per 10 min |
 | `heal`, `ubers`, `drops` | Medic's own numbers (drops lower better) | per min / per 10 min |
 | `backstabs` | Spy | per 10 min |
 | `duel` | kills on the enemy Sniper minus deaths to them | per 10 min |
@@ -150,7 +151,7 @@ but because deaths, untraded deaths and valued kills already contain them.
 | deaths | 0.20 |
 | untraded_deaths | 0.15 |
 | medic_picks | 0.05 |
-| caps | 0.05 |
+| caps_contested | 0.05 |
 | untraded | 0.05 |
 
 **Why:** assists as heavy as kills — he arrives first, takes someone to half
@@ -177,7 +178,7 @@ class-shaped survived the fit, and nothing was added to make it look fuller.
 | deaths | 0.20 |
 | untraded_deaths | 0.20 |
 | impact_kills | 0.15 |
-| caps | 0.15 |
+| caps_contested | 0.15 |
 | medic_picks | 0.05 |
 | situation_kills | 0.05 |
 
@@ -192,7 +193,7 @@ the push comes.
 | | |
 |---|---:|
 | deaths | 0.30 |
-| impact_kills | 0.15 |
+| fight_swing_shared | 0.15 |
 | fight_kast_engaged | 0.15 |
 | medic_picks | 0.10 |
 | untraded_deaths | 0.10 |
@@ -204,6 +205,14 @@ the push comes.
 measured by whether it went his team's way, not by whether he got the kill.
 Deaths to flankers because a Demoman who dies to the flank leaves his team
 with no damage for ten seconds.
+
+**Changed in v8:** impact kills gave way to the fight swing *shared* with
+whoever damaged the victim in the five seconds before. A Demo's kills
+usually finish what someone else's damage started, and crediting the last
+shot alone undersold the rest of the team. 76.8% -> 77.3% of winners picked,
+72.1% -> 73.0% held out. The same swap was tried for Engineer, Heavy and
+Soldier and made each of them worse, so it is Demoman only.
+
 
 ### Heavy — 76.8% (was 72.0%)
 
@@ -228,7 +237,7 @@ Heavy takes half a minute to matter again.
 |---|---:|
 | impact_kills | 0.20 |
 | impact_assists | 0.20 |
-| caps | 0.20 |
+| caps_contested | 0.20 |
 | untraded_deaths | 0.20 |
 | deaths | 0.10 |
 | opening | 0.05 |
@@ -252,7 +261,7 @@ an Engineer.
 | ubers | 0.15 |
 | untraded_deaths | 0.15 |
 | drops | 0.10 |
-| caps | 0.10 |
+| caps_contested | 0.10 |
 | impact_assists | 0.10 |
 
 **Why, and this one overrules the data on purpose.** Left alone the fit gives
@@ -316,9 +325,19 @@ Points where a Highlander player's judgement beats the maths:
 2. **The defending-Engineer 1.6** — proposed, never validated.
 3. **Engineer and Pyro** are measured almost entirely by proxies. Are the
    proxies the right ones?
-4. **Caps are not weighted by what they cost.** Sitting on the cart after a
-   wipe currently counts the same as capping into a live defence. Known, and
-   queued.
+4. **Caps are now weighted by what they cost (v8).** Each capture counts
+   the enemies who were alive to stop it, so walking onto a wiped point adds
+   nothing and taking one into a full defence adds nine. Swapped in for the
+   flat count at the same weight in all four models that use caps, and never
+   worse on the full sample or the held-out one: scout +0.1/+0.5, pyro
+   +0.1/+2.0, engineer +0.8/+1.0, medic +0.3/+0.0. The gains are small; the
+   case for it is that it fixes a named unfairness without costing anything.
+   **Two things for a reviewer.** It needs the raw server log, so the ~200
+   oldest logs that only exist on logs.tf lose the component rather than
+   keep a flat count. And the *class* half of the original suggestion --
+   that a Pyro's cap should count less than a Soldier's -- did not survive
+   measurement: split by mode, every class's captures are worth the same
+   within a few points.
 5. **Clean-up discount** only applies at 3+ up. Should being *down* players
    make a kill worth more?
 6. **Everything is fitted against "did their team win"**, which is
@@ -329,6 +348,6 @@ Points where a Highlander player's judgement beats the maths:
 
 ---
 
-*Generated from model v7. Weights live in
+*Generated from model v8. Weights live in
 `crates/hl-rating/src/weights.default.toml`, which carries the same
 reasoning inline and can be edited without rebuilding the app.*

@@ -5,6 +5,7 @@ import { errorMessage, type PlayerHit } from "../../api/types";
 import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import "./players.css";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * Look other people up (Q14).
@@ -36,14 +37,12 @@ export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
   return (
     <div className="content players">
       <div className="panel">
-        <h2>Look someone up</h2>
-        <p className="hint" style={{ marginTop: 6 }}>
-          Anyone from your stored matches. Name or Steam ID.
-        </p>
+        <h2>{t("Look someone up")}</h2>
+        <p className="hint" style={{ marginTop: 6 }}>{t("Anyone from your stored matches. Name or Steam ID.")}</p>
         <input
           className="player-search"
           value={query}
-          placeholder="A name, or 76561198… / [U:1:…]"
+          placeholder={t("A name, or 76561198… / [U:1:…]")}
           onChange={(e) => {
             setQuery(e.target.value);
             setPicked(null);
@@ -74,7 +73,7 @@ function Results({
   if (hits.length === 0) {
     return (
       <p className="hint" style={{ marginTop: 14 }}>
-        {loading ? "Looking…" : "Nobody by that name has played in your matches."}
+        {loading ? t("Looking…") : t("Nobody by that name has played in your matches.")}
       </p>
     );
   }
@@ -90,8 +89,7 @@ function Results({
           {h.topClass ? <ClassIcon cls={h.topClass} size={22} /> : <span style={{ width: 22 }} />}
           <span className="ph-name">{h.name}</span>
           <span className="ph-meta muted">
-            {h.games} game{h.games === 1 ? "" : "s"}
-            {h.lastSeen !== null && ` · last ${formatDate(h.lastSeen, true)}`}
+            {tx("{games} game{1}{2}", { "1": h.games === 1 ? "" : "s", "2": h.lastSeen !== null && t(" · last {0}", { "0": formatDate(h.lastSeen, true) }), games: h.games })}
           </span>
         </button>
       ))}
@@ -108,7 +106,7 @@ function PlayerCard({ accountId, onOpenMatch }: { accountId: number; onOpenMatch
     placeholderData: keepPreviousData,
   });
 
-  if (q.isPending) return <div className="panel"><p className="hint">Loading…</p></div>;
+  if (q.isPending) return <div className="panel"><p className="hint">{t("Loading…")}</p></div>;
   if (q.isError) return <div className="panel"><p className="error">{errorMessage(q.error)}</p></div>;
 
   const { summary: s, profile } = q.data!;
@@ -121,38 +119,30 @@ function PlayerCard({ accountId, onOpenMatch }: { accountId: number; onOpenMatch
           <div>
             <h2>{s.name}</h2>
             <p className="hint">
-              {s.games} game{s.games === 1 ? "" : "s"} in your matches
-              {s.firstSeen !== null && s.lastSeen !== null && (
-                <>
-                  , {formatDate(s.firstSeen, true)} to {formatDate(s.lastSeen, true)}
+              {tx("{games} game{1} in your matches{2}", { "1": s.games === 1 ? "" : "s", "2": s.firstSeen !== null && s.lastSeen !== null && (
+                <>{tx(", {0} to {1}", { "0": formatDate(s.firstSeen, true), "1": formatDate(s.lastSeen, true) })}
                 </>
-              )}
+              ), games: s.games })}
             </p>
             {s.alsoKnownAs.length > 0 && (
-              <p className="hint muted">Also as {s.alsoKnownAs.join(", ")}</p>
+              <p className="hint muted">{tx("Also as {0}", { "0": s.alsoKnownAs.join(", ") })}</p>
             )}
           </div>
           <div className="pl-ids">
-            <a href={`https://logs.tf/profile/${s.steamid64}`} target="_blank" rel="noreferrer">
-              logs.tf ↗
-            </a>
-            <a href={`https://steamcommunity.com/profiles/${s.steamid64}`} target="_blank" rel="noreferrer">
-              Steam ↗
-            </a>
+            <a href={`https://logs.tf/profile/${s.steamid64}`} target="_blank" rel="noreferrer">{t("logs.tf ↗")}</a>
+            <a href={`https://steamcommunity.com/profiles/${s.steamid64}`} target="_blank" rel="noreferrer">{t("Steam ↗")}</a>
           </div>
         </div>
 
         <dl className="kv pl-met">
-          <dt>On your team</dt>
+          <dt>{t("On your team")}</dt>
           <dd>{s.withYou}</dd>
-          <dt>Against you</dt>
+          <dt>{t("Against you")}</dt>
           <dd>
             {s.againstYou}
             {s.againstYou > 0 && (
               <span className="muted">
-                {" "}
-                · {s.youBeatThem}–{s.theyBeatYou} to you
-              </span>
+                {tx("{0}· {youBeatThem}–{theyBeatYou} to you", { "0": " ", youBeatThem: s.youBeatThem, theyBeatYou: s.theyBeatYou })}</span>
             )}
           </dd>
         </dl>
@@ -185,13 +175,10 @@ function PlayerCard({ accountId, onOpenMatch }: { accountId: number; onOpenMatch
           <h2>
             {capitalize(shown ?? "")} · {rating(profile.careerAvg)}
           </h2>
-          <p className="hint" style={{ marginTop: 6 }}>
-            Over {profile.games} rated game{profile.games === 1 ? "" : "s"}
-            {profile.winRate !== null && `, ${profile.winRate.toFixed(0)}% won`}.
-          </p>
+          <p className="hint" style={{ marginTop: 6 }}>{tx("Over {games} rated game{1}{2}.", { "1": profile.games === 1 ? "" : "s", "2": profile.winRate !== null && t(", {0}% won", { "0": profile.winRate.toFixed(0) }), games: profile.games })}</p>
           <div className="pl-lists">
-            <GameList title="Their best" games={profile.best} onOpen={onOpenMatch} />
-            <GameList title="Their worst" games={profile.worst} onOpen={onOpenMatch} />
+            <GameList title={t("Their best")} games={profile.best} onOpen={onOpenMatch} />
+            <GameList title={t("Their worst")} games={profile.worst} onOpen={onOpenMatch} />
           </div>
         </div>
       )}
@@ -215,7 +202,7 @@ function GameList({
       {games.map((g) => (
         <button key={g.logId} className="pl-game" onClick={() => onOpen(g.logId)}>
           <span className="pl-game-rating">{rating(g.score)}</span>
-          <span className="pl-game-map">{splitMap(g.map ?? "").name ?? "unknown"}</span>
+          <span className="pl-game-map">{splitMap(g.map ?? "").name ?? t("unknown")}</span>
           <span className="muted">{g.playedAt === null ? "" : formatDate(g.playedAt, true)}</span>
         </button>
       ))}

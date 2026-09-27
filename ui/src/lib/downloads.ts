@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { api } from "../api/client";
+import type { StvStage } from "../api/types";
 
 /**
  * Demo downloads, tracked app-wide rather than by the panel that started
@@ -24,6 +25,11 @@ export interface Download {
   error?: string;
   /** Set when it finished, so a card can be dismissed on its own terms. */
   finishedAt?: number;
+  /**
+   * What the backend is doing now the file is down: linking it, reading it,
+   * keeping it, saving. Absent while the bytes are still arriving.
+   */
+  stage?: StvStage;
 }
 
 let downloads: Download[] = [];
@@ -55,7 +61,8 @@ export function watchDownloads() {
     // so only the wait is worth showing.
     onQueued: (q) =>
       put(q.logId, q.position === 0 ? { state: "running", position: 0 } : { state: "queued", position: q.position }),
-    onProgress: (p) => put(p.logId, { bytes: p.bytes, total: p.total, state: "running" }),
+    onProgress: (p) => put(p.logId, { bytes: p.bytes, total: p.total, state: "running", stage: undefined }),
+    onStage: (s) => put(s.logId, { stage: s, state: "running" }),
     onDone: (d) => put(d.logId, { state: "done", finishedAt: Date.now(), bytes: d.bytes }),
     onError: (e) => put(e.logId, { state: "failed", error: e.message, finishedAt: Date.now() }),
   });

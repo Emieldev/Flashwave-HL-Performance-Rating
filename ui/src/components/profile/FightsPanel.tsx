@@ -1,5 +1,6 @@
 import type { FightLine, FightsCard } from "../../api/types";
-import { capitalize } from "../../lib/format";
+import { t, tx } from "../../lib/i18n";
+import { classLabel } from "../analysis/common";
 
 /**
  * Your kills in context against the players you face on the class: who opens
@@ -10,26 +11,24 @@ export function FightsPanel({ card, cls }: { card: FightsCard; cls: string }) {
   return (
     <section className="panel fights-panel">
       <header>
-        <h2>Fights</h2>
-        <p className="hint">
-          Your {card.games} games against {card.poolGames.toLocaleString()} by the {capitalize(cls)}s you have faced.
-        </p>
+        <h2>{t("Fights")}</h2>
+        <p className="hint">{tx("Your {games} games against {1} by the {2}s you have faced.", { "1": card.poolGames.toLocaleString(), "2": classLabel(cls), games: card.games })}</p>
       </header>
       <div className="table-wrap">
         <table className="match-table fights-card">
           <thead>
             <tr>
               <th />
-              <th className="num">You</th>
-              <th className="num">Players you face</th>
+              <th className="num">{t("You")}</th>
+              <th className="num">{t("Players you face")}</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {card.lines.map((l) => (
-              <tr key={l.label} title={l.hint}>
+              <tr key={l.label} title={t(l.hint)}>
                 <td>
-                  {l.label} <span className="muted">· {l.unit}</span>
+                  {t(l.label)} <span className="muted">· {t(l.unit)}</span>
                 </td>
                 <td className="num">{fmt(l, l.you)}</td>
                 <td className="num muted">{fmt(l, l.pool)}</td>
@@ -56,11 +55,10 @@ function fmt(l: FightLine, v: number | null): string {
 function Verdict({ l }: { l: FightLine }) {
   if (l.you === null || l.pool === null || l.better === 0 || l.pool === 0) return null;
   const rel = (l.you - l.pool) / Math.abs(l.pool);
-  if (Math.abs(rel) < 0.05) return <span className="muted">about the same</span>;
+  if (Math.abs(rel) < 0.05) return <span className="muted">{t("about the same")}</span>;
   const good = rel * l.better > 0;
   return (
     <span className={good ? "verdict good" : "verdict bad"}>
-      {good ? "▲ better" : "▼ worse"} by {Math.round(Math.abs(rel) * 100)}%
-    </span>
+      {tx("{0} by {1}%", { "0": good ? t("▲ better") : t("▼ worse"), "1": Math.round(Math.abs(rel) * 100) })}</span>
   );
 }

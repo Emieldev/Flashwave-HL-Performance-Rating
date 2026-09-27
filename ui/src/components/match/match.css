@@ -1299,43 +1299,55 @@
   max-width: 320px;
 }
 
-/* Players up/down and uber advantage, per round, on the lanes' own axis. */
-.round-state {
-  display: grid;
-  grid-template-columns: var(--lane-label-w, 54px) 1fr;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 6px;
+/* The kill-by-kill timeline's game state under each round's lanes: players
+   up or down, both ubers, the advantage. Inside the lanes grid, so it shares
+   their width and time axis exactly; its row labels sit in the lane-label
+   column beside US / YOU / THEM. */
+.round,
+.round:last-child {
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: start;
 }
 
-.rst-label {
-  font-size: 0.72rem;
-  color: var(--faint);
-  text-align: right;
+.round-lanes {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  grid-template-columns: 74px minmax(0, 1fr);
 }
 
-.rst-track {
+.round-stats {
+  grid-column: 1;
+}
+
+.ss-lane-labels {
   position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--sunken);
-  overflow: hidden;
+  align-self: start;
+  margin-top: 12px;
 }
 
-.rst-track span {
+.ss-lane-labels > span {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.6rem;
+  color: var(--faint);
 }
 
-.rst-up {
-  background: var(--kill);
+.round-strip {
+  position: relative;
+  margin-top: 8px;
+  min-width: 0;
 }
 
-.rst-down {
-  background: var(--death);
+.round-strip .ss svg {
+  display: block;
+  cursor: crosshair;
 }
 
-.rst-even {
-  background: transparent;
+.round-strip-tip {
+  top: calc(100% + 4px);
+  width: 250px;
+  z-index: 5;
 }

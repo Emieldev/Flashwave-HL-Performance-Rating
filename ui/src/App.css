@@ -121,6 +121,15 @@
   flex: 1;
 }
 
+/* Only text fields stretch. A checkbox given flex: 1 grows to fill the row,
+   draws its box in the middle of that space and pushes its label to the far
+   side. */
+.row > input[type="checkbox"],
+.row > input[type="radio"] {
+  flex: none;
+  margin: 0;
+}
+
 .notes {
   margin: 0;
   padding-left: 18px;
@@ -993,7 +1002,169 @@ th.num {
   color: var(--bad);
 }
 
+/* Settings › Updates and › Changelog. */
+.update-status {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-status .hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-status .dl-bar {
+  max-width: 360px;
+}
+
+.changelog {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.changelog-entry {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.changelog-entry > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.md {
+  margin-top: 8px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 78ch;
+}
+
+.md-h {
+  margin: 14px 0 4px;
+  font-size: 0.92rem;
+}
+
+.md-p {
+  margin: 6px 0;
+}
+
+.md-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.md-list li {
+  margin: 3px 0;
+}
+
+.md-code {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+
+/* The steps after a demo's download: a tick for done, a spinner for the one
+   under way, a hollow ring for what is still to come. */
+.dl-steps {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.82rem;
+}
+
+.dl-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dl-step.todo {
+  color: var(--faint);
+}
+
+.dl-step.done {
+  color: var(--muted);
+}
+
+.dl-step.now {
+  color: var(--text);
+}
+
+.dl-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* A detail line can start with a lowercase phrase ("your recording, 1 of 2")
+   that is also used mid-sentence; capitalised here, in every language. */
+.dl-step-body > .dl-sub::first-letter {
+  text-transform: uppercase;
+}
+
+.dl-mark {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.dl-step.done .dl-mark::before {
+  content: "✓";
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.dl-step.todo .dl-mark::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--faint);
+}
+
+.spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--text-rgb), 0.18);
+  border-top-color: var(--accent);
+  animation: hl-spin 0.8s linear infinite;
+}
+
+@keyframes hl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+
 .dl-bar {
+  display: block;
   height: 6px;
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.35);

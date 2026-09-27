@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { setPeriod, usePeriod } from "../lib/period";
+import { locale, t as tr } from "../lib/i18n";
 
 /** A day as the date input wants it, `YYYY-MM-DD`, from unix seconds (UTC). */
 const toInput = (t: number | null) =>
@@ -16,7 +17,7 @@ const fromInput = (v: string, end: boolean) => {
 };
 
 const shortDate = (t: number) =>
-  new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  new Date(t * 1000).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /**
  * All time, one season, or two dates of your choosing. Seasons come from
@@ -33,7 +34,7 @@ export function PeriodPicker() {
   return (
     <div className="period-picker">
       <label className="period-field">
-        <span className="an-label">Period</span>
+        <span className="an-label">{tr("Period")}</span>
         <select
           value={value}
           onChange={(e) => {
@@ -46,18 +47,18 @@ export function PeriodPicker() {
             }
           }}
         >
-          <option value="all">All time</option>
+          <option value="all">{tr("All time")}</option>
           {list.length > 0 && (
             <optgroup label="Seasons">
               {list.map((s) => (
                 <option key={s.key} value={`s:${s.key}`}>
                   {s.name}
-                  {s.ongoing ? " (now)" : ""}
+                  {s.ongoing ? tr(" (now)") : ""}
                 </option>
               ))}
             </optgroup>
           )}
-          <option value="custom">Custom dates…</option>
+          <option value="custom">{tr("Custom dates…")}</option>
         </select>
       </label>
       {period.kind === "season" && (
@@ -69,11 +70,11 @@ export function PeriodPicker() {
         <span className="period-dates">
           <input
             type="date"
-            aria-label="From"
+            aria-label={tr("From")}
             value={toInput(period.from)}
             onChange={(e) => setPeriod({ ...period, from: fromInput(e.target.value, false) })}
           />
-          <span className="hint">to</span>
+          <span className="hint">{tr("to")}</span>
           <input
             type="date"
             aria-label="To"

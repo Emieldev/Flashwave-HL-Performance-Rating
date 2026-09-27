@@ -46,6 +46,21 @@ pub struct ClockRow {
     pub upload_delay_s: i64,
 }
 
+/// One demo the app downloaded, for the cleanup panel (PLAN Q23).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadedDemo {
+    pub demo_id: i64,
+    pub file_name: String,
+    pub size_bytes: i64,
+    pub map: Option<String>,
+    pub start_utc: Option<f64>,
+    /// Matches this demo is linked to, and whether every one of them has
+    /// been read at the current pass version.
+    pub logs: i64,
+    pub read: bool,
+}
+
 /// A demo linked to a log, with what the match page needs to jump into it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +81,10 @@ pub struct LinkedDemo {
     pub filename_time: Option<String>,
     pub method: String,
     pub log_share: f64,
+    /// The file has been deleted to save space (PLAN Q23), but the row and
+    /// everything derived from it remain. Only a demo the app downloaded
+    /// reaches this state, so it can always be fetched again.
+    pub deleted: bool,
     /// `(tick, name, value)` markers from the sidecar.
     #[serde(skip)]
     pub events: Vec<(i64, String, Option<String>)>,
@@ -79,6 +98,11 @@ pub struct DemoStats {
     pub stv: i64,
     pub markers: i64,
     pub matches_with_demo: i64,
+    /// Demos kept as timelines (Q3), what they take up, and how many of
+    /// them no longer have their file.
+    pub timelines: i64,
+    pub timeline_bytes: i64,
+    pub timelines_file_gone: i64,
 }
 
 impl Db {
@@ -145,6 +169,9 @@ impl Db {
                 start_utc = COALESCE(excluded.start_utc, demo.start_utc),
                 filename_time = excluded.filename_time,
                 demos_tf_id = COALESCE(excluded.demos_tf_id, demo.demos_tf_id),
+                -- A file being indexed is a file on disk: a demo that was
+                -- deleted and has been downloaded again is no longer gone.
+                deleted_at = NULL,
                 indexed_at = datetime('now')
              RETURNING demo_id",
         )
@@ -182,25 +209,124 @@ impl Db {
     }
 
     /// Forget demos whose files are gone. Returns how many were removed.
+    /// Forget demos that are no longer on disk -- except the ones the app
+    /// downloaded, which are marked gone instead (PLAN Q23).
+    ///
+    /// The difference matters because `demos_tf_id` is the only way back. A
+    /// demo we fetched and then deleted, by hand or by the cleanup, can be
+    /// fetched again from that id; dropping the row throws the id away and
+    /// the match silently reverts to having no demo. Everything derived
+    /// from it -- aim, deaths, routes -- stays either way: it was derived
+    /// once and the file has no further say in it.
+    ///
+    /// A demo with a stored timeline (Q3) is marked gone too, whoever put it
+    /// there: the timeline is everything the file held, and dropping the row
+    /// would cut it off from the matches it belongs to.
     pub async fn prune_demos(&self, keep_paths: &[String]) -> Result<u64> {
-        let existing: Vec<(i64, String)> = sqlx::query("SELECT demo_id, path FROM demo")
-            .fetch_all(self.pool())
-            .await?
-            .into_iter()
-            .map(|r| (r.get("demo_id"), r.get("path")))
-            .collect();
+        let existing: Vec<(i64, String, Option<i64>)> =
+            sqlx::query(
+                "SELECT d.demo_id, d.path,
+                        COALESCE(d.demos_tf_id, (SELECT -1 FROM demo_timeline t WHERE t.demo_id = d.demo_id)) AS demos_tf_id
+                 FROM demo d WHERE d.deleted_at IS NULL",
+            )
+                .fetch_all(self.pool())
+                .await?
+                .into_iter()
+                .map(|r| (r.get("demo_id"), r.get("path"), r.get("demos_tf_id")))
+                .collect();
         let keep: std::collections::HashSet<&str> = keep_paths.iter().map(String::as_str).collect();
         let mut removed = 0;
-        for (id, path) in existing {
-            if !keep.contains(path.as_str()) {
-                for t in ["demo_link", "demo_event", "demo"] {
-                    sqlx::query(&format!("DELETE FROM {t} WHERE demo_id = ?1")).bind(id).execute(self.pool()).await?;
-                }
-                removed += 1;
+        for (id, path, demos_tf_id) in existing {
+            if keep.contains(path.as_str()) {
+                continue;
             }
+            // Fetchable again, or kept as a timeline: marked, not dropped.
+            if demos_tf_id.is_some() {
+                sqlx::query("UPDATE demo SET deleted_at = unixepoch() WHERE demo_id = ?1")
+                    .bind(id)
+                    .execute(self.pool())
+                    .await?;
+                continue;
+            }
+            for t in ["demo_link", "demo_event", "demo"] {
+                sqlx::query(&format!("DELETE FROM {t} WHERE demo_id = ?1")).bind(id).execute(self.pool()).await?;
+            }
+            removed += 1;
         }
         Ok(removed)
     }
+
+    /// The demos the app downloaded and still holds on disk, newest first.
+    ///
+    /// Only these may be deleted to reclaim space (PLAN Q23): the app put
+    /// them there and `demos_tf_id` can fetch them again. A POV demo is the
+    /// player's own recording and is never listed here, and neither is an
+    /// STV they had before the app existed -- no id, no way back.
+    ///
+    /// `read` says every log this demo is linked to has been read at the
+    /// current pass version, which is what "finished with it" means.
+    ///
+    /// Also, since Q3, its timeline kept at `timeline_version`: the file may
+    /// only go once everything it holds has been recorded.
+    pub async fn downloaded_demos(&self, aim_version: i64, timeline_version: i64) -> Result<Vec<DownloadedDemo>> {
+        let rows = sqlx::query(
+            "SELECT d.demo_id, d.file_name, d.size_bytes, d.map, d.start_utc,
+                    (SELECT COUNT(*) FROM demo_link l WHERE l.demo_id = d.demo_id) AS logs,
+                    CASE WHEN EXISTS (SELECT 1 FROM demo_timeline t
+                                       WHERE t.demo_id = d.demo_id AND t.version >= ?2)
+                         THEN (SELECT COUNT(*) FROM demo_link l
+                                WHERE l.demo_id = d.demo_id
+                                  AND EXISTS (SELECT 1 FROM aim_log a
+                                               WHERE a.log_id = l.log_id AND a.version = ?1))
+                         ELSE 0 END AS logs_read
+             FROM demo d
+             WHERE d.demos_tf_id IS NOT NULL AND d.deleted_at IS NULL
+             ORDER BY d.start_utc DESC",
+        )
+        .bind(aim_version)
+        .bind(timeline_version)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let logs: i64 = r.get("logs");
+                let logs_read: i64 = r.get("logs_read");
+                DownloadedDemo {
+                    demo_id: r.get("demo_id"),
+                    file_name: r.get("file_name"),
+                    size_bytes: r.get("size_bytes"),
+                    map: r.get("map"),
+                    start_utc: r.get("start_utc"),
+                    logs,
+                    // A demo linked to nothing has been read for nothing, so
+                    // it is not "finished with" -- it is unused.
+                    read: logs > 0 && logs_read == logs,
+                }
+            })
+            .collect())
+    }
+
+    /// Where a demo's file is, and whether it is already marked gone.
+    pub async fn demo_path(&self, demo_id: i64) -> Result<Option<(String, bool)>> {
+        Ok(sqlx::query("SELECT path, deleted_at FROM demo WHERE demo_id = ?1")
+            .bind(demo_id)
+            .fetch_optional(self.pool())
+            .await?
+            .map(|r| (r.get("path"), r.get::<Option<i64>, _>("deleted_at").is_some())))
+    }
+
+    /// Mark one demo's file as deleted. The row stays: it holds the
+    /// demos.tf id this demo can be fetched back from.
+    pub async fn mark_demo_deleted(&self, demo_id: i64) -> Result<()> {
+        sqlx::query("UPDATE demo SET deleted_at = unixepoch() WHERE demo_id = ?1")
+            .bind(demo_id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
+
+
 
     /// Every kept log that has rounds, with what its clock needs.
     pub async fn clock_inputs(&self) -> Result<Vec<ClockInput>> {
@@ -328,7 +454,7 @@ impl Db {
     pub async fn demos_for_log(&self, log_id: i64) -> Result<Vec<LinkedDemo>> {
         let rows = sqlx::query(
             "SELECT d.demo_id, d.path, d.file_name, d.playdemo_arg, d.kind, d.recorder, d.size_bytes,
-                    d.playback_s, d.ticks, d.tick_rate, d.start_utc, d.filename_time,
+                    d.playback_s, d.ticks, d.tick_rate, d.start_utc, d.filename_time, d.deleted_at,
                     l.method, l.log_share
              FROM demo_link l JOIN demo d ON d.demo_id = l.demo_id
              WHERE l.log_id = ?1
@@ -363,6 +489,7 @@ impl Db {
                 filename_time: r.get("filename_time"),
                 method: r.get("method"),
                 log_share: r.get("log_share"),
+                deleted: r.get::<Option<i64>, _>("deleted_at").is_some(),
                 events,
             });
         }
@@ -379,6 +506,12 @@ impl Db {
             stv: q("SELECT COUNT(*) FROM demo WHERE kind = 'stv'").await?,
             markers: q("SELECT COUNT(*) FROM demo_event").await?,
             matches_with_demo: q("SELECT COUNT(DISTINCT log_id) FROM demo_link").await?,
+            timelines: q("SELECT COUNT(*) FROM demo_timeline").await?,
+            timeline_bytes: q("SELECT COALESCE(SUM(stored_bytes), 0) FROM demo_timeline").await?,
+            timelines_file_gone: q(
+                "SELECT COUNT(*) FROM demo_timeline t JOIN demo d ON d.demo_id = t.demo_id WHERE d.deleted_at IS NOT NULL",
+            )
+            .await?,
         })
     }
 }

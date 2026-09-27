@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLayoutEffect, useState } from "react";
+import { STATE_ROWS, STRIP_H, StateStrip } from "../analysis/StateStrip";
+import { StateLine } from "../analysis/TimelineChart";
 import { api } from "../../api/client";
 import type { Analysis, EventRow, Jump, MatchDetail, RoundRow, Team } from "../../api/types";
 import { copy } from "../../lib/toast";
 import { clock, teamLabel } from "../../lib/format";
+import { t as tr, tx } from "../../lib/i18n";
 
 /**
  * Every round on its own track, with caps, ubers, drops and medic deaths
@@ -24,10 +28,8 @@ export function RoundTimeline({ d }: { d: MatchDetail }) {
   if (d.rounds.length === 0) {
     return (
       <section className="panel">
-        <h2>Rounds</h2>
-        <p className="hint" style={{ marginTop: 6 }}>
-          This log has no round data.
-        </p>
+        <h2>{tr("Rounds")}</h2>
+        <p className="hint" style={{ marginTop: 6 }}>{tr("This log has no round data.")}</p>
       </section>
     );
   }
@@ -43,18 +45,16 @@ export function RoundTimeline({ d }: { d: MatchDetail }) {
   const hasMine = d.rounds.some((r) => r.events.some((e) => MINE.has(e.kind)));
   const won = d.rounds.filter((r) => r.winner === left).length;
   const lost = d.rounds.filter((r) => r.winner === right).length;
-  const leftName = us ? "Us" : teamLabel(left);
-  const rightName = us ? "Them" : teamLabel(right);
+  const leftName = us ? tr("Us") : teamLabel(left);
+  const rightName = us ? tr("Them") : teamLabel(right);
 
   return (
     <section className="panel rounds">
       <header className="rounds-head">
         <div>
-          <h2>Rounds</h2>
+          <h2>{tr("Rounds")}</h2>
           <p className="hint" style={{ marginTop: 4 }}>
-            {us ? `You won ${won} of ${d.rounds.length} rounds.` : `${teamLabel(left)} ${won}, ${teamLabel(right)} ${lost}.`}{" "}
-            Each round has a lane per team: that team&apos;s caps and ubers, and its Medic going down.
-            {anySwapped && " Sides swap between stopwatch halves; colours follow the team, not the side."}
+            {tx("{0}{1}Each round has a lane per team: that team's caps and ubers, and its Medic going down.{2}", { "0": us ? tr("You won {won} of {rounds} rounds.", { won: won, rounds: d.rounds.length }) : `${teamLabel(left)} ${won}, ${teamLabel(right)} ${lost}.`, "1": " ", "2": anySwapped && tr(" Sides swap between stopwatch halves; colours follow the team, not the side.") })}
           </p>
         </div>
         <Legend jumps={hasJumps} mine={hasMine} />
@@ -102,7 +102,7 @@ function Round(props: {
     events.filter((e) => !MINE.has(e.kind) && (e.team === team || (team === right && e.team === null)));
   const mine = events.filter((e) => MINE.has(e.kind));
 
-  const result = r.winner === null ? "–" : !us ? `${teamLabel(r.winner)}` : r.winner === left ? "Won" : "Lost";
+  const result = r.winner === null ? "–" : !us ? `${teamLabel(r.winner)}` : r.winner === left ? tr("Won") : tr("Lost");
   const resultClass = r.winner === null || !us ? "round-result" : r.winner === left ? "round-result result-W" : "round-result result-L";
 
   // The colour the left team actually wore this round.
@@ -119,7 +119,7 @@ function Round(props: {
         {r.jump ? (
           <button
             className="round-num jumpable"
-            title={`Copy demo_gototick ${r.jump.tick} (round start)`}
+            title={tr("Copy demo_gototick {tick} (round start)", { tick: r.jump.tick })}
             onClick={() => jumpTo(r.jump!, `round ${r.roundNum} start`, demoName)}
           >
             R{r.roundNum}
@@ -131,7 +131,7 @@ function Round(props: {
         <span className="round-sub">
           {clock(r.lengthS)}
           {us && (
-            <span className={`wore wore-${leftWore.toLowerCase()}`} title={r.coloursSwapped ? "Sides swapped this half" : undefined}>
+            <span className={`wore wore-${leftWore.toLowerCase()}`} title={r.coloursSwapped ? tr("Sides swapped this half") : undefined}>
               {teamLabel(leftWore)}
             </span>
           )}
@@ -143,7 +143,7 @@ function Round(props: {
         <div className={`lane lane-team lane-${left.toLowerCase()}`}>{markers(lane(left))}</div>
         {showMine && (
           <>
-            <span className="lane-label">You</span>
+            <span className="lane-label">{tr("You")}</span>
             <div className="lane lane-mine">{markers(mine)}</div>
           </>
         )}
@@ -154,16 +154,15 @@ function Round(props: {
             <span key={t} className="tick" style={{ left: `${(t / len) * 100}%` }} />
           ))}
         </div>
+        {a && <RoundStrip a={a} roundNum={r.roundNum} len={len} mine={myTeam ?? left} />}
       </div>
-
-      <RoundState r={r} a={a} mine={myTeam ?? left} />
 
       <div className="round-stats">
         <StatRow label="Kills" a={stat(left, r.redKills, r.blueKills)} b={stat(right, r.redKills, r.blueKills)} left={left} right={right} />
         <StatRow label="Ubers" a={stat(left, r.redUbers, r.blueUbers)} b={stat(right, r.redUbers, r.blueUbers)} left={left} right={right} />
         {r.firstcap && (
           <div className="rs-row">
-            <span className="rs-label">First cap</span>
+            <span className="rs-label">{tr("First cap")}</span>
             <span className={`team-${r.firstcap.toLowerCase()}`}>{names[r.firstcap === left ? 0 : 1]}</span>
           </div>
         )}
@@ -173,78 +172,71 @@ function Round(props: {
 }
 
 /**
- * Who held the uber and who was up players, for one round.
- *
- * The same two facts the kill-by-kill timeline shows under its chart, but
- * per round and next to the caps they explain — a round lost while a player
- * down for most of it reads very differently from one lost even.
+ * The kill-by-kill timeline's game state, under one round's lanes: players up
+ * or down, each side's uber building, used and ready, and who holds the
+ * advantage. On the lanes' own time axis, so an uber pop sits directly under
+ * its marker and a round lost a player down for most of it reads as that.
  *
  * The state series is one sample a game second, laid out with the rounds end
- * to end, so a round is the slice between its own start and end.
+ * to end, so a round is the slice from its own start.
  */
-function RoundState({ r, a, mine }: { r: RoundRow; a: Analysis | null; mine: Team }) {
-  if (!a) return null;
-  const span = a.rounds.find((x) => x.roundNum === r.roundNum);
+function RoundStrip({ a, roundNum, len, mine }: { a: Analysis; roundNum: number; len: number; mine: Team }) {
+  // A callback ref, not `useRef`: the box can appear after the first render
+  // (the round's span arrives with the analysis), and the watcher has to
+  // attach to it whenever it does.
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  const [hoverT, setHoverT] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!el) return;
+    // A ResizeObserver reports the size once as soon as it starts watching,
+    // so this also takes the first measurement.
+    const ro = new ResizeObserver(([e]) => setWidth(Math.floor(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+
+  const span = a.rounds.find((x) => x.roundNum === roundNum);
   if (!span || span.endS <= span.startS) return null;
-
-  const red = mine === "Red";
-  const s = a.state;
-  const from = Math.max(0, Math.floor(span.startS));
-  const to = Math.min(s.advantage.length, Math.ceil(span.endS));
-  if (to <= from) return null;
-
-  const width = (n: number) => `${(n / (to - from)) * 100}%`;
-  const at = (i: number) => `${((i - from) / (to - from)) * 100}%`;
-
-  // Runs of the same value, so a strip is a few boxes rather than hundreds.
-  const runs = (pick: (i: number) => number) => {
-    const out: Array<{ v: number; i: number; n: number }> = [];
-    for (let i = from; i < to; i++) {
-      const v = pick(i);
-      const last = out[out.length - 1];
-      if (last && last.v === v) last.n += 1;
-      else out.push({ v, i, n: 1 });
-    }
-    return out;
-  };
-
-  const numbers = runs((i) => {
-    const ours = (red ? s.redAlive : s.blueAlive)[i] ?? 0;
-    const theirs = (red ? s.blueAlive : s.redAlive)[i] ?? 0;
-    return Math.sign(ours - theirs);
-  });
-  const adv = runs((i) => {
-    const v = s.advantage[i] ?? 0;
-    return red ? v : -v;
-  });
-
-  const upFor = numbers.filter((x) => x.v > 0).reduce((n, x) => n + x.n, 0);
-  const downFor = numbers.filter((x) => x.v < 0).reduce((n, x) => n + x.n, 0);
-  const pct = (n: number) => Math.round((n / (to - from)) * 100);
+  const t0 = span.startS;
+  // The lanes' scale, so markers above and state below line up.
+  const t1 = span.startS + len;
+  const x = (t: number) => ((t - t0) / (t1 - t0)) * width;
 
   return (
-    <div className="round-state" title={`Up a player ${pct(upFor)}% of the round, down ${pct(downFor)}%`}>
-      <span className="rst-label">Players</span>
-      <div className="rst-track">
-        {numbers.map((x) => (
-          <span
-            key={`n${x.i}`}
-            className={x.v > 0 ? "rst-up" : x.v < 0 ? "rst-down" : "rst-even"}
-            style={{ left: at(x.i), width: width(x.n) }}
-          />
+    <>
+      <span className="lane-label ss-lane-labels" style={{ height: STRIP_H }}>
+        {STATE_ROWS.map((r) => (
+          <span key={r.label} style={{ top: r.top, height: r.height }}>
+            {tr(r.label)}
+          </span>
         ))}
-      </div>
-      <span className="rst-label">Uber</span>
-      <div className="rst-track">
-        {adv.map((x) => (
-          <span
-            key={`a${x.i}`}
-            className={x.v > 0 ? "rst-up" : x.v < 0 ? "rst-down" : "rst-even"}
-            style={{ left: at(x.i), width: width(x.n) }}
+      </span>
+      <div className="round-strip" ref={setEl}>
+        {width > 0 && (
+          <StateStrip
+            a={a}
+            mine={mine}
+            t0={t0}
+            t1={t1}
+            x={x}
+            left={0}
+            plotW={width}
+            width={width}
+            hoverT={hoverT}
+            onHover={setHoverT}
+            labels={false}
+            summary={false}
           />
-        ))}
+        )}
+        {hoverT !== null && (
+          <div className="tl-tip round-strip-tip" style={{ left: Math.min(Math.max(0, width - 260), x(hoverT) + 10) }}>
+            <div className="tip-meta">{clock(hoverT - t0)}</div>
+            <StateLine a={a} mine={mine} t={hoverT} />
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -285,7 +277,7 @@ function Marker(props: {
         <span
           className={`mk mk-mine mk-my-kill${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — you killed ${e.player ?? "?"}${e.value ? ` (${e.value})` : ""}${hint}`}
+          title={tr("{at} — you killed {1}{2}{hint}", { "1": e.player ?? "?", "2": e.value ? ` (${e.value})` : "", at: at, hint: tr(hint) })}
           {...act}
         />
       );
@@ -294,7 +286,7 @@ function Marker(props: {
         <span
           className={`mk mk-mine mk-my-death${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — ${e.killer ?? "?"} killed you${e.value ? ` (${e.value})` : ""}${hint}`}
+          title={tr("{at} — {1} killed you{2}{hint}", { "1": e.killer ?? "?", "2": e.value ? ` (${e.value})` : "", at: at, hint: tr(hint) })}
           {...act}
         />
       );
@@ -303,7 +295,7 @@ function Marker(props: {
         <span
           className={`mk mk-streak${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — killstreak of ${e.value ?? "?"} (from your demo)${hint}`}
+          title={tr("{at} — killstreak of {1} (from your demo){hint}", { "1": e.value ?? "?", at: at, hint: tr(hint) })}
           {...act}
         >
           {e.value ?? "K"}
@@ -314,7 +306,7 @@ function Marker(props: {
         <span
           className={`mk mk-cap team-bg-${team}${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — ${who} cap${e.point !== null ? `, point ${e.point}` : ""}${hint}`}
+          title={tr("{at} — {who} cap{2}{hint}", { "2": e.point !== null ? tr(", point {0}", { "0": e.point }) : "", at: at, who: who, hint: tr(hint) })}
           {...act}
         />
       );
@@ -323,7 +315,7 @@ function Marker(props: {
         <span
           className={`mk mk-uber team-border-${team}${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — ${who} uber${e.medigun && e.medigun !== "medigun" ? ` (${e.medigun})` : ""}${e.player ? `, ${e.player}` : ""}${hint}`}
+          title={tr("{at} — {who} uber{2}{3}{hint}", { "2": e.medigun && e.medigun !== "medigun" ? ` (${e.medigun})` : "", "3": e.player ? `, ${e.player}` : "", at: at, who: who, hint: tr(hint) })}
           {...act}
         >
           U
@@ -334,7 +326,7 @@ function Marker(props: {
         <span
           className={`mk mk-drop${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — ${who} drop: ${e.player ?? "medic"} died with uber ready${hint}`}
+          title={tr("{at} — {who} drop: {2} died with uber ready{hint}", { "2": e.player ?? "medic", at: at, who: who, hint: tr(hint) })}
           {...act}
         >
           D
@@ -345,7 +337,7 @@ function Marker(props: {
         <span
           className={`mk mk-pick ${e.killerIsMe ? "by-me" : ""} team-border-${team}${jumpCls}`}
           style={{ left: pos }}
-          title={`${at} — ${who} Medic ${e.player ?? ""} killed${e.killer ? ` by ${e.killer}` : ""}${e.killerIsMe ? " (you)" : ""}${hint}`}
+          title={tr("{at} — {who} Medic {2} killed{3}{4}{hint}", { "2": e.player ?? "", "3": e.killer ? tr(" by {0}", { "0": e.killer }) : "", "4": e.killerIsMe ? tr(" (you)") : "", at: at, who: who, hint: tr(hint) })}
           {...act}
         >
           ✚
@@ -361,7 +353,7 @@ function StatRow(props: { label: string; a: number | null; b: number | null; lef
   if (a === null && b === null) return null;
   return (
     <div className="rs-row">
-      <span className="rs-label">{label}</span>
+      <span className="rs-label">{tr(label)}</span>
       <span>
         <strong className={`team-${left.toLowerCase()}`}>{a ?? "–"}</strong>
         <span className="sep"> – </span>
@@ -379,35 +371,27 @@ function jumpTo(j: Jump, what: string, demoName: (j: Jump) => string | undefined
 function Legend({ jumps, mine }: { jumps: boolean; mine: boolean }) {
   return (
     <div className="legend">
-      {jumps && <span className="legend-note">click any marker to copy its tick</span>}
+      {jumps && <span className="legend-note">{tr("click any marker to copy its tick")}</span>}
       <span>
-        <span className="mk-demo mk-cap team-bg-none" /> cap
-      </span>
+        {tx("{0} cap", { "0": <span className="mk-demo mk-cap team-bg-none" /> })}</span>
       <span>
-        <span className="mk-demo mk-uber">U</span> uber
-      </span>
+        {tx("{0} uber", { "0": <span className="mk-demo mk-uber">U</span> })}</span>
       <span>
-        <span className="mk-demo mk-drop">D</span> drop
-      </span>
+        {tx("{0} drop", { "0": <span className="mk-demo mk-drop">D</span> })}</span>
       <span>
-        <span className="mk-demo mk-pick">✚</span> Medic down
-      </span>
+        {tx("{0} Medic down", { "0": <span className="mk-demo mk-pick">✚</span> })}</span>
       <span>
-        <span className="mk-demo mk-pick by-me">✚</span> killed by you
-      </span>
+        {tx("{0} killed by you", { "0": <span className="mk-demo mk-pick by-me">✚</span> })}</span>
       {jumps && (
         <span>
-          <span className="mk-demo mk-streak">4</span> your killstreak
-        </span>
+          {tx("{0} your killstreak", { "0": <span className="mk-demo mk-streak">4</span> })}</span>
       )}
       {mine && (
         <>
           <span>
-            <span className="mk-demo mk-mine mk-my-kill" /> your kill
-          </span>
+            {tx("{0} your kill", { "0": <span className="mk-demo mk-mine mk-my-kill" /> })}</span>
           <span>
-            <span className="mk-demo mk-mine mk-my-death" /> your death
-          </span>
+            {tx("{0} your death", { "0": <span className="mk-demo mk-mine mk-my-death" /> })}</span>
         </>
       )}
     </div>

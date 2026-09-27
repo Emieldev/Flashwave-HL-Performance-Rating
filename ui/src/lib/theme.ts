@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { k } from "./i18n";
 
 /**
  * The colour theme (Q10, function's ask).
@@ -13,10 +14,10 @@ import { useSyncExternalStore } from "react";
  */
 
 export const THEMES = [
-  { id: "gravel", name: "Gravel", hint: "TF2's browns and the game's orange" },
-  { id: "dustbowl", name: "Dustbowl", hint: "hotter and sandier, the desert maps" },
-  { id: "coldfront", name: "Coldfront", hint: "slate and ice, the winter maps" },
-  { id: "swiftwater", name: "Swiftwater", hint: "mossy green, the one that is neither" },
+  { id: "gravel", name: "Gravel", hint: k("TF2's browns and the game's orange") },
+  { id: "dustbowl", name: "Dustbowl", hint: k("hotter and sandier, the desert maps") },
+  { id: "coldfront", name: "Coldfront", hint: k("slate and ice, the winter maps") },
+  { id: "swiftwater", name: "Swiftwater", hint: k("mossy green, the one that is neither") },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

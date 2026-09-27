@@ -1,0 +1,958 @@
+//! A demo, kept (Q3).
+//!
+//! Every pass that reads a demo -- aim, deaths, routes, spychecks -- asks its
+//! own question of the file and keeps only the answer. The next question means
+//! reading the file again, and a demo deleted to save space (Q23) can never be
+//! asked anything new. A timeline is the other way round: one pass records
+//! what the demo holds, compactly, and later questions are answered from the
+//! record without the file.
+//!
+//! What is kept:
+//!
+//! - **Samples**, every `stride` ticks, for every player alive and carried by
+//!   the demo: position and view angles. This is the bulk, so it is stored as
+//!   per-player deltas (a few bytes a sample) and deflated.
+//! - **Changes**, at the exact tick they happen: health, class, team, alive,
+//!   carried (`in_pvs`), the full condition bits (scoped, cloaked, ubered...),
+//!   Medic charge, medigun and heal target, Spy cloak and disguise. State that
+//!   changes rarely costs nothing between changes, and nothing is sampled away.
+//! - **Objects**, on change: the payload cart's position and every building's
+//!   level, health, state and place.
+//! - **Events**: every game event the demo carried (hurts, deaths, captures,
+//!   spawns, charges), exactly as the parser decoded them.
+//!
+//! Time is one counter, `t`, that keeps counting when the demo's own tick
+//! restarts (a recording holding two matches). `seams` maps it back: each is
+//! `(t, tick)` where a stretch starts, so `tick = seam.tick + (t - seam.t)`.
+
+use crate::deep::{Conds, DeepAnalyser};
+use anyhow::{bail, Context, Result};
+use flate2::read::DeflateDecoder;
+use flate2::write::DeflateEncoder;
+use flate2::Compression;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use tf_demo_parser::demo::data::game_state::{Building, PlayerClassData, PlayerState};
+// What a timeline's readers need to ask it questions, without depending on
+// the parser themselves.
+pub use tf_demo_parser::demo::data::game_state::PlayerCondition;
+pub use tf_demo_parser::demo::gamevent::GameEvent;
+
+/// Bump when what is recorded, or how, changes: stored timelines below it
+/// are recorded again the next time their demo is read.
+pub const TIMELINE_VERSION: i64 = 1;
+
+/// Ticks between samples: every one. Measured on three demos (PLAN §14b):
+/// recomputing "a second before" from a timeline matched the demo to 0.05°
+/// on average at every tick, and drifted to 1-2° with outliers past 100° at
+/// every second or fourth, for a saving of a quarter to a half of 2-3 MB. The
+/// questions still to come -- reaction time, flicks -- live in exactly those
+/// ticks.
+pub const DEFAULT_STRIDE: u32 = 1;
+
+/// A player, once per demo however many times they reconnected.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Person {
+    pub steamid: String,
+    pub name: String,
+}
+
+/// One sample of where a player stood and looked.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sample {
+    pub t: u32,
+    /// Map units, rounded to the unit.
+    pub pos: [f32; 3],
+    /// Degrees, to within 0.006.
+    pub yaw: f32,
+    /// Degrees, positive looking down, to within 0.01.
+    pub pitch: f32,
+}
+
+/// One piece of a player's state, from tick `t` until the next change of the
+/// same kind.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Field {
+    Health(u16),
+    MaxHealth(u16),
+    /// `tf_demo_parser`'s class number: 1 Scout ... 9 Engineer.
+    Class(u8),
+    /// 2 RED, 3 BLU.
+    Team(u8),
+    Alive(bool),
+    /// Whether the demo is carrying this player: always for an STV, only in
+    /// view for a POV demo's other players.
+    Here(bool),
+    Conds(Conds),
+    /// Uber percentage.
+    Charge(u8),
+    Medigun(u8),
+    /// Slot of the player being healed.
+    HealTarget(Option<u16>),
+    /// Spy cloak, percent.
+    Cloak(u8),
+    DisguiseClass(u8),
+    DisguiseTeam(u8),
+}
+
+impl Field {
+    fn kind(&self) -> u8 {
+        match self {
+            Field::Health(_) => 0,
+            Field::MaxHealth(_) => 1,
+            Field::Class(_) => 2,
+            Field::Team(_) => 3,
+            Field::Alive(_) => 4,
+            Field::Here(_) => 5,
+            Field::Conds(_) => 6,
+            Field::Charge(_) => 7,
+            Field::Medigun(_) => 8,
+            Field::HealTarget(_) => 9,
+            Field::Cloak(_) => 10,
+            Field::DisguiseClass(_) => 11,
+            Field::DisguiseTeam(_) => 12,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Change {
+    pub t: u32,
+    pub field: Field,
+}
+
+/// Everything recorded about one player.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Track {
+    pub samples: Vec<Sample>,
+    pub changes: Vec<Change>,
+}
+
+/// A cart or a building, as it stood from `t` until its next row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ObjectRow {
+    pub t: u32,
+    /// The demo's entity index: the same object across rows.
+    pub entity: u32,
+    /// "cart", "sentry", "dispenser", "teleporter", or "gone".
+    pub kind: String,
+    pub pos: [i32; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builder: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<u16>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub building: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sapped: bool,
+}
+
+/// A demo, decoded from what was stored.
+#[derive(Debug, Clone, Default)]
+pub struct Timeline {
+    pub version: i64,
+    pub tick_rate: f64,
+    pub stride: u32,
+    /// `(t, tick)` where each stretch of the demo's own ticks starts.
+    pub seams: Vec<(u32, u32)>,
+    /// Slot `i` is `people[i]`.
+    pub people: Vec<Person>,
+    pub tracks: Vec<Track>,
+    /// The demo's user ids, which events use, to slots.
+    pub user_ids: Vec<(u16, u16)>,
+    pub objects: Vec<ObjectRow>,
+    pub events: Vec<(u32, GameEvent)>,
+}
+
+impl Timeline {
+    pub fn slot_of(&self, steamid: &str) -> Option<usize> {
+        self.people.iter().position(|p| p.steamid == steamid)
+    }
+
+    pub fn slot_of_user(&self, user_id: u16) -> Option<usize> {
+        self.user_ids.iter().find(|(u, _)| *u == user_id).map(|(_, s)| usize::from(*s))
+    }
+
+    /// The demo's own tick for `t`.
+    pub fn tick_of(&self, t: u32) -> u32 {
+        let seam = self.seams.iter().rev().find(|(st, _)| *st <= t).copied().unwrap_or((0, 0));
+        seam.1 + (t - seam.0)
+    }
+
+    /// `t` for the demo's own `tick`, in the stretch that holds it. A tick
+    /// that two stretches both hold (a demo with a restart) resolves to the
+    /// first; pass the stretch explicitly with [`Timeline::t_in`] when that
+    /// matters.
+    pub fn t_of(&self, tick: u32) -> Option<u32> {
+        (0..self.seams.len()).find_map(|i| self.t_in(i, tick))
+    }
+
+    pub fn t_in(&self, stretch: usize, tick: u32) -> Option<u32> {
+        let (st, sk) = *self.seams.get(stretch)?;
+        let end = self.seams.get(stretch + 1).map(|(t, _)| *t).unwrap_or(u32::MAX);
+        let t = st.checked_add(tick.checked_sub(sk)?)?;
+        (t < end).then_some(t)
+    }
+
+    /// The last change of `kind`'s sort at or before `t`, for `slot`.
+    pub fn at(&self, slot: usize, t: u32, kind: fn(&Field) -> bool) -> Option<Field> {
+        let changes = &self.tracks.get(slot)?.changes;
+        let end = changes.partition_point(|c| c.t <= t);
+        changes[..end].iter().rev().find(|c| kind(&c.field)).map(|c| c.field)
+    }
+
+    /// The sample nearest `t` for `slot`, if one is within `within` ticks.
+    pub fn sample_near(&self, slot: usize, t: u32, within: u32) -> Option<Sample> {
+        let s = &self.tracks.get(slot)?.samples;
+        let i = s.partition_point(|x| x.t < t);
+        [i.checked_sub(1), Some(i)]
+            .into_iter()
+            .flatten()
+            .filter_map(|j| s.get(j))
+            .filter(|x| x.t.abs_diff(t) <= within)
+            .min_by_key(|x| x.t.abs_diff(t))
+            .copied()
+    }
+}
+
+/// The stored form: what goes in the `demo_timeline` row.
+#[derive(Debug, Clone, Default)]
+pub struct Stored {
+    pub version: i64,
+    pub tick_rate: f64,
+    pub stride: u32,
+    /// JSON: people, user ids and seams. Small, and readable in the database.
+    pub head: String,
+    /// Deflated.
+    pub samples: Vec<u8>,
+    pub changes: Vec<u8>,
+    pub objects: Vec<u8>,
+    pub events: Vec<u8>,
+    /// What the four blobs came to before deflating, for the Settings count.
+    pub raw_bytes: usize,
+}
+
+impl Stored {
+    pub fn stored_bytes(&self) -> usize {
+        self.head.len() + self.samples.len() + self.changes.len() + self.objects.len() + self.events.len()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Head {
+    people: Vec<Person>,
+    user_ids: Vec<(u16, u16)>,
+    seams: Vec<(u32, u32)>,
+}
+
+// ---- Recording ------------------------------------------------------------
+
+/// Builds a [`Timeline`] one tick at a time, from inside a pass that is
+/// already walking the demo.
+pub struct Recorder {
+    stride: u32,
+    tick_rate: f64,
+    t: u32,
+    /// The demo tick seen last, to spot a restart.
+    last_tick: Option<u32>,
+    seams: Vec<(u32, u32)>,
+    people: Vec<Person>,
+    slots: HashMap<String, u16>,
+    user_ids: HashMap<u16, u16>,
+    tracks: Vec<Track>,
+    /// The last value of each field kind per slot, to record only changes.
+    last: Vec<[Option<Field>; 13]>,
+    events_done: usize,
+    events: Vec<(u32, GameEvent)>,
+    objects: Vec<ObjectRow>,
+    object_last: HashMap<u32, ObjectRow>,
+}
+
+impl Recorder {
+    pub fn new(stride: u32, tick_rate: f64) -> Self {
+        Recorder {
+            stride: stride.max(1),
+            tick_rate,
+            t: 0,
+            last_tick: None,
+            seams: Vec::new(),
+            people: Vec::new(),
+            slots: HashMap::new(),
+            user_ids: HashMap::new(),
+            tracks: Vec::new(),
+            last: Vec::new(),
+            events_done: 0,
+            events: Vec::new(),
+            objects: Vec::new(),
+            object_last: HashMap::new(),
+        }
+    }
+
+    fn slot(&mut self, steamid: &str, name: &str) -> u16 {
+        if let Some(&s) = self.slots.get(steamid) {
+            return s;
+        }
+        let s = self.people.len() as u16;
+        self.people.push(Person { steamid: steamid.to_string(), name: name.to_string() });
+        self.slots.insert(steamid.to_string(), s);
+        self.tracks.push(Track::default());
+        self.last.push([None; 13]);
+        s
+    }
+
+    fn set(&mut self, slot: u16, field: Field) {
+        let i = usize::from(slot);
+        let k = usize::from(field.kind());
+        if self.last[i][k] != Some(field) {
+            self.last[i][k] = Some(field);
+            self.tracks[i].changes.push(Change { t: self.t, field });
+        }
+    }
+
+    /// Record the tick the analyser is on. `owner` is a POV demo's recorder,
+    /// who counts as carried whatever `in_pvs` says; empty for an STV.
+    pub fn observe(&mut self, a: &DeepAnalyser, owner: &str) {
+        let state = a.state();
+        let tick = u32::from(state.tick);
+        match self.last_tick {
+            Some(last) if tick == last => return,
+            Some(last) if tick > last => self.t += tick - last,
+            // A restart: a new stretch, `t` moving on by one so no two
+            // stretches share a moment. Except when the stretch before never
+            // got past its first tick -- a demo opens with one sign-on packet
+            // stamped with some unrelated tick before play starts at 1 -- in
+            // which case that stretch was not one and this replaces it.
+            Some(_) => {
+                if self.seams.last().is_some_and(|(st, _)| *st == self.t) {
+                    self.seams.pop();
+                } else {
+                    self.t += 1;
+                }
+                self.seams.push((self.t, tick));
+            }
+            None => self.seams.push((0, tick)),
+        }
+        self.last_tick = Some(tick);
+
+        // Everyone this tick, by entity, to resolve heal targets to slots.
+        let mut by_entity: HashMap<u32, u16> = HashMap::new();
+        let mut rows = Vec::with_capacity(state.players.len());
+        for p in &state.players {
+            let Some(info) = &p.info else { continue };
+            if info.steam_id.is_empty() || info.steam_id == "BOT" {
+                continue;
+            }
+            let slot = self.slot(&info.steam_id, &info.name);
+            self.user_ids.insert(u16::from(info.user_id), slot);
+            by_entity.insert(u32::from(p.entity), slot);
+            rows.push((slot, p));
+        }
+        let sample_now = self.t.is_multiple_of(self.stride);
+        for (slot, p) in rows {
+            let here = p.in_pvs || p.info.as_ref().is_some_and(|i| i.steam_id == owner);
+            let alive = p.state == PlayerState::Alive;
+            self.set(slot, Field::Here(here));
+            self.set(slot, Field::Alive(alive));
+            if !here {
+                // Whatever the demo says about someone it is not carrying is
+                // stale; recording it would only record the staleness.
+                continue;
+            }
+            self.set(slot, Field::Team(p.team as u8));
+            self.set(slot, Field::Class(p.class as u8));
+            self.set(slot, Field::Health(p.health));
+            self.set(slot, Field::MaxHealth(p.max_health));
+            self.set(slot, Field::Conds(a.conds_of(p.entity)));
+            match &p.class_data {
+                PlayerClassData::Medic { charge, medigun, target, .. } => {
+                    self.set(slot, Field::Charge(*charge));
+                    self.set(slot, Field::Medigun(*medigun as u8));
+                    let t = target.and_then(|e| by_entity.get(&u32::from(e)).copied());
+                    self.set(slot, Field::HealTarget(t));
+                }
+                PlayerClassData::Spy { disguise_team, disguise_class, cloak } => {
+                    self.set(slot, Field::Cloak(cloak.clamp(0.0, 100.0).round() as u8));
+                    self.set(slot, Field::DisguiseClass(*disguise_class as u8));
+                    self.set(slot, Field::DisguiseTeam(*disguise_team as u8));
+                }
+                PlayerClassData::None => {}
+            }
+            if sample_now && alive {
+                self.tracks[usize::from(slot)].samples.push(Sample {
+                    t: self.t,
+                    pos: [p.position.x, p.position.y, p.position.z],
+                    yaw: p.view_angle,
+                    pitch: p.pitch_angle,
+                });
+            }
+        }
+
+        for (_, event) in state.events.iter().skip(self.events_done) {
+            self.events.push((self.t, event.clone()));
+        }
+        self.events_done = state.events.len();
+
+        if sample_now {
+            let mut seen = Vec::new();
+            for (entity, objective) in &state.objectives {
+                // The cart is the only objective the parser tracks.
+                let Some(cart) = objective.as_cart() else { continue };
+                let row = ObjectRow {
+                    t: self.t,
+                    entity: u32::from(*entity),
+                    kind: "cart".into(),
+                    pos: round3([cart.position.x, cart.position.y, cart.position.z]),
+                    builder: None,
+                    team: None,
+                    level: None,
+                    health: None,
+                    building: false,
+                    sapped: false,
+                };
+                seen.push(row.entity);
+                self.object(row);
+            }
+            for (entity, b) in &state.buildings {
+                let Some(row) = building_row(self.t, u32::from(*entity), b) else { continue };
+                seen.push(row.entity);
+                self.object(row);
+            }
+            // Anything that was here and is not any more: destroyed, or a
+            // round reset.
+            let gone: Vec<u32> = self
+                .object_last
+                .iter()
+                .filter(|(e, r)| r.kind != "gone" && !seen.contains(e))
+                .map(|(e, _)| *e)
+                .collect();
+            for e in gone {
+                let mut row = self.object_last[&e].clone();
+                row.t = self.t;
+                row.kind = "gone".into();
+                self.object(row);
+            }
+        }
+    }
+
+    fn object(&mut self, row: ObjectRow) {
+        let same = self.object_last.get(&row.entity).is_some_and(|last| {
+            let mut a = last.clone();
+            a.t = row.t;
+            a == row
+        });
+        if !same {
+            self.object_last.insert(row.entity, row.clone());
+            self.objects.push(row);
+        }
+    }
+
+    pub fn finish(self) -> Timeline {
+        let mut user_ids: Vec<(u16, u16)> = self.user_ids.into_iter().collect();
+        user_ids.sort_unstable();
+        Timeline {
+            version: TIMELINE_VERSION,
+            tick_rate: self.tick_rate,
+            stride: self.stride,
+            seams: self.seams,
+            people: self.people,
+            tracks: self.tracks,
+            user_ids,
+            objects: self.objects,
+            events: self.events,
+        }
+    }
+}
+
+fn round3(v: [f32; 3]) -> [i32; 3] {
+    [v[0].round() as i32, v[1].round() as i32, v[2].round() as i32]
+}
+
+fn building_row(t: u32, entity: u32, b: &Building) -> Option<ObjectRow> {
+    let (kind, builder, pos, level, health, team, building, sapped) = match b {
+        Building::Sentry(s) => ("sentry", s.builder, s.position, s.level, s.health, s.team, s.building, s.sapped),
+        Building::Dispenser(d) => ("dispenser", d.builder, d.position, d.level, d.health, d.team, d.building, d.sapped),
+        Building::Teleporter(tp) => ("teleporter", tp.builder, tp.position, tp.level, tp.health, tp.team, tp.building, tp.sapped),
+        // The parser may learn new kinds; until this does, they are skipped.
+        _ => return None,
+    };
+    Some(ObjectRow {
+        t,
+        entity,
+        kind: kind.into(),
+        pos: round3([pos.x, pos.y, pos.z]),
+        builder: Some(u16::from(builder)),
+        team: Some(team as u8),
+        level: Some(level),
+        health: Some(health),
+        building,
+        sapped,
+    })
+}
+
+// ---- Reading -----------------------------------------------------------------
+
+/// A player's whole state at one moment, rebuilt from their changes: what
+/// later passes ask questions of.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Now {
+    pub alive: bool,
+    pub here: bool,
+    pub health: u16,
+    pub max_health: u16,
+    pub class: u8,
+    pub team: u8,
+    pub conds: Conds,
+    pub charge: u8,
+    pub medigun: u8,
+    pub heal_target: Option<u16>,
+    pub cloak: u8,
+    pub disguise_class: u8,
+    pub disguise_team: u8,
+}
+
+impl Now {
+    pub fn apply(&mut self, f: Field) {
+        match f {
+            Field::Health(v) => self.health = v,
+            Field::MaxHealth(v) => self.max_health = v,
+            Field::Class(v) => self.class = v,
+            Field::Team(v) => self.team = v,
+            Field::Alive(v) => self.alive = v,
+            Field::Here(v) => self.here = v,
+            Field::Conds(v) => self.conds = v,
+            Field::Charge(v) => self.charge = v,
+            Field::Medigun(v) => self.medigun = v,
+            Field::HealTarget(v) => self.heal_target = v,
+            Field::Cloak(v) => self.cloak = v,
+            Field::DisguiseClass(v) => self.disguise_class = v,
+            Field::DisguiseTeam(v) => self.disguise_team = v,
+        }
+    }
+
+    /// Whether condition `c` holds (read correctly; see `deep`).
+    pub fn has(&self, c: tf_demo_parser::demo::data::game_state::PlayerCondition) -> bool {
+        crate::deep::has(&self.conds, c)
+    }
+
+    /// Alive and carried by the demo: the only time anything about a player
+    /// is a measurement.
+    pub fn live(&self) -> bool {
+        self.alive && self.here
+    }
+}
+
+impl Timeline {
+    /// The last moment anything was recorded.
+    pub fn end(&self) -> u32 {
+        self.tracks
+            .iter()
+            .flat_map(|tr| tr.changes.last().map(|c| c.t).into_iter().chain(tr.samples.last().map(|s| s.t)))
+            .chain(self.events.last().map(|(t, _)| *t))
+            .chain(self.objects.last().map(|o| o.t))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// `slot`'s demo as stretches of unchanging state, `(from, to, state)`,
+    /// from their first change to [`Timeline::end`]. Every change at one
+    /// moment is applied before the stretch starting there.
+    pub fn stretches(&self, slot: usize) -> Vec<(u32, u32, Now)> {
+        let Some(track) = self.tracks.get(slot) else { return Vec::new() };
+        let changes = &track.changes;
+        let end = self.end();
+        let mut out = Vec::new();
+        let mut now = Now::default();
+        let mut i = 0;
+        while i < changes.len() {
+            let from = changes[i].t;
+            while let Some(c) = changes.get(i).filter(|c| c.t == from) {
+                now.apply(c.field);
+                i += 1;
+            }
+            let to = changes.get(i).map_or(end, |c| c.t);
+            if to > from {
+                out.push((from, to, now));
+            }
+        }
+        out
+    }
+
+    /// Ticks `slot` spent alive, carried, and matching `test`.
+    pub fn ticks_where(&self, slot: usize, test: impl Fn(&Now) -> bool) -> u32 {
+        self.stretches(slot).iter().filter(|(_, _, n)| n.live() && test(n)).map(|(a, b, _)| b - a).sum()
+    }
+
+    /// `slot`'s state at `t`.
+    pub fn now(&self, slot: usize, t: u32) -> Now {
+        let mut now = Now::default();
+        if let Some(track) = self.tracks.get(slot) {
+            for c in track.changes.iter().take_while(|c| c.t <= t) {
+                now.apply(c.field);
+            }
+        }
+        now
+    }
+
+    /// Seconds for a number of ticks.
+    pub fn seconds(&self, ticks: u32) -> f64 {
+        f64::from(ticks) / self.tick_rate.max(1.0)
+    }
+}
+
+// ---- Encoding -------------------------------------------------------------
+
+fn put_var(out: &mut Vec<u8>, mut v: u64) {
+    loop {
+        let b = (v & 0x7f) as u8;
+        v >>= 7;
+        if v == 0 {
+            out.push(b);
+            return;
+        }
+        out.push(b | 0x80);
+    }
+}
+
+fn put_zig(out: &mut Vec<u8>, v: i64) {
+    put_var(out, ((v << 1) ^ (v >> 63)) as u64);
+}
+
+struct Cursor<'a> {
+    b: &'a [u8],
+    i: usize,
+}
+
+impl Cursor<'_> {
+    fn var(&mut self) -> Result<u64> {
+        let mut v = 0u64;
+        let mut shift = 0;
+        loop {
+            let Some(&b) = self.b.get(self.i) else { bail!("timeline ended mid-number") };
+            self.i += 1;
+            v |= u64::from(b & 0x7f) << shift;
+            if b & 0x80 == 0 {
+                return Ok(v);
+            }
+            shift += 7;
+            if shift > 63 {
+                bail!("timeline number too long");
+            }
+        }
+    }
+    fn zig(&mut self) -> Result<i64> {
+        let v = self.var()?;
+        Ok(((v >> 1) as i64) ^ -((v & 1) as i64))
+    }
+    fn byte(&mut self) -> Result<u8> {
+        let Some(&b) = self.b.get(self.i) else { bail!("timeline ended mid-record") };
+        self.i += 1;
+        Ok(b)
+    }
+    fn done(&self) -> bool {
+        self.i >= self.b.len()
+    }
+}
+
+// Angles are kept as whole steps: yaw in 1/65536 of a turn, pitch in
+// hundredths of a degree.
+const YAW_STEPS: f32 = 65536.0 / 360.0;
+const PITCH_STEPS: f32 = 100.0;
+
+fn yaw_step(deg: f32) -> i64 {
+    (deg.rem_euclid(360.0) * YAW_STEPS).round() as i64 % 65536
+}
+
+fn deflate(raw: &[u8]) -> Result<Vec<u8>> {
+    let mut e = DeflateEncoder::new(Vec::new(), Compression::default());
+    e.write_all(raw)?;
+    Ok(e.finish()?)
+}
+
+fn inflate(z: &[u8]) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    DeflateDecoder::new(z).read_to_end(&mut out).context("inflating a timeline")?;
+    Ok(out)
+}
+
+impl Timeline {
+    pub fn encode(&self) -> Result<Stored> {
+        // Samples: per player, a count and then deltas from the one before.
+        let mut s = Vec::new();
+        put_var(&mut s, self.tracks.len() as u64);
+        for track in &self.tracks {
+            put_var(&mut s, track.samples.len() as u64);
+            let (mut t, mut p, mut yaw, mut pitch) = (0i64, [0i64; 3], 0i64, 0i64);
+            for x in &track.samples {
+                put_var(&mut s, (i64::from(x.t) - t) as u64);
+                t = i64::from(x.t);
+                for (last, pos) in p.iter_mut().zip(x.pos) {
+                    let v = pos.round() as i64;
+                    put_zig(&mut s, v - *last);
+                    *last = v;
+                }
+                let y = yaw_step(x.yaw);
+                // The short way round, so turning through 0 is a small step.
+                let mut dy = y - yaw;
+                if dy > 32768 {
+                    dy -= 65536;
+                } else if dy < -32768 {
+                    dy += 65536;
+                }
+                put_zig(&mut s, dy);
+                yaw = y;
+                let pi = (x.pitch * PITCH_STEPS).round() as i64;
+                put_zig(&mut s, pi - pitch);
+                pitch = pi;
+            }
+        }
+
+        // Changes: per player, (dt, kind, value).
+        let mut c = Vec::new();
+        put_var(&mut c, self.tracks.len() as u64);
+        for track in &self.tracks {
+            put_var(&mut c, track.changes.len() as u64);
+            let mut t = 0u32;
+            for ch in &track.changes {
+                put_var(&mut c, u64::from(ch.t - t));
+                t = ch.t;
+                c.push(ch.field.kind());
+                match ch.field {
+                    Field::Health(v) | Field::MaxHealth(v) => put_var(&mut c, u64::from(v)),
+                    Field::Class(v)
+                    | Field::Team(v)
+                    | Field::Charge(v)
+                    | Field::Medigun(v)
+                    | Field::Cloak(v)
+                    | Field::DisguiseClass(v)
+                    | Field::DisguiseTeam(v) => c.push(v),
+                    Field::Alive(v) | Field::Here(v) => c.push(u8::from(v)),
+                    Field::Conds(bits) => c.extend_from_slice(&bits),
+                    Field::HealTarget(v) => put_var(&mut c, v.map_or(0, |s| u64::from(s) + 1)),
+                }
+            }
+        }
+
+        let mut o = Vec::new();
+        for row in &self.objects {
+            serde_json::to_writer(&mut o, row)?;
+            o.push(b'\n');
+        }
+        let mut ev = Vec::new();
+        for (t, e) in &self.events {
+            write!(ev, "{t}\t")?;
+            serde_json::to_writer(&mut ev, e)?;
+            ev.push(b'\n');
+        }
+
+        let head = serde_json::to_string(&Head {
+            people: self.people.clone(),
+            user_ids: self.user_ids.clone(),
+            seams: self.seams.clone(),
+        })?;
+        Ok(Stored {
+            version: self.version,
+            tick_rate: self.tick_rate,
+            stride: self.stride,
+            raw_bytes: s.len() + c.len() + o.len() + ev.len(),
+            head,
+            samples: deflate(&s)?,
+            changes: deflate(&c)?,
+            objects: deflate(&o)?,
+            events: deflate(&ev)?,
+        })
+    }
+
+    pub fn decode(stored: &Stored) -> Result<Timeline> {
+        let head: Head = serde_json::from_str(&stored.head).context("reading a timeline's head")?;
+        let n = head.people.len();
+
+        let raw = inflate(&stored.samples)?;
+        let mut cur = Cursor { b: &raw, i: 0 };
+        let tracks_n = cur.var()? as usize;
+        if tracks_n != n {
+            bail!("timeline has {tracks_n} sample tracks for {n} people");
+        }
+        let mut tracks = vec![Track::default(); n];
+        for track in &mut tracks {
+            let count = cur.var()? as usize;
+            track.samples.reserve(count);
+            let (mut t, mut p, mut yaw, mut pitch) = (0i64, [0i64; 3], 0i64, 0i64);
+            for _ in 0..count {
+                t += cur.var()? as i64;
+                for v in &mut p {
+                    *v += cur.zig()?;
+                }
+                yaw = (yaw + cur.zig()?).rem_euclid(65536);
+                pitch += cur.zig()?;
+                let mut y = yaw as f32 / YAW_STEPS;
+                if y > 180.0 {
+                    y -= 360.0;
+                }
+                track.samples.push(Sample {
+                    t: t as u32,
+                    pos: [p[0] as f32, p[1] as f32, p[2] as f32],
+                    yaw: y,
+                    pitch: pitch as f32 / PITCH_STEPS,
+                });
+            }
+        }
+
+        let raw = inflate(&stored.changes)?;
+        let mut cur = Cursor { b: &raw, i: 0 };
+        if cur.var()? as usize != n {
+            bail!("timeline change tracks do not match its people");
+        }
+        for track in &mut tracks {
+            let count = cur.var()? as usize;
+            track.changes.reserve(count);
+            let mut t = 0u32;
+            for _ in 0..count {
+                t += cur.var()? as u32;
+                let field = match cur.byte()? {
+                    0 => Field::Health(cur.var()? as u16),
+                    1 => Field::MaxHealth(cur.var()? as u16),
+                    2 => Field::Class(cur.byte()?),
+                    3 => Field::Team(cur.byte()?),
+                    4 => Field::Alive(cur.byte()? != 0),
+                    5 => Field::Here(cur.byte()? != 0),
+                    6 => {
+                        let mut bits: Conds = [0; 20];
+                        for b in &mut bits {
+                            *b = cur.byte()?;
+                        }
+                        Field::Conds(bits)
+                    }
+                    7 => Field::Charge(cur.byte()?),
+                    8 => Field::Medigun(cur.byte()?),
+                    9 => Field::HealTarget(cur.var()?.checked_sub(1).map(|s| s as u16)),
+                    10 => Field::Cloak(cur.byte()?),
+                    11 => Field::DisguiseClass(cur.byte()?),
+                    12 => Field::DisguiseTeam(cur.byte()?),
+                    k => bail!("timeline has a change of unknown kind {k}"),
+                };
+                track.changes.push(Change { t, field });
+            }
+        }
+        if !cur.done() {
+            bail!("timeline changes run past their count");
+        }
+
+        let raw = inflate(&stored.objects)?;
+        let objects = raw
+            .split(|&b| b == b'\n')
+            .filter(|l| !l.is_empty())
+            .map(|l| serde_json::from_slice(l).context("reading a timeline object"))
+            .collect::<Result<Vec<ObjectRow>>>()?;
+
+        let raw = inflate(&stored.events)?;
+        let mut events = Vec::new();
+        for line in raw.split(|&b| b == b'\n').filter(|l| !l.is_empty()) {
+            let tab = line.iter().position(|&b| b == b'\t').context("a timeline event without its time")?;
+            let t: u32 = std::str::from_utf8(&line[..tab])?.parse()?;
+            events.push((t, serde_json::from_slice(&line[tab + 1..]).context("reading a timeline event")?));
+        }
+
+        Ok(Timeline {
+            version: stored.version,
+            tick_rate: stored.tick_rate,
+            stride: stored.stride,
+            seams: head.seams,
+            people: head.people,
+            tracks,
+            user_ids: head.user_ids,
+            objects,
+            events,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample(t: u32, x: f32, yaw: f32, pitch: f32) -> Sample {
+        Sample { t, pos: [x, -x, 64.0], yaw, pitch }
+    }
+
+    #[test]
+    fn a_timeline_survives_storing() {
+        let mut bits: Conds = [0; 20];
+        bits[0] = 0b10;
+        let tl = Timeline {
+            version: TIMELINE_VERSION,
+            tick_rate: 66.67,
+            stride: 2,
+            seams: vec![(0, 100), (500, 3)],
+            people: vec![
+                Person { steamid: "[U:1:1]".into(), name: "a".into() },
+                Person { steamid: "[U:1:2]".into(), name: "b".into() },
+            ],
+            tracks: vec![
+                Track {
+                    // Turning through 180/-180 must come back as a small turn.
+                    samples: vec![sample(0, 10.0, 179.0, -10.5), sample(2, 12.0, -179.0, 3.25), sample(510, -4000.0, 0.0, 89.0)],
+                    changes: vec![
+                        Change { t: 0, field: Field::Health(125) },
+                        Change { t: 0, field: Field::Conds(bits) },
+                        Change { t: 4, field: Field::HealTarget(Some(1)) },
+                        Change { t: 9, field: Field::HealTarget(None) },
+                        Change { t: 9, field: Field::Alive(false) },
+                    ],
+                },
+                Track::default(),
+            ],
+            user_ids: vec![(3, 0), (7, 1)],
+            objects: vec![ObjectRow {
+                t: 4,
+                entity: 99,
+                kind: "cart".into(),
+                pos: [1, 2, 3],
+                builder: None,
+                team: None,
+                level: None,
+                health: None,
+                building: false,
+                sapped: false,
+            }],
+            events: vec![],
+        };
+        let back = Timeline::decode(&tl.encode().unwrap()).unwrap();
+        assert_eq!(back.people, tl.people);
+        assert_eq!(back.tracks[0].changes, tl.tracks[0].changes);
+        assert_eq!(back.objects, tl.objects);
+        for (a, b) in back.tracks[0].samples.iter().zip(&tl.tracks[0].samples) {
+            assert_eq!(a.t, b.t);
+            assert_eq!(a.pos, b.pos);
+            assert!((a.yaw - b.yaw).abs() < 0.01, "{} vs {}", a.yaw, b.yaw);
+            assert!((a.pitch - b.pitch).abs() < 0.006);
+        }
+        assert_eq!(back.tick_of(510), 13);
+        assert_eq!(back.t_of(13), Some(510));
+        assert_eq!(back.slot_of_user(7), Some(1));
+    }
+
+    #[test]
+    fn state_is_read_as_of_a_moment() {
+        let tl = Timeline {
+            people: vec![Person { steamid: "x".into(), name: "x".into() }],
+            tracks: vec![Track {
+                samples: vec![],
+                changes: vec![
+                    Change { t: 0, field: Field::Health(150) },
+                    Change { t: 10, field: Field::Health(40) },
+                    Change { t: 20, field: Field::Alive(false) },
+                ],
+            }],
+            ..Timeline::default()
+        };
+        let health = |f: &Field| matches!(f, Field::Health(_));
+        assert_eq!(tl.at(0, 5, health), Some(Field::Health(150)));
+        assert_eq!(tl.at(0, 10, health), Some(Field::Health(40)));
+        assert_eq!(tl.at(0, 25, |f| matches!(f, Field::Alive(_))), Some(Field::Alive(false)));
+    }
+}

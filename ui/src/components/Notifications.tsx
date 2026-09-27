@@ -2,6 +2,7 @@ import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
 import { dismissSync, fractionOf, labelOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
 import { dismissUpdate, installUpdate, restartNow, useUpdate } from "../lib/update";
+import { t, tx } from "../lib/i18n";
 
 /**
  * The corner: everything running in the background, one card each.
@@ -16,7 +17,7 @@ export function Notifications({ onOpenMatch }: { onOpenMatch: (logId: number) =>
   const sync = useSyncStatus();
   const demo = useDemoSeen();
   const update = useUpdate();
-  const quiet = update.state === "idle" || update.state === "checking";
+  const quiet = update.state === "idle" || update.state === "checking" || update.state === "current";
   if (downloads.length === 0 && sync.state === "idle" && !demo && quiet) return null;
 
   return (
@@ -41,7 +42,7 @@ export function Notifications({ onOpenMatch }: { onOpenMatch: (logId: number) =>
  */
 function UpdateCard() {
   const u = useUpdate();
-  if (u.state === "idle" || u.state === "checking") return null;
+  if (u.state === "idle" || u.state === "checking" || u.state === "current") return null;
 
   const pct =
     u.state === "downloading" && u.total ? Math.min(100, (u.got / u.total) * 100) : null;
@@ -50,29 +51,27 @@ function UpdateCard() {
     <div className={u.state === "failed" ? "dl dl-failed" : "dl dl-running"}>
       <div className="dl-head">
         <span className="dl-title">
-          {u.state === "available" && "Update available"}
-          {u.state === "downloading" && "Downloading update"}
-          {u.state === "ready" && "Update ready"}
-          {u.state === "failed" && "Update failed"}
+          {u.state === "available" && t("Update available")}
+          {u.state === "downloading" && t("Downloading update")}
+          {u.state === "ready" && t("Update ready")}
+          {u.state === "failed" && t("Update failed")}
         </span>
-        <button className="dl-close" onClick={() => dismissUpdate()} title="Dismiss">
+        <button className="dl-close" onClick={() => dismissUpdate()} title={t("Dismiss")}>
           ×
         </button>
       </div>
 
       {u.state === "available" && (
         <>
-          <p className="dl-label">Version {u.version}</p>
+          <p className="dl-label">{tx("Version {version}", { version: u.version })}</p>
           {u.notes && <p className="dl-sub up-notes">{u.notes.replace(/\s+/g, " ").slice(0, 160)}</p>}
-          <button className="dl-go" onClick={() => void installUpdate()}>
-            Download and install
-          </button>
+          <button className="dl-go" onClick={() => void installUpdate()}>{t("Download and install")}</button>
         </>
       )}
 
       {u.state === "downloading" && (
         <>
-          <p className="dl-label">Version {u.version}</p>
+          <p className="dl-label">{tx("Version {version}", { version: u.version })}</p>
           <div className="dl-bar" aria-hidden>
             <span
               className={pct === null ? "dl-fill dl-unknown" : "dl-fill"}
@@ -80,18 +79,15 @@ function UpdateCard() {
             />
           </div>
           <p className="dl-sub">
-            {(u.got / 1_000_000).toFixed(0)} MB
-            {u.total ? ` of ${(u.total / 1_000_000).toFixed(0)} MB` : " so far"}
+            {tx("{0} MB{1}", { "0": (u.got / 1_000_000).toFixed(0), "1": u.total ? t(" of {0} MB", { "0": (u.total / 1_000_000).toFixed(0) }) : t(" so far") })}
           </p>
         </>
       )}
 
       {u.state === "ready" && (
         <>
-          <p className="dl-sub">Version {u.version} is installed. Restart to use it.</p>
-          <button className="dl-go" onClick={() => void restartNow()}>
-            Restart now
-          </button>
+          <p className="dl-sub">{tx("Version {version} is installed. Restart to use it.", { version: u.version })}</p>
+          <button className="dl-go" onClick={() => void restartNow()}>{t("Restart now")}</button>
         </>
       )}
 
@@ -111,18 +107,18 @@ function DemoSeenCard() {
   return (
     <div className={gaveUp ? "dl dl-failed" : "dl dl-running"}>
       <div className="dl-head">
-        <span className="dl-title">{gaveUp ? "No log yet" : "New demo"}</span>
-        <button className="dl-close" onClick={() => dismissDemoSeen()} title="Dismiss">
+        <span className="dl-title">{gaveUp ? t("No log yet") : t("New demo")}</span>
+        <button className="dl-close" onClick={() => dismissDemoSeen()} title={t("Dismiss")}>
           ×
         </button>
       </div>
       <p className="dl-label">{d.fileName}</p>
       <p className="dl-sub">
         {gaveUp
-          ? "logs.tf has nothing for this match yet. Press Sync once it is uploaded."
+          ? t("logs.tf has nothing for this match yet. Press Sync once it is uploaded.")
           : d.tries === 1
-            ? "Looking for the log…"
-            : `Still looking — logs.tf can take a minute (try ${d.tries}).`}
+            ? t("Looking for the log…")
+            : t("Still looking — logs.tf can take a minute (try {tries}).", { tries: d.tries })}
       </p>
     </div>
   );
@@ -143,15 +139,15 @@ function SyncCard() {
           {/* A rebuild sends the same events as a sync and only names itself
               at the end, so the phase it is in says which one this is. */}
           {sync.state === "running" &&
-            (sync.progress?.kind === "reprocessing" ? "Rebuilding" : "Syncing")}
-          {done && (sync.result.kind === "reprocess" ? "Rebuilt" : "Sync finished")}
-          {failed && "Sync failed"}
+            (sync.progress?.kind === "reprocessing" ? t("Rebuilding") : t("Syncing"))}
+          {done && (sync.result.kind === "reprocess" ? t("Rebuilt") : t("Sync finished"))}
+          {failed && t("Sync failed")}
         </span>
         {/* A running sync has no close button: stopping it is not something
             this card can do, and a card that hides itself would only make
             the progress harder to find. */}
         {sync.state !== "running" && (
-          <button className="dl-close" onClick={dismissSync} title="Dismiss">
+          <button className="dl-close" onClick={dismissSync} title={t("Dismiss")}>
             ×
           </button>
         )}
@@ -166,19 +162,19 @@ function SyncCard() {
               style={fraction === null ? undefined : { width: `${Math.round(fraction * 100)}%` }}
             />
           </div>
-          {sync.failures > 0 && <p className="dl-sub dl-error">{sync.failures} failed</p>}
+          {sync.failures > 0 && <p className="dl-sub dl-error">{tx("{failures} failed", { failures: sync.failures })}</p>}
         </>
       )}
 
       {done && (
         <p className="dl-sub">
           {sync.result.kind === "reprocess"
-            ? "Every match rebuilt from stored data."
+            ? t("Every match rebuilt from stored data.")
             : sync.result.fetched === 0
-              ? "Up to date — no new matches."
-              : `${sync.result.fetched} new match${sync.result.fetched === 1 ? "" : "es"}, rated and in the list.`}
+              ? t("Up to date — no new matches.")
+              : t("{fetched} new match{1}, rated and in the list.", { "1": sync.result.fetched === 1 ? "" : "es", fetched: sync.result.fetched })}
           {sync.result.failed > 0 && (
-            <span className="dl-error"> {sync.result.failed} failed; next sync retries them.</span>
+            <span className="dl-error"> {tx("{failed} failed; next sync retries them.", { failed: sync.result.failed })}</span>
           )}
         </p>
       )}
@@ -204,54 +200,97 @@ function DownloadCard({ d, onOpenMatch }: { d: Download; onOpenMatch: (logId: nu
     <div className={`dl dl-${d.state}`}>
       <div className="dl-head">
         <span className="dl-title">
-          {d.state === "queued" && "Waiting to download"}
-          {d.state === "running" && "Downloading demo"}
-          {d.state === "done" && "Demo ready"}
-          {d.state === "failed" && "Download failed"}
+          {d.state === "queued" && t("Waiting to download")}
+          {d.state === "running" && (d.stage ? t("Working on the demo") : t("Downloading demo"))}
+          {d.state === "done" && t("Demo ready")}
+          {d.state === "failed" && t("Download failed")}
         </span>
-        <button className="dl-close" onClick={() => dismissDownload(d.logId)} title="Dismiss">
+        <button className="dl-close" onClick={() => dismissDownload(d.logId)} title={t("Dismiss")}>
           ×
         </button>
       </div>
-      <p className="dl-label">{d.label}</p>
+      <p className="dl-label">{t(d.label)}</p>
 
       {d.state === "queued" && (
         <p className="dl-sub">
-          {d.position === 1 ? "Next, once the one before it finishes." : `${d.position ?? 1} ahead of it in the queue.`}
+          {d.position === 1 ? t("Next, once the one before it finishes.") : t("{0} ahead of it in the queue.", { "0": d.position ?? 1 })}
         </p>
       )}
 
-      {d.state === "running" && (
-        <>
-          <div className="dl-bar" aria-hidden>
-            {/* Without a total the server never said how big it is, so the bar
-                slides instead of filling. */}
-            <span className={pct === null ? "dl-fill dl-unknown" : "dl-fill"} style={pct === null ? undefined : { width: `${pct}%` }} />
-          </div>
-          <p className="dl-sub">
-            {mb(d.bytes)}
-            {d.total ? ` of ${mb(d.total)} · ${pct!.toFixed(0)}%` : " so far"}
-          </p>
-        </>
-      )}
+      {d.state === "running" && <DemoSteps d={d} pct={pct} />}
 
       {d.state === "done" && (
         <>
-          <p className="dl-sub">Read and linked: every player&apos;s movement is on the match now.</p>
+          <p className="dl-sub">{t("Read and linked: every player's movement is on the match now.")}</p>
           <button
             className="dl-go"
             onClick={() => {
               onOpenMatch(d.logId);
               dismissDownload(d.logId);
             }}
-          >
-            Open the match
-          </button>
+          >{t("Open the match")}</button>
         </>
       )}
 
-      {d.state === "failed" && <p className="dl-sub dl-error">{d.error ?? "Something went wrong."}</p>}
+      {d.state === "failed" && <p className="dl-sub dl-error">{d.error ?? t("Something went wrong.")}</p>}
     </div>
+  );
+}
+
+/**
+ * Everything between the click and "ready", as a list of steps: the download,
+ * then linking, reading and saving. The last three used to happen behind a
+ * bar stuck at 100%, which read as the app having hung.
+ */
+function DemoSteps({ d, pct }: { d: Download; pct: number | null }) {
+  const s = d.stage;
+  // Which step is under way: the download until the backend says otherwise.
+  const at = !s ? 0 : s.step === "linking" ? 1 : s.step === "saving" ? 3 : 2;
+  const whose = (kind: string | null) => (kind === "pov" ? t("your recording") : t("the server's recording"));
+  const steps: Array<{ label: string; detail?: string; bar?: number | null }> = [
+    {
+      label: at === 0 ? t("Downloading") : t("Downloaded"),
+      detail: at === 0
+        ? mb(d.bytes) + (d.total ? t(" of {0} · {1}%", { "0": mb(d.total), "1": pct!.toFixed(0) }) : t(" so far"))
+        : mb(d.total ?? d.bytes),
+      // Without a total the server never said how big it is, so the bar
+      // slides instead of filling.
+      bar: at === 0 ? pct : undefined,
+    },
+    { label: at > 1 ? t("Linked to its match") : t("Linking it to its match") },
+    {
+      label: at > 2 ? t("Read") : s?.step === "keeping" ? t("Keeping it") : t("Reading the demo"),
+      detail:
+        at !== 2 || !s
+          ? undefined
+          : s.step === "keeping"
+            ? t("Compressing {0} into its timeline", { "0": whose(s.kind) })
+            : (s.of ?? 1) > 1
+              ? t("{0}, {1} of {2} · {3}%", { "0": whose(s.kind), "1": s.demo ?? 1, "2": s.of ?? 1, "3": s.pct ?? 0 })
+              : t("{0} · {1}%", { "0": whose(s.kind), "1": s.pct ?? 0 }),
+      bar: at === 2 && s?.step === "reading" ? s.pct ?? 0 : undefined,
+    },
+    { label: t("Saving aim, deaths and movement") },
+  ];
+  return (
+    <ol className="dl-steps" aria-live="polite">
+      {steps.map((step, i) => (
+        <li key={i} className={i < at ? "dl-step done" : i === at ? "dl-step now" : "dl-step todo"}>
+          <span className="dl-mark" aria-hidden>
+            {i === at && <span className="spin" />}
+          </span>
+          <span className="dl-step-body">
+            <span>{step.label}</span>
+            {i === at && step.detail && <span className="dl-sub">{step.detail}</span>}
+            {i === at && step.bar !== undefined && (
+              <span className="dl-bar" aria-hidden>
+                <span className={step.bar === null ? "dl-fill dl-unknown" : "dl-fill"} style={step.bar === null ? undefined : { width: `${step.bar}%` }} />
+              </span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

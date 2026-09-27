@@ -6,21 +6,24 @@ import { capitalize, splitMap, teamLabel } from "../../lib/format";
 import type { Slice } from "./common";
 import { Aim } from "./Aim";
 import { Fights } from "./Fights";
+import { Teamfights } from "./Teamfights";
 import { KillMap } from "./KillMap";
 import { PlayByPlay } from "./PlayByPlay";
 import { Spread } from "./Spread";
 import { TimelineChart } from "./TimelineChart";
 import "./analysis.css";
+import { t, k } from "../../lib/i18n";
+import { classLabel } from "./common";
 
 type Tab = "map" | "feed" | "fights" | "spread" | "aim" | "timeline";
 
 const TABS: Array<[Tab, string]> = [
-  ["map", "Kill map"],
-  ["feed", "Play-by-play"],
-  ["fights", "Fights"],
-  ["spread", "Damage and kills by class"],
-  ["aim", "Aim"],
-  ["timeline", "Timeline"],
+  ["map", k("Kill map")],
+  ["feed", k("Play-by-play")],
+  ["fights", k("Fights")],
+  ["spread", k("Damage and kills by class")],
+  ["aim", k("Aim")],
+  ["timeline", k("Timeline")],
 ];
 
 /**
@@ -34,12 +37,12 @@ export function AnalysisPanel({ d, onlyRounds }: { d: MatchDetail; onlyRounds?: 
   return (
     <section className="panel analysis">
       <header className="an-head">
-        <h2>Kill by kill</h2>
+        <h2>{t("Kill by kill")}</h2>
       </header>
-      {q.isPending && <p className="hint">Reading the raw log…</p>}
+      {q.isPending && <p className="hint">{t("Reading the raw log…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
       {q.data === null && (
-        <p className="hint">Raw log not stored yet — run a sync.</p>
+        <p className="hint">{t("Raw log not stored yet — run a sync.")}</p>
       )}
       {q.data && (
         <Body
@@ -128,7 +131,7 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
     <>
       <div className="an-filters">
         <label className="an-field">
-          <span className="an-label">Player</span>
+          <span className="an-label">{t("Player")}</span>
           <select value={player} onChange={(e) => setPlayer(Number(e.target.value))}>
             {teams.map((team) =>
               team.length === 0 ? null : (
@@ -136,8 +139,8 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
                   {team.map((p) => (
                     <option key={p.accountId} value={p.accountId}>
                       {p.name}
-                      {p.mainClass ? ` · ${capitalize(p.mainClass)}` : ""}
-                      {p.isMe ? " (you)" : ""}
+                      {p.mainClass ? ` · ${classLabel(p.mainClass)}` : ""}
+                      {p.isMe ? t(" (you)") : ""}
                     </option>
                   ))}
                 </optgroup>
@@ -146,7 +149,7 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
           </select>
         </label>
         {multiMap && !only && (
-          <div className="segmented" role="tablist" aria-label="Map">
+          <div className="segmented" role="tablist" aria-label={t("Map")}>
             <button
               role="tab"
               aria-selected={seg === null}
@@ -155,9 +158,7 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
                 setSeg(null);
                 setRound(null);
               }}
-            >
-              All maps
-            </button>
+            >{t("All maps")}</button>
             {a.segments.map((s, i) => (
               <button
                 key={i}
@@ -168,17 +169,15 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
                   setSeg(i);
                   setRound(null);
                 }}
-                title={s.map ?? "map not known"}
+                title={s.map ?? t("map not known")}
               >
                 {capitalize(splitMap(s.map).name ?? "unknown map")}
               </button>
             ))}
           </div>
         )}
-        <div className="segmented" role="tablist" aria-label="Round">
-          <button role="tab" aria-selected={round === null} className={round === null ? "seg active" : "seg"} onClick={() => setRound(null)}>
-            All rounds
-          </button>
+        <div className="segmented" role="tablist" aria-label={t("Round")}>
+          <button role="tab" aria-selected={round === null} className={round === null ? "seg active" : "seg"} onClick={() => setRound(null)}>{t("All rounds")}</button>
           {roundChoices.map((r) => (
             <button
               key={r.roundNum}
@@ -193,17 +192,23 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
         </div>
       </div>
 
-      <nav className="an-tabs" role="tablist" aria-label="View">
+      <nav className="an-tabs" role="tablist" aria-label={t("View")}>
         {TABS.map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "an-tab active" : "an-tab"} onClick={() => setTab(id)}>
-            {label}
+            {t(label)}
           </button>
         ))}
       </nav>
 
       {tab === "map" && <KillMap a={a} player={player} slice={slice} stv={stv} />}
       {tab === "feed" && <PlayByPlay a={a} player={player} slice={slice} />}
-      {tab === "fights" && <Fights a={a} player={player} slice={slice} onPick={setPlayer} />}
+      {tab === "fights" && (
+        <>
+          <Fights a={a} player={player} slice={slice} onPick={setPlayer} />
+          <h3 className="an-sub">{t("Teamfights")}</h3>
+          <Teamfights a={a} player={player} slice={slice} />
+        </>
+      )}
       {tab === "spread" && <Spread a={a} player={player} slice={slice} />}
       {tab === "aim" && <Aim a={a} logId={a.logId} player={player} slice={slice} onPick={setPlayer} />}
       {tab === "timeline" && <TimelineChart a={a} player={player} slice={slice} onPick={setPlayer} />}

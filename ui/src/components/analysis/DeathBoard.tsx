@@ -1,4 +1,5 @@
 import type { DeathRow } from "../../api/types";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * Where the player who killed you was, seen from above.
@@ -51,9 +52,7 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
 
   return (
     <figure className="aim-fig">
-      <figcaption>
-        Where the player who killed you was
-        <span className="aim-fig-sub">seen from above: you are in the middle, facing up</span>
+      <figcaption>{tx("Where the player who killed you was{0}", { "0": <span className="aim-fig-sub">{t("seen from above: you are in the middle, facing up")}</span> })}
       </figcaption>
 
       <div className="board-wrap">
@@ -61,7 +60,7 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
           viewBox={`0 0 ${S} ${S}`}
           className="aim-board death-board"
           role="img"
-          aria-label={`${behind.length} of ${placed.length} deaths came from outside your view`}
+          aria-label={t("{behind} of {placed} deaths came from outside your view", { behind: behind.length, placed: placed.length })}
         >
           <path d={wedge} className="board-fov" />
           {RINGS.filter((u) => u <= max).map((u) => (
@@ -74,12 +73,8 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
           ))}
           <line x1={c} x2={c} y1={c - R} y2={c + R} className="board-cross" />
           <line x1={c - R} x2={c + R} y1={c} y2={c} className="board-cross" />
-          <text x={c} y={12} className="aim-axis" textAnchor="middle">
-            where you were looking
-          </text>
-          <text x={c} y={S - 3} className="aim-axis" textAnchor="middle">
-            behind you
-          </text>
+          <text x={c} y={12} className="aim-axis" textAnchor="middle">{t("where you were looking")}</text>
+          <text x={c} y={S - 3} className="aim-axis" textAnchor="middle">{t("behind you")}</text>
 
           {placed.map((d) => {
             const [x, y] = place(d);
@@ -87,10 +82,10 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
             return (
               <circle key={d.tick} cx={x} cy={y} r={5} fill={d.scoped ? SCOPED : SEEN} fillOpacity={0.85}>
                 <title>
-                  {turn < 1 ? "straight ahead" : `${turn.toFixed(0)}° to your ${(d.killerDxDeg ?? 0) > 0 ? "right" : "left"}`}
-                  {d.killerRange === null ? ", distance not recorded" : `, ${d.killerRange.toFixed(0)} units away`}
-                  {d.scoped ? ", you were scoped" : ""}
-                  {d.matesNear === 0 ? ", nobody near you" : `, ${d.matesNear} teammate${d.matesNear === 1 ? "" : "s"} near`}
+                  {turn < 1 ? t("straight ahead") : t("{0}° to your {1}", { "0": turn.toFixed(0), "1": (d.killerDxDeg ?? 0) > 0 ? t("right") : t("left") })}
+                  {d.killerRange === null ? t(", distance not recorded") : t(", {0} units away", { "0": d.killerRange.toFixed(0) })}
+                  {d.scoped ? t(", you were scoped") : ""}
+                  {d.matesNear === 0 ? t(", nobody near you") : t(", {matesNear} teammate{1} near", { "1": d.matesNear === 1 ? "" : "s", matesNear: d.matesNear })}
                 </title>
               </circle>
             );
@@ -99,24 +94,19 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
         </svg>
 
         <dl className="board-read">
-          <dt>Off your screen</dt>
+          <dt>{t("Off your screen")}</dt>
           <dd>
-            {behind.length} of {placed.length} deaths came from more than {HALF_FOV}° to a side, so they were never in
-            front of you
-          </dd>
-          <dt>Scoped at the time</dt>
+            {tx("{behind} of {placed} deaths came from more than {HALF_FOV}° to a side, so they were never in front of you", { behind: behind.length, placed: placed.length, HALF_FOV: HALF_FOV })}</dd>
+          <dt>{t("Scoped at the time")}</dt>
           <dd>
-            {placed.filter((d) => d.scoped).length} of {placed.length}
-            {scopedBehind > 0 && `, and ${scopedBehind} of those came from outside your view`}
+            {tx("{length} of {placed}{2}", { "2": scopedBehind > 0 && t(", and {scopedBehind} of those came from outside your view", { scopedBehind: scopedBehind }), length: placed.filter((d) => d.scoped).length, placed: placed.length })}
           </dd>
-          <dt>Usual distance</dt>
+          <dt>{t("Usual distance")}</dt>
           <dd>
             {median(placed)}
             {unknown > 0 && (
               <span className="muted">
-                {" "}
-                · {unknown} on the rim: the demo never carried them, which is what a Spy behind you looks like
-              </span>
+                {tx("{0}· {unknown} on the rim: the demo never carried them, which is what a Spy behind you looks like", { "0": " ", unknown: unknown })}</span>
             )}
           </dd>
         </dl>
@@ -124,14 +114,11 @@ export function DeathBoard({ deaths }: { deaths: DeathRow[] }) {
 
       <ul className="aim-legend">
         <li>
-          <span className="aim-dot" style={{ background: SCOPED }} aria-hidden /> you were scoped
-        </li>
+          {tx("{0} you were scoped", { "0": <span className="aim-dot" style={{ background: SCOPED }} aria-hidden /> })}</li>
         <li>
-          <span className="aim-dot" style={{ background: SEEN }} aria-hidden /> you were not
-        </li>
+          {tx("{0} you were not", { "0": <span className="aim-dot" style={{ background: SEEN }} aria-hidden /> })}</li>
         <li>
-          <span className="aim-dot board-dot-fov" aria-hidden /> roughly what your screen showed
-        </li>
+          {tx("{0} roughly what your screen showed", { "0": <span className="aim-dot board-dot-fov" aria-hidden /> })}</li>
       </ul>
     </figure>
   );

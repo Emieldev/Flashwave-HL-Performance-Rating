@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { LogFlags, MatchDetail, PlayerRow } from "../../api/types";
-import { capitalize, clock, rating, teamLabel } from "../../lib/format";
+import { clock, rating, teamLabel } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
+import { t as tr, tx, k } from "../../lib/i18n";
+import { classLabel } from "../analysis/common";
 
 const CLASS_ORDER = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
 
@@ -19,24 +21,24 @@ type Col = {
 const per = (n: number, p: PlayerRow) => (p.timeS > 0 ? n / (p.timeS / 60) : 0);
 
 const COLS: Col[] = [
-  { key: "k", label: "K", title: "Kills", value: (p) => p.kills },
-  { key: "a", label: "A", title: "Assists", value: (p) => p.assists },
-  { key: "d", label: "D", title: "Deaths", value: (p) => p.deaths },
-  { key: "da", label: "DA", title: "Damage dealt", value: (p) => p.dmg, fmt: (v) => v.toLocaleString() },
-  { key: "dapm", label: "DA/M", title: "Damage per minute", value: (p) => p.dpm },
-  { key: "kad", label: "KA/D", title: "Kills and assists per death", value: (p) => (p.kills + p.assists) / Math.max(1, p.deaths), fmt: (v) => v.toFixed(1) },
-  { key: "kd", label: "K/D", title: "Kills per death", value: (p) => p.kills / Math.max(1, p.deaths), fmt: (v) => v.toFixed(1) },
-  { key: "dt", label: "DT", title: "Damage taken", value: (p, f) => (f.dt ? p.dt : null), fmt: (v) => v.toLocaleString() },
-  { key: "dtpm", label: "DT/M", title: "Damage taken per minute", value: (p, f) => (f.dt ? per(p.dt, p) : null), fmt: (v) => v.toFixed(0) },
-  { key: "hp", label: "HP", title: "Health packs picked up", value: (p) => p.medkits },
-  { key: "bs", label: "BS", title: "Backstabs", value: (p, f) => (f.bs ? p.backstabs : null) },
-  { key: "hs", label: "HS", title: "Headshot kills", value: (p, f) => (f.hs ? p.headshots : null) },
-  { key: "as", label: "AS", title: "Airshots", value: (p, f) => (f.airshots ? p.airshots : null) },
-  { key: "cap", label: "CAP", title: "Points captured", value: (p, f) => (f.cp ? p.cpc : null) },
+  { key: "k", label: "K", title: k("Kills"), value: (p) => p.kills },
+  { key: "a", label: "A", title: k("Assists"), value: (p) => p.assists },
+  { key: "d", label: "D", title: k("Deaths"), value: (p) => p.deaths },
+  { key: "da", label: "DA", title: k("Damage dealt"), value: (p) => p.dmg, fmt: (v) => v.toLocaleString() },
+  { key: "dapm", label: "DA/M", title: k("Damage per minute"), value: (p) => p.dpm },
+  { key: "kad", label: "KA/D", title: k("Kills and assists per death"), value: (p) => (p.kills + p.assists) / Math.max(1, p.deaths), fmt: (v) => v.toFixed(1) },
+  { key: "kd", label: "K/D", title: k("Kills per death"), value: (p) => p.kills / Math.max(1, p.deaths), fmt: (v) => v.toFixed(1) },
+  { key: "dt", label: "DT", title: k("Damage taken"), value: (p, f) => (f.dt ? p.dt : null), fmt: (v) => v.toLocaleString() },
+  { key: "dtpm", label: "DT/M", title: k("Damage taken per minute"), value: (p, f) => (f.dt ? per(p.dt, p) : null), fmt: (v) => v.toFixed(0) },
+  { key: "hp", label: "HP", title: k("Health packs picked up"), value: (p) => p.medkits },
+  { key: "bs", label: "BS", title: k("Backstabs"), value: (p, f) => (f.bs ? p.backstabs : null) },
+  { key: "hs", label: "HS", title: k("Headshot kills"), value: (p, f) => (f.hs ? p.headshots : null) },
+  { key: "as", label: "AS", title: k("Airshots"), value: (p, f) => (f.airshots ? p.airshots : null) },
+  { key: "cap", label: k("CAP"), title: k("Points captured"), value: (p, f) => (f.cp ? p.cpc : null) },
   {
     key: "rating",
-    label: "Rating",
-    title: "Rating on the main class against the players you face: 1.00 is an average game. Not rated under 5 minutes.",
+    label: k("Rating"),
+    title: k("Rating on the main class against the players you face: 1.00 is an average game. Not rated under 5 minutes."),
     value: (p) => p.rating?.score ?? null,
     fmt: (v) => rating(v),
   },
@@ -79,8 +81,8 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
     <section className="panel box">
       <header className="box-head">
         <div>
-          <h2>Scoreboard</h2>
-          <p className="hint">Click a column to sort.</p>
+          <h2>{tr("Scoreboard")}</h2>
+          <p className="hint">{tr("Click a column to sort.")}</p>
         </div>
         {/* Which log the page is reading. It had a panel of its own for one
             select; it belongs with the numbers it scopes. */}
@@ -90,16 +92,14 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
         <table className="match-table scoreboard">
           <thead>
             <tr>
-              <th className="sortable" onClick={() => click("team")} aria-sort={sort.key === "team" ? "ascending" : "none"}>
-                Team{arrow("team")}
+              <th className="sortable" onClick={() => click("team")} aria-sort={sort.key === "team" ? "ascending" : "none"}>{tx("Team{0}", { "0": arrow("team") })}
               </th>
-              <th className="sortable" onClick={() => click("name")}>
-                Name{arrow("name")}
+              <th className="sortable" onClick={() => click("name")}>{tx("Name{0}", { "0": arrow("name") })}
               </th>
               <th>C</th>
               {COLS.map((c) => (
-                <th key={c.key} className="num sortable" title={c.title} onClick={() => click(c.key)}>
-                  {c.label}
+                <th key={c.key} className="num sortable" title={tr(c.title)} onClick={() => click(c.key)}>
+                  {tr(c.label)}
                   {arrow(c.key)}
                 </th>
               ))}
@@ -111,11 +111,11 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
                 <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</td>
                 <td className="nowrap player-name">
                   {p.name}
-                  {p.isMe && <span className="you-tag">you</span>}
+                  {p.isMe && <span className="you-tag">{tr("you")}</span>}
                 </td>
                 <td className="sb-classes">
                   {p.classes.map(([c, t], i) => (
-                    <span key={c} title={`${capitalize(c)} ${clock(t)}`}>
+                    <span key={c} title={`${classLabel(c)} ${clock(t)}`}>
                       <ClassIcon cls={c} size={i === 0 ? 22 : 16} faded={i > 0} />
                     </span>
                   ))}

@@ -1,4 +1,5 @@
 import { capitalize } from "../lib/format";
+import { classLabel } from "./analysis/common";
 
 const KNOWN = new Set(["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"]);
 
@@ -9,7 +10,7 @@ const KNOWN = new Set(["scout", "soldier", "pyro", "demoman", "heavy", "engineer
 export function ClassIcon({ cls, size = 20, faded = false }: { cls: string | null; size?: number; faded?: boolean }) {
   if (!cls) return <span className="muted">—</span>;
   const key = cls === "heavyweapons" ? "heavy" : cls;
-  if (!KNOWN.has(key)) return <span>{capitalize(cls)}</span>;
+  if (!KNOWN.has(key)) return <span>{classLabel(cls)}</span>;
   return (
     <img
       src={`/classes/${key}.png`}

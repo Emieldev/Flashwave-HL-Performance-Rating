@@ -1,6 +1,7 @@
 import type { Analysis, AnalysisPlayer, Jump, RoundSpan } from "../../api/types";
 import { copy } from "../../lib/toast";
 import { clock } from "../../lib/format";
+import { k, t } from "../../lib/i18n";
 
 /**
  * Colour roles shared by every analysis view, so one meaning keeps one colour:
@@ -35,16 +36,40 @@ export function themeColour(name: string, fallback: string): string {
 export const CLASS_ORDER = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
 
 export const CLASS_SHORT: Record<string, string> = {
-  scout: "Scout",
-  soldier: "Soldier",
-  pyro: "Pyro",
-  demoman: "Demo",
-  heavy: "Heavy",
-  engineer: "Engie",
-  medic: "Medic",
-  sniper: "Sniper",
-  spy: "Spy",
+  scout: k("Scout"),
+  soldier: k("Soldier"),
+  pyro: k("Pyro"),
+  demoman: k("Demo"),
+  heavy: k("Heavy"),
+  engineer: k("Engie"),
+  medic: k("Medic"),
+  sniper: k("Sniper"),
+  spy: k("Spy"),
 };
+
+const CLASS_NAMES: Record<string, string> = {
+  scout: k("Scout"),
+  soldier: k("Soldier"),
+  pyro: k("Pyro"),
+  demoman: k("Demoman"),
+  heavy: k("Heavy"),
+  engineer: k("Engineer"),
+  medic: k("Medic"),
+  sniper: k("Sniper"),
+  spy: k("Spy"),
+};
+
+/**
+ * A class as the game names it in the chosen language: in Russian the game
+ * itself says Разведчик, not Scout, and players read the app the same way.
+ * Anything that is not one of the nine comes back capitalised as it was.
+ */
+export function classLabel(cls: string | null | undefined, short = false): string {
+  if (!cls) return "";
+  const key = cls.toLowerCase();
+  const en = (short ? CLASS_SHORT : CLASS_NAMES)[key];
+  return en ? t(en) : cls.charAt(0).toUpperCase() + cls.slice(1);
+}
 
 /** "R2 3:41": the round and the time into it. */
 export function roundClock(t: number, rounds: RoundSpan[]): string {
@@ -92,14 +117,14 @@ export function inSlice(roundNum: number, s: Slice): boolean {
  * rather than the label. Anything saying what it is showing says it here.
  */
 export function sliceLabel(s: Slice): string {
-  if (s.rounds === null) return "over the whole match";
-  if (s.oneRound) return "in this round";
-  return s.map ? `on ${s.map}` : "in these rounds";
+  if (s.rounds === null) return t("over the whole match");
+  if (s.oneRound) return t("in this round");
+  return s.map ? t("on {map}", { map: s.map }) : t("in these rounds");
 }
 
 /** The same, as a noun for "counted from ...". */
 export function sliceScope(s: Slice): string {
-  if (s.rounds === null) return "the whole match";
-  if (s.oneRound) return "this round";
-  return s.map ? `this map` : "these rounds";
+  if (s.rounds === null) return t("the whole match");
+  if (s.oneRound) return t("this round");
+  return s.map ? t("this map") : t("these rounds");
 }

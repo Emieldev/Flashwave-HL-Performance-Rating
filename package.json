@@ -11,6 +11,7 @@
     "ui": "npm --prefix ui run dev",
     "ui:check": "npm --prefix ui run build",
     "icons": "node scripts/generate-icons.mjs",
+    "i18n": "node scripts/i18n.mjs",
     "tauri": "tauri"
   },
   "devDependencies": {

@@ -204,6 +204,7 @@ fn view(d: &LinkedDemo) -> DemoView {
         log_share: d.log_share,
         markers: d.events.len(),
         approximate: d.kind == "stv",
+        deleted: d.deleted,
     }
 }
 

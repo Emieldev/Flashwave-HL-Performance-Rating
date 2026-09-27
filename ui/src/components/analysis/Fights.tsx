@@ -4,6 +4,7 @@ import { clock, teamLabel } from "../../lib/format";
 import { playerMap, sliceScope, type Slice } from "./common";
 import { fightsInSlice } from "./roundFights";
 import { ClassIcon } from "../ClassIcon";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * Every player's kills in context (PLAN §11 B and D): who opened fights,
@@ -30,33 +31,27 @@ export function Fights({ a, player, slice, onPick }: { a: Analysis; player: numb
 
   return (
     <div className="fights">
-      <p className="hint">
-        A fight starts after 10 s with no kill. A kill is <strong>traded</strong> when the killer&apos;s team loses
-        someone within 3 s.
-      </p>
+      <p className="hint">{tx("A fight starts after 10 s with no kill. A kill is {0} when the killer's team loses someone within 3 s.", { "0": <strong>{t("traded")}</strong> })}</p>
       {partial && (
-        <p className="hint">
-          Counted from the kills in {sliceScope(slice)}. Fight KAST, forces and deaths around an uber need the whole match, so
-          they are blank here.
-        </p>
+        <p className="hint">{tx("Counted from the kills in {0}. Fight KAST, forces and deaths around an uber need the whole match, so they are blank here.", { "0": sliceScope(slice) })}</p>
       )}
       <div className="table-wrap">
         <table className="match-table fights-table">
           <thead>
             <tr>
-              <th>Player</th>
-              <th className="num" title="Fights alive for where they got a kill or assist, survived, or had their death traded">Fight KAST</th>
-              <th className="num" title="First kills of fights won and lost">Opening duels</th>
-              <th className="num" title="First kills of rounds: got one / was one">First picks</th>
-              <th className="num" title="Share of this player's kills where their team lost someone within 3 s">Traded</th>
-              <th className="num" title="Died within 3 s of their own kill">Died after kill</th>
-              <th className="num" title="Avenged a teammate killed within 3 s before">Trades</th>
-              <th className="num" title="Kills while their team was already up a player">Clean-ups</th>
-              <th className="num" title="Combo players killed while their team held a ready charge; Medics among them dropped">Into charge</th>
-              <th className="num" title="Enemy ubers popped right after this player's damage on the Medic">Forces</th>
-              <th className="num" title="Deaths in the 10 s before their team popped, during it, and in the 10 s after">Around own uber</th>
-              <th className="num" title="Deaths your team killed back within 3 s">Deaths traded</th>
-              <th className="num" title="Died to the enemy Sniper / a flanker (Scout, Spy, Soldier) / the combo (Medic, Demoman, Heavy, Pyro)">Died to Sniper / flank / combo</th>
+              <th>{t("Player")}</th>
+              <th className="num" title={t("Fights alive for where they got a kill or assist, survived, or had their death traded")}>{t("Fight KAST")}</th>
+              <th className="num" title={t("First kills of fights won and lost")}>{t("Opening duels")}</th>
+              <th className="num" title={t("First kills of rounds: got one / was one")}>{t("First picks")}</th>
+              <th className="num" title={t("Share of this player's kills where their team lost someone within 3 s")}>{t("Traded")}</th>
+              <th className="num" title={t("Died within 3 s of their own kill")}>{t("Died after kill")}</th>
+              <th className="num" title={t("Avenged a teammate killed within 3 s before")}>{t("Trades")}</th>
+              <th className="num" title={t("Kills while their team was already up a player")}>{t("Clean-ups")}</th>
+              <th className="num" title={t("Combo players killed while their team held a ready charge; Medics among them dropped")}>{t("Into charge")}</th>
+              <th className="num" title={t("Enemy ubers popped right after this player's damage on the Medic")}>{t("Forces")}</th>
+              <th className="num" title={t("Deaths in the 10 s before their team popped, during it, and in the 10 s after")}>{t("Around own uber")}</th>
+              <th className="num" title={t("Deaths your team killed back within 3 s")}>{t("Deaths traded")}</th>
+              <th className="num" title={t("Died to the enemy Sniper / a flanker (Scout, Spy, Soldier) / the combo (Medic, Demoman, Heavy, Pyro)")}>{t("Died to Sniper / flank / combo")}</th>
             </tr>
           </thead>
           {teams.map((team) => (
@@ -76,7 +71,7 @@ export function Fights({ a, player, slice, onPick }: { a: Analysis; player: numb
                     <td className="nowrap class-cell">
                       <ClassIcon cls={p.mainClass} size={20} /> {p.name}
                     </td>
-                    <td className="num" title={partial ? "Whole-match only" : `${f.fightsKast} of ${f.fightsPresent} fights`}>
+                    <td className="num" title={partial ? t("Whole-match only") : t("{fightsKast} of {fightsPresent} fights", { fightsKast: f.fightsKast, fightsPresent: f.fightsPresent })}>
                       {whole(pct(f.fightsKast, f.fightsPresent))}
                     </td>
                     <td className="num">
@@ -91,14 +86,14 @@ export function Fights({ a, player, slice, onPick }: { a: Analysis; player: numb
                     <td className="num">{f.cleanupKills}</td>
                     <td className="num">
                       {f.chargedPicks}
-                      {f.drops > 0 && <span className="muted"> ({f.drops} drop{f.drops > 1 ? "s" : ""})</span>}
+                      {f.drops > 0 && <span className="muted">{" "}{tx("({drops} drop{1})", { "1": f.drops > 1 ? "s" : "", drops: f.drops })}</span>}
                     </td>
                     <td className="num">{whole(f.forces || "–")}</td>
                     <td className="num">
                       {whole(`${f.deathsBeforeUber} / ${f.deathsDuringUber} / ${f.deathsAfterUber}`)}
                     </td>
                     <td className="num">
-                      {f.tradedDeaths} <span className="muted">of {f.deaths}</span>
+                      {f.tradedDeaths} <span className="muted">{tx("of {deaths}", { deaths: f.deaths })}</span>
                     </td>
                     <td className="num">
                       {f.deathsToSniper} / {f.deathsToFlank} / {f.deathsToCombo}
@@ -112,14 +107,14 @@ export function Fights({ a, player, slice, onPick }: { a: Analysis; player: numb
 
       {a.firstPicks.some((f) => !slice.rounds || slice.rounds.has(f.roundNum)) && (
         <>
-          <h3 className="fights-sub">First pick of each round</h3>
+          <h3 className="fights-sub">{t("First pick of each round")}</h3>
           <ol className="fights-firsts">
             {a.firstPicks
               .filter((f) => !slice.rounds || slice.rounds.has(f.roundNum))
               .map((f, i) => (
               <li key={i}>
                 <span className="muted">R{f.roundNum}</span> <strong>{clock(f.afterS)}</strong>{" "}
-                <span className="muted">after the round went live:</span>{" "}
+                <span className="muted">{t("after the round went live:")}</span>{" "}
                 <span className={`team-${(players.get(f.killer)?.team ?? "none").toLowerCase()}`}>{name(f.killer)}</span> →{" "}
                 <span className={`team-${(players.get(f.victim)?.team ?? "none").toLowerCase()}`}>{name(f.victim)}</span>
               </li>

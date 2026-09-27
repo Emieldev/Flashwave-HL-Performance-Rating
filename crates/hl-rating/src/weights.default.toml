@@ -239,7 +239,12 @@ situation_kills = 0.20
 impact_kills    = 0.20
 impact_assists  = 0.20
 medic_picks     = 0.05
-caps            = 0.05
+# Q17 (zaag): captures weighed by the enemies alive to stop them, not
+# counted flat. Swapped in at the same weight the flat count had, and
+# never worse in any of the four models that use caps, on the full
+# sample or the held-out one (scout +0.1/+0.5, pyro +0.1/+2.0,
+# engineer +0.8/+1.0, medic +0.3/+0.0). See the note at [model.scout].
+caps_contested  = 0.05
 deaths          = 0.20
 untraded        = 0.05
 untraded_deaths = 0.15
@@ -265,7 +270,8 @@ untraded_deaths = 0.25
 impact_kills    = 0.15
 impact_assists  = 0.20
 medic_picks     = 0.05
-caps            = 0.15
+# Q17: captures weighed by enemies alive. See [model.scout].
+caps_contested  = 0.15
 deaths          = 0.20
 untraded_deaths = 0.20
 situation_kills = 0.05
@@ -278,7 +284,13 @@ situation_kills = 0.05
 # Scout and Spy problem stated as a number -- a Demoman who dies to the flank
 # is a Demoman whose team has no damage for the next ten seconds.
 [model.demoman]
-impact_kills       = 0.15
+# Q6b: the kill's swing shared with everyone who damaged the victim in
+# the five seconds before, in place of impact kills at the same weight.
+# A Demo's kills finish what the Soldier's rockets started, and the
+# single stat shows it: 67.7% shared against 65.2% unshared, the
+# biggest gap of any class. Full sample 76.8 -> 77.3, held-out 72.1 ->
+# 73.0. Tried for Engineer, Heavy and Soldier too; none held up.
+fight_swing_shared = 0.15
 impact_assists     = 0.05
 medic_picks        = 0.10
 deaths             = 0.30
@@ -317,7 +329,8 @@ situation_kills    = 0.10
 [model.engineer]
 impact_kills    = 0.20
 impact_assists  = 0.20
-caps            = 0.20
+# Q17: captures weighed by enemies alive. See [model.scout].
+caps_contested  = 0.20
 deaths          = 0.10
 opening         = 0.05
 untraded        = 0.05
@@ -341,7 +354,8 @@ impact_assists  = 0.10
 heal            = 0.15
 ubers           = 0.15
 drops           = 0.10
-caps            = 0.10
+# Q17: captures weighed by enemies alive. See [model.scout].
+caps_contested  = 0.10
 deaths          = 0.25
 untraded_deaths = 0.15
 

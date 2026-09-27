@@ -2,23 +2,32 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type Analysis, type AimRow, type AimTotals, type DeathRow, type LifeTotals } from "../../api/types";
 import { AimCharts } from "./AimCharts";
-import { playerMap, sliceLabel, sliceScope, type Slice } from "./common";
+import { classLabel, playerMap, sliceLabel, sliceScope, type Slice } from "./common";
+import { t, t as tr, tx, k } from "../../lib/i18n";
 
 /**
- * Your aim, read from the match's own demo (PLAN §14).
+ * Classes whose kills land where the crosshair was. For everyone else the
+ * angle to the head is still a real measurement — it is just not a
+ * measurement of aim, and the tab says so rather than reporting a Soldier's
+ * 28 degrees as though it were a Sniper's.
+ */
+const HITSCAN = new Set(["sniper", "scout", "heavy", "engineer", "spy"]);
+
+/**
+ * One player's aim, read from the match's own demo (PLAN §14, Q16b).
  *
- * The log says who you killed; the demo says where you were looking a second
- * before, how far the view travelled, and how far away they were. Only kills
- * the demo carried both players through get an answer, so a Spy killed round
- * a corner is left out.
+ * The log says who they killed; the demo says where they were looking a
+ * second before, how far the view travelled, and how far away the victim
+ * was. Only kills the demo carried both players through get an answer, so a
+ * Spy killed round a corner is left out.
  *
- * **This is the owner's aim and nobody else's.** `demo_aim` has no shooter
- * column — the pass was written for "the aim behind each of your kills" —
- * so there is nothing to show for another player. The tab used not to take
- * `player` at all, which meant picking someone else in the filter row left
- * these cards showing *your* numbers under *their* name; a tester read his
- * own 28° crosshair error as a teammate's. Now it says whose it is, and
- * says plainly when the answer is not available rather than inventing one.
+ * **It answers for anyone the demo can vouch for.** It used to answer only
+ * for the owner, and before that it did not take `player` at all — which
+ * meant picking someone else in the filter row left these cards showing
+ * *your* numbers under *their* name, and a tester read his own 28° crosshair
+ * error as a teammate's. Which players it can answer for depends on the
+ * demo: an STV carries all eighteen, a POV carries only whoever recorded it.
+ * When the match has no STV the tab says that, rather than looking broken.
  */
 export function Aim(props: {
   a: Analysis;
@@ -29,36 +38,37 @@ export function Aim(props: {
   onPick: (accountId: number) => void;
 }) {
   const { a, logId, player, slice, onPick } = props;
-  const q = useQuery({ queryKey: ["aim", logId], queryFn: () => api.getAim(logId) });
+  const q = useQuery({ queryKey: ["aim", logId, player], queryFn: () => api.getAim(logId, player) });
   const names = playerMap(a);
   // The filter row above applies here too: a round, or a map of a combined
   // log, narrows the kills and deaths the demo is read for.
   const inSlice = (round: number | null) => slice.rounds === null || (round !== null && slice.rounds.has(round));
 
   const me = a.players.find((p) => p.isMe) ?? null;
-  if (me !== null && player !== me.accountId) {
-    // Telling someone to go and change a dropdown is worse than changing it
-    // for them. The tab is the owner's kills only — `demo_aim` has no
-    // shooter column — so the useful thing is a way back, not an argument.
-    const who = names.get(player)?.name ?? "that player";
-    return (
-      <div className="an-empty">
-        <p className="hint">
-          Aim comes from your own demo, so it only covers <strong>your</strong> kills on any class —
-          there is nothing recorded for {who}.
-        </p>
-        <button onClick={() => onPick(me.accountId)}>Show my aim</button>
-      </div>
-    );
-  }
+  const mine = me === null || player === me.accountId;
+  const who = names.get(player)?.name ?? "that player";
+  const cls = a.players.find((p) => p.accountId === player)?.mainClass ?? null;
 
-  if (q.isPending) return <p className="hint an-empty">Reading the demo…</p>;
+  if (q.isPending) return <p className="hint an-empty">{t("Reading the demo…")}</p>;
   if (q.isError) return <p className="error">{errorMessage(q.error)}</p>;
   const d = q.data;
-  if (!d || d.kills.length === 0) {
+  if (!d || (d.kills.length === 0 && d.deaths.length === 0)) {
+    // Nothing for someone else, on a match with no STV, has one cause and
+    // one fix. Saying which beats an empty panel, and offering the way back
+    // beats telling them to go and change a dropdown themselves.
+    if (!mine && !d?.stv) {
+      return (
+        <div className="an-empty">
+          <p className="hint">{tx("Nothing for {who}: other players' aim comes from the match's STV demo, and this match has only your own. Download the STV from the links at the top and it will fill in.", { who: who })}</p>
+          <button onClick={() => onPick(me!.accountId)}>{t("Show my aim")}</button>
+        </div>
+      );
+    }
     return (
       <p className="hint an-empty">
-        No demo linked to this match. Set your TF2 folder in Settings.
+        {mine
+          ? t("No demo linked to this match. Set your TF2 folder in Settings.")
+          : t("The demo has nothing for {who} — it never carried them long enough to read.", { who: who })}
       </p>
     );
   }
@@ -67,42 +77,35 @@ export function Aim(props: {
   const deaths = d.deaths.filter((k) => inSlice(k.roundNum));
   const filtered = slice.rounds !== null;
   if (kills.length === 0 && deaths.length === 0) {
-    return <p className="hint an-empty">No kills or deaths of yours {sliceLabel(slice)}.</p>;
+    return (
+      <p className="hint an-empty">{tx("No kills or deaths {0} {1}.", { "0": mine ? t("of yours") : t("for {who}", { who: who }), "1": sliceLabel(slice) })}</p>
+    );
   }
 
   return (
     <div className="aim">
       {d.totals && !filtered && <Summary t={d.totals} career={d.career} life={d.life} careerLife={d.careerLife} />}
+      {cls !== null && !HITSCAN.has(cls) && (
+        <p className="hint">{tx("Crosshair error is the angle to the victim's head, which is a hitscan measure. A{0} {cls} kills with splash and projectiles that never had to be on the head, so read these as where they were looking, not how well they aimed.", { "0": cls === "soldier" || cls === "engineer" ? "n" : "", cls: classLabel(cls) })}</p>
+      )}
       {filtered && (
         <p className="hint">
-          {kills.length} kill{kills.length === 1 ? "" : "s"} and {deaths.length} death
-          {deaths.length === 1 ? "" : "s"} in {sliceScope(slice)}.
-        </p>
+          {tx("{kills} kill{1} and {deaths} death{3} in {4}.", { "1": kills.length === 1 ? "" : "s", "3": deaths.length === 1 ? "" : "s", "4": sliceScope(slice), kills: kills.length, deaths: deaths.length })}</p>
       )}
       <AimCharts kills={kills} deaths={deaths} />
       <details className="aim-details">
-        <summary>Every kill, in numbers</summary>
+        <summary>{t("Every kill, in numbers")}</summary>
         <div className="table-wrap">
         <table className="match-table aim-table">
           <thead>
             <tr>
-              <th>Victim</th>
-              <th className="num" title="Degrees between your view and their head when the kill landed">
-                Crosshair
-              </th>
-              <th className="num" title="The same, one second before the kill: how far the crosshair had to travel">
-                A second before
-              </th>
-              <th className="num" title="How far your view turned in the half second before the shot">
-                Flick
-              </th>
-              <th className="num" title="Distance in map units; a Sniper sightline is around 1,500">
-                Range
-              </th>
-              <th className="num" title="How far above you they stood">
-                Height
-              </th>
-              <th>Shot</th>
+              <th>{t("Victim")}</th>
+              <th className="num" title={t("Degrees between their view and the victim's head when the kill landed")}>{t("Crosshair")}</th>
+              <th className="num" title={t("The same, one second before the kill: how far the crosshair had to travel")}>{t("A second before")}</th>
+              <th className="num" title={t("How far the view turned in the half second before the shot")}>{t("Flick")}</th>
+              <th className="num" title={t("Distance in map units; a Sniper sightline is around 1,500")}>{t("Range")}</th>
+              <th className="num" title={t("How far above the shooter the victim stood")}>{t("Height")}</th>
+              <th>{t("Shot")}</th>
             </tr>
           </thead>
           <tbody>
@@ -119,11 +122,9 @@ export function Aim(props: {
                 <td className="num">{k.rangeUnits.toFixed(0)}</td>
                 <td className="num">{k.height.toFixed(0)}</td>
                 <td className="nowrap">
-                  {k.headshot && <span className="badge badge-hs">headshot</span>}
+                  {k.headshot && <span className="badge badge-hs">{t("headshot")}</span>}
                   {!k.victimSeen && (
-                    <span className="muted" title="The demo did not carry them the whole time, so these numbers are stale">
-                      not on screen
-                    </span>
+                    <span className="muted" title={t("The demo did not carry them the whole time, so these numbers are stale")}>{t("not on screen")}</span>
                   )}
                 </td>
               </tr>
@@ -134,14 +135,11 @@ export function Aim(props: {
       </details>
       {deaths.length > 0 && (
         <details className="aim-details">
-          <summary>Every death, in numbers</summary>
+          <summary>{t("Every death, in numbers")}</summary>
           <Deaths rows={deaths} names={names} />
         </details>
       )}
-      <p className="hint aim-foot">
-        Angles are measured to the middle of the victim&apos;s head. A small crosshair error a second before the kill
-        means the angle was already held; a large one followed by a flick means it was a reaction.
-      </p>
+      <p className="hint aim-foot">{t("Angles are measured to the middle of the victim's head. A small crosshair error a second before the kill means the angle was already held; a large one followed by a flick means it was a reaction.")}</p>
     </div>
   );
 }
@@ -149,57 +147,51 @@ export function Aim(props: {
 function Summary(props: { t: AimTotals; career: AimTotals | null; life: LifeTotals | null; careerLife: LifeTotals | null }) {
   const { t, career, life, careerLife } = props;
   const cards: Array<[string, string, string, string | null]> = [
-    ["Crosshair error", `${t.errorDeg.toFixed(1)}°`, "when the kill landed", career && `${career.errorDeg.toFixed(1)}° usually`],
-    ["A second before", `${t.beforeDeg.toFixed(1)}°`, "how far it had to travel", career && `${career.beforeDeg.toFixed(1)}° usually`],
-    ["Flick", `${t.flickDeg.toFixed(1)}°`, "turn in the last half second", career && `${career.flickDeg.toFixed(1)}° usually`],
-    ["Range", t.rangeUnits.toFixed(0), "map units", career && `${career.rangeUnits.toFixed(0)} usually`],
-    ["Angle already held", `${(t.heldShare * 100).toFixed(0)}%`, "within 3° a second before", career && `${(career.heldShare * 100).toFixed(0)}% usually`],
+    [k("Crosshair error"), `${t.errorDeg.toFixed(1)}°`, k("when the kill landed"), career && tr("{v} usually", { v: `${career.errorDeg.toFixed(1)}°` })],
+    [k("A second before"), `${t.beforeDeg.toFixed(1)}°`, k("how far it had to travel"), career && tr("{v} usually", { v: `${career.beforeDeg.toFixed(1)}°` })],
+    [k("Flick"), `${t.flickDeg.toFixed(1)}°`, k("turn in the last half second"), career && tr("{v} usually", { v: `${career.flickDeg.toFixed(1)}°` })],
+    [k("Range"), t.rangeUnits.toFixed(0), k("map units"), career && tr("{v} usually", { v: `${career.rangeUnits.toFixed(0)}` })],
+    [k("Angle already held"), `${(t.heldShare * 100).toFixed(0)}%`, k("within 3° a second before"), career && tr("{v} usually", { v: `${(career.heldShare * 100).toFixed(0)}%` })],
   ];
   if (life) {
     cards.push(
-      ["Scoped", `${(life.scopedShare * 100).toFixed(0)}%`, "of your time alive", careerLife && `${(careerLife.scopedShare * 100).toFixed(0)}% usually`],
+      [k("Scoped"), `${(life.scopedShare * 100).toFixed(0)}%`, k("of their time alive"), careerLife && tr("{v} usually", { v: `${(careerLife.scopedShare * 100).toFixed(0)}%` })],
       [
-        "Nearest teammate",
+        k("Nearest teammate"),
         life.nearestMate === null ? "—" : life.nearestMate.toFixed(0),
-        "units away when you died",
-        careerLife?.nearestMate ? `${careerLife.nearestMate.toFixed(0)} usually` : null,
+        k("units away when they died"),
+        careerLife?.nearestMate ? tr("{v} usually", { v: `${careerLife.nearestMate.toFixed(0)}` }) : null,
       ],
-      ["Died alone", `${(life.aloneShare * 100).toFixed(0)}%`, "nobody within 900 units", careerLife && `${(careerLife.aloneShare * 100).toFixed(0)}% usually`],
+      [k("Died alone"), `${(life.aloneShare * 100).toFixed(0)}%`, k("nobody within 900 units"), careerLife && tr("{v} usually", { v: `${(careerLife.aloneShare * 100).toFixed(0)}%` })],
     );
   }
   return (
     <div className="aim-cards">
       {cards.map(([label, value, note, vs]) => (
         <div className="aim-card" key={label}>
-          <span className="aim-label">{label}</span>
+          <span className="aim-label">{tr(label)}</span>
           <span className="aim-value">{value}</span>
-          <span className="aim-note">{note}</span>
+          <span className="aim-note">{tr(note)}</span>
           {vs && <span className="aim-vs">{vs}</span>}
         </div>
       ))}
-      <p className="hint aim-count">From {t.kills} kills the demo could answer for.</p>
+      <p className="hint aim-count">{tx("From {kills} kills the demo could answer for.", { kills: t.kills })}</p>
     </div>
   );
 }
 
-/** Your deaths: who got you, from how far, and who was close enough to help. */
+/** The deaths: who got them, from how far, and who was close enough to help. */
 function Deaths({ rows, names }: { rows: DeathRow[]; names: ReturnType<typeof playerMap> }) {
   return (
     <div className="table-wrap">
       <table className="match-table aim-table">
         <thead>
           <tr>
-            <th>Killed by</th>
-            <th className="num" title="How far away they were; blank when the demo never carried them">
-              Their range
-            </th>
-            <th className="num" title="Distance to the nearest living teammate the demo carried">
-              Nearest teammate
-            </th>
-            <th className="num" title="Teammates within 900 units">
-              Cover
-            </th>
-            <th>State</th>
+            <th>{t("Killed by")}</th>
+            <th className="num" title={t("How far away they were; blank when the demo never carried them")}>{t("Their range")}</th>
+            <th className="num" title={t("Distance to the nearest living teammate the demo carried")}>{t("Nearest teammate")}</th>
+            <th className="num" title={t("Teammates within 900 units")}>{t("Cover")}</th>
+            <th>{t("State")}</th>
           </tr>
         </thead>
         <tbody>
@@ -212,8 +204,8 @@ function Deaths({ rows, names }: { rows: DeathRow[]; names: ReturnType<typeof pl
               </td>
               <td className="num">{r.matesNear}</td>
               <td className="nowrap">
-                {r.scoped && <span className="badge badge-hs">scoped</span>}
-                {r.matesNear === 0 && <span className="muted">alone</span>}
+                {r.scoped && <span className="badge badge-hs">{t("scoped")}</span>}
+                {r.matesNear === 0 && <span className="muted">{t("alone")}</span>}
               </td>
             </tr>
           ))}

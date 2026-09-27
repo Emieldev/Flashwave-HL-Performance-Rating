@@ -360,6 +360,16 @@ impl Db {
         self.set_setting(keys::ALL_HISTORY, if on { "1" } else { "0" }).await
     }
 
+    /// Whether a downloaded STV demo is deleted once every match it covers
+    /// has been read (PLAN Q23). Off unless asked for.
+    pub async fn auto_delete_demos(&self) -> Result<bool> {
+        Ok(self.get_setting(keys::AUTO_DELETE_DEMOS).await?.as_deref() == Some("1"))
+    }
+
+    pub async fn set_auto_delete_demos(&self, on: bool) -> Result<()> {
+        self.set_setting(keys::AUTO_DELETE_DEMOS, if on { "1" } else { "0" }).await
+    }
+
     /// Logs the window is holding back: old, not officials, never downloaded.
     /// What Settings offers to fetch, and what it costs.
     pub async fn outside_window(&self) -> Result<i64> {

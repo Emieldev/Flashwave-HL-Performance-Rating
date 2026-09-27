@@ -58,6 +58,13 @@ const CORE: [Component; 14] = [
 pub fn components_for(class: TfClass) -> Vec<Component> {
     let mut v = CORE.to_vec();
     v.push(Component::FightSwing);
+    // Q17 and Q25: measured beside the flat Caps they would refine, for
+    // every class -- the capping classes are the obvious candidates, but a
+    // component that only helps the Engineer should say so here rather
+    // than be assumed.
+    v.extend([Component::CapsContested, Component::CapsMatesDead]);
+    // Q6b: beside the unshared swing, so the fit can say which reads better.
+    v.push(Component::FightSwingShared);
     match class {
         TfClass::Sniper => v.extend([Component::Duel, Component::HeadshotShare]),
         TfClass::Spy => v.extend([Component::Backstabs, Component::HeadshotShare, Component::Duel]),

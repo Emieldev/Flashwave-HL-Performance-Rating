@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { errorMessage, type MatchDetail } from "../../api/types";
 import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
+import { t, tx } from "../../lib/i18n";
 
 /**
  * "There is a SourceTV demo for this match. Want it?"
@@ -67,27 +68,16 @@ export function StvPrompt({ d }: { d: MatchDetail }) {
   }
 
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label="Download the SourceTV demo">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label={t("Download the SourceTV demo")}>
       <div className="modal">
-        <h3>There is a SourceTV demo for this match</h3>
-        <p>
-          It holds what the scoreboard cannot: where all eighteen players walked, what each life was
-          worth, and every kill with the angle behind it. Downloading it fills in the Movement and
-          Aim tabs for this match.
-        </p>
-        <p className="muted">
-          About a hundred megabytes from demos.tf, half a minute, straight into{" "}
-          <code>tf/demos/stv</code>. It carries on while you read other matches.
-        </p>
+        <h3>{t("There is a SourceTV demo for this match")}</h3>
+        <p>{t("It holds what the scoreboard cannot: where all eighteen players walked, what each life was worth, and every kill with the angle behind it. Downloading it fills in the Movement and Aim tabs for this match.")}</p>
+        <p className="muted">{tx("About a hundred megabytes from demos.tf, half a minute, straight into{0}{1}. It carries on while you read other matches.", { "0": " ", "1": <code>{t("tf/demos/stv")}</code> })}</p>
         {error && <p className="error">{error}</p>}
         <div className="modal-actions">
-          <button className="primary" onClick={() => void fetchIt()}>
-            Download it
-          </button>
-          <button onClick={() => setOpen(false)}>Not now</button>
-          <button className="linkish" onClick={stopAsking}>
-            Never ask
-          </button>
+          <button className="primary" onClick={() => void fetchIt()}>{t("Download it")}</button>
+          <button onClick={() => setOpen(false)}>{t("Not now")}</button>
+          <button className="linkish" onClick={stopAsking}>{t("Never ask")}</button>
         </div>
       </div>
     </div>

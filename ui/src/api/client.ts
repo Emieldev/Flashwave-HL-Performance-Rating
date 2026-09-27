@@ -4,12 +4,17 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { save } from "@tauri-apps/plugin-dialog";
 import type {
+  StvStage,
+  LanguageFiles,
+  SavedLanguageFile,
   Analysis,
   AppConfig,
   AppStatus,
+  Cleaned,
   CmdError,
   ContextCounts,
   ContextKind,
+  DownloadedDemo,
   DemoIndexSummary,
   DemoStats,
   IndexStats,
@@ -51,6 +56,7 @@ export interface StvHandlers {
   onProgress: (p: StvProgress) => void;
   onDone: (d: StvFetched) => void;
   onError: (e: CmdError & { logId: number }) => void;
+  onStage: (s: StvStage) => void;
 }
 
 export interface SyncHandlers {
@@ -94,12 +100,22 @@ const realApi = {
   fetchPart: (partId: number) => invoke<MatchDetail | null>("fetch_part", { partId }),
   /** Where you walked in one match, one route per life (PLAN §14). */
   getPaths: (logId: number) => invoke<PathRow[]>("get_paths", { logId }),
+  /** Whether a downloaded demo is deleted once it has been read (Q23). */
+  autoDeleteDemos: () => invoke<boolean>("auto_delete_demos"),
+  setAutoDeleteDemos: (on: boolean) => invoke<boolean>("set_auto_delete_demos", { on }),
+  /** STV demos the app downloaded and still holds (Q23). */
+  downloadedDemos: () => invoke<DownloadedDemo[]>("downloaded_demos"),
+  /** Delete downloaded demos to reclaim space. One, or all of them. */
+  deleteDownloadedDemos: (only: number | null = null, force = false) =>
+    invoke<Cleaned>("delete_downloaded_demos", { only, force }),
   /** Copies of the database, newest first. */
   allHistory: () => invoke<boolean>("all_history"),
   setAllHistory: (on: boolean) => invoke<boolean>("set_all_history", { on }),
   listBackups: () => invoke<Backups>("list_backups"),
   /** Show a file or folder in Explorer. */
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
+  languageFiles: () => invoke<LanguageFiles>("language_files"),
+  saveLanguageFile: (id: string, text: string) => invoke<SavedLanguageFile>("save_language_file", { id, text }),
   /** Put a backup back and restart. Refused unless this database is empty. */
   restoreBackup: (path: string) => invoke<void>("restore_backup", { path }),
   /** Start fresh on purpose: stop offering the backup. */
@@ -122,8 +138,9 @@ const realApi = {
     if (!path) return null;
     return invoke<Backup>("save_backup_as", { path });
   },
-  /** What the demo says about your aim in one match (PLAN §14). */
-  getAim: (logId: number) => invoke<AimResponse>("get_aim", { logId }),
+  /** What the demo says about one player's aim in one match (PLAN §14).
+   *  Without a player it answers for the owner, as it always did. */
+  getAim: (logId: number, player?: number) => invoke<AimResponse>("get_aim", { logId, player }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */
@@ -156,6 +173,7 @@ const realApi = {
     const offs = await Promise.all([
       listen<StvQueued>("stv://queued", (e) => h.onQueued(e.payload)),
       listen<StvProgress>("stv://progress", (e) => h.onProgress(e.payload)),
+      listen<StvStage>("stv://stage", (e) => h.onStage(e.payload)),
       listen<StvFetched>("stv://done", (e) => h.onDone(e.payload)),
       listen<CmdError & { logId: number }>("stv://error", (e) => h.onError(e.payload)),
     ]);
