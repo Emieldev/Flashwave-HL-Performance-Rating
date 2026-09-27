@@ -455,7 +455,10 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
               key={mapName}
               map={mapName}
               file={callouts}
-              dirty={dirty}
+              // Save is always there to press while editing: a flag of
+              // "changed" is lost when the page reloads parts of itself, and
+              // the edits, kept in the query's copy, are not.
+              dirty={dirty || editing}
               onChange={liveEdit}
               onSaved={() => setDirty(false)}
               drawing={drawing}

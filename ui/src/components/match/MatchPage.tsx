@@ -10,6 +10,7 @@ import { DemoPanel } from "./DemoPanel";
 import { CartPanel } from "./CartPanel";
 import { PositionsPanel } from "./PositionsPanel";
 import { Spychecks } from "./Spychecks";
+import { StvBanner, StvLocked } from "./StvGate";
 import { StvPrompt } from "./StvPrompt";
 import { AnalysisPanel } from "../analysis/AnalysisPanel";
 import { Matchups } from "./Matchups";
@@ -36,6 +37,9 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
   // The rounds of the combined log this part covers, for the kill-by-kill
   // views, which read the whole match's raw log.
   const onlyRounds = chosen?.parentRounds.length ? chosen.parentRounds : null;
+  // A deleted STV still counts: what was read from it is kept.
+  const hasStv = q.data?.demos.some((x) => x.kind === "stv") ?? false;
+  const isPayload = /^pl_/i.test(shown?.map ?? "");
 
   async function pick(next: number | null) {
     setPart(next);
@@ -66,6 +70,7 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
       {q.data && shown && (
         <>
           <Header d={shown} />
+          <StvBanner d={q.data} />
           {/* The scoreboard first, as on logs.tf; the matchups read it next. */}
           <Fold id="scoreboard">
             <BoxScore
@@ -91,14 +96,18 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
             <DemoPanel d={q.data} />
             <StvPrompt d={q.data} />
           </Fold>
+          {/* The STV-only panels: blurred, with the reason and the download,
+              where there is no STV rather than missing without a word. */}
           <Fold id="spychecks">
-            <Spychecks d={q.data} />
+            {hasStv ? <Spychecks d={q.data} /> : <StvLocked d={q.data} kind="spychecks" />}
           </Fold>
-          <Fold id="cart">
-            <CartPanel d={q.data} />
-          </Fold>
+          {(hasStv || isPayload) && (
+            <Fold id="cart">
+              {hasStv ? <CartPanel d={q.data} /> : <StvLocked d={q.data} kind="cart" />}
+            </Fold>
+          )}
           <Fold id="positions">
-            <PositionsPanel d={shown} />
+            {hasStv ? <PositionsPanel d={shown} /> : <StvLocked d={q.data} kind="positions" />}
           </Fold>
           <Fold id="rounds">
             <RoundTimeline d={shown} />
