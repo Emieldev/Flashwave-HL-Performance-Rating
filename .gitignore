@@ -27,3 +27,5 @@ desktop.ini
 # The update signing key lives outside the repo; never let a copy in.
 *.key
 *.key.pub
+
+__pycache__/
