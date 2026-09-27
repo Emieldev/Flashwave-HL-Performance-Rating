@@ -1,0 +1,35 @@
+/* Teams and seasons (Q29) */
+.teams-page { display: flex; flex-direction: column; gap: 16px; }
+.teams-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.teams-pool { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.teams-pool code { margin-right: 4px; }
+.teams-divisions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+}
+.teams-row { cursor: pointer; }
+.teams-row:hover td { background: rgba(var(--muted-rgb), 0.08); }
+.teams-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.teams-avatar { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; flex: none; background: var(--panel-2); display: inline-block; }
+
+.team-head { display: flex; align-items: center; gap: 14px; }
+.team-head h2 { margin: 0; }
+.team-avatar { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex: none; background: var(--panel-2); display: inline-block; }
+.team-record { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
+.team-record strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+
+.team-maps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 20px;
+  margin-top: 12px;
+}
+.team-map { display: flex; flex-direction: column; gap: 5px; }
+.team-map-head { display: flex; justify-content: space-between; gap: 8px; }
+.team-map-bar { height: 6px; border-radius: 3px; background: rgba(var(--muted-rgb), 0.15); overflow: hidden; }
+.team-map-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+
+.team-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+.team-won { color: var(--ok); }
+.team-lost { color: var(--bad); }

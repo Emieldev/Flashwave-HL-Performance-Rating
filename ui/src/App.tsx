@@ -10,6 +10,7 @@ import { SyncSummary } from "./components/SyncSummary";
 import { MatchPage } from "./components/match/MatchPage";
 import { ProfilePage } from "./components/profile/ProfilePage";
 import { TeammatesPage } from "./components/teammates/TeammatesPage";
+import { TeamsPage } from "./components/teams/TeamsPage";
 import { PlayersPage } from "./components/players/PlayersPage";
 import { ToastHost } from "./lib/toast";
 import { Notifications } from "./components/Notifications";
@@ -24,7 +25,7 @@ import { RestoreBanner } from "./components/RestoreBanner";
 import "./App.css";
 import "./components/match/match.css";
 
-type Tab = "matches" | "profile" | "teammates" | "players" | "settings";
+type Tab = "matches" | "profile" | "teammates" | "teams" | "players" | "settings";
 
 // Settings is not one of these: it is the cog on the far right, where a
 // setting belongs, rather than a fourth thing to read.
@@ -32,6 +33,7 @@ const TABS: Array<[Tab, string]> = [
   ["matches", "Matches"],
   ["profile", "Profile"],
   ["teammates", "Teammates"],
+  ["teams", "Teams"],
   ["players", "Players"],
 ];
 
@@ -177,6 +179,11 @@ export default function App() {
       {visited.has("teammates") && (
         <div hidden={tab !== "teammates" || openLog !== null}>
           <ErrorBoundary what="Teammates"><TeammatesPage /></ErrorBoundary>
+        </div>
+      )}
+      {visited.has("teams") && (
+        <div hidden={tab !== "teams" || openLog !== null}>
+          <ErrorBoundary what="Teams"><TeamsPage /></ErrorBoundary>
         </div>
       )}
       {visited.has("players") && (

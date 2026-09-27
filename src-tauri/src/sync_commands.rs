@@ -124,6 +124,14 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
                 Err(e) => tracing::warn!(error = %format!("{e:#}"), "demos.tf lookup failed"),
             }
 
+            // Q29: every team's season, from ETF2L. Best effort, and a few
+            // dozen match pages a sync, so a year fills in over a few syncs.
+            stage("Reading ETF2L seasons");
+            match hl_ingest::leagues::fetch(&db, &sources, |_, _| {}).await {
+                Ok(s) => tracing::info!(competitions = s.competitions, results = s.results, details = s.details, "ETF2L seasons read"),
+                Err(e) => tracing::warn!(error = %format!("{e:#}"), "ETF2L seasons could not be read"),
+            }
+
             // New logs can link to demos already on disk. This also places
             // every log on the real clock, which the round maps use.
             if let Some(tf) = db.get_config().await?.tf_path {
@@ -972,6 +980,19 @@ pub async fn import_log(state: State<'_, AppState>, text: String) -> CmdResult<h
     })?;
     let (weights, _) = hl_rating::Weights::load(&state.db_path.with_file_name("weights.toml"));
     Ok(hl_ingest::import_log(&state.db, &state.sources, &weights, log_id).await?)
+}
+
+/// Q29: one ETF2L Highlander season's division tables; the newest when
+/// `season` is not given.
+#[tauri::command]
+pub async fn get_leagues(state: State<'_, AppState>, season: Option<i64>) -> CmdResult<hl_ingest::leagues::SeasonView> {
+    Ok(hl_ingest::leagues::season(&state.db, season).await?)
+}
+
+/// Q29: one team's page.
+#[tauri::command]
+pub async fn get_team(state: State<'_, AppState>, team_id: i64) -> CmdResult<Option<hl_ingest::leagues::TeamView>> {
+    Ok(hl_ingest::leagues::team(&state.db, team_id).await?)
 }
 
 /// Q18: a match from a demo alone, for a server that wrote no log. Runs the

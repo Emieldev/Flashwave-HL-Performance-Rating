@@ -28,7 +28,7 @@ const write = process.argv.includes("--write");
 // Labels that reach t() through a variable rather than a literal.
 const LITERALS = [
   // App.tsx nav
-  "Matches", "Profile", "Teammates", "Players",
+  "Matches", "Profile", "Teammates", "Teams", "Players",
   // AnalysisPanel.tsx tabs
   "Kill map", "Play-by-play", "Fights", "Damage and kills by class", "Aim", "Timeline",
   // ProfilePage.tsx kind filter, and ContextBadge's KIND_PLURAL

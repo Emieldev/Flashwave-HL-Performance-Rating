@@ -234,6 +234,8 @@ pub fn run() {
             sync_commands::retry_failed,
             sync_commands::import_log,
             sync_commands::import_demo,
+            sync_commands::get_leagues,
+            sync_commands::get_team,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");

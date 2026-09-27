@@ -1036,6 +1036,63 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["leagues", "fetch"] => {
+            // Q29: a year of ETF2L Highlander seasons, every team.
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let started = std::time::Instant::now();
+            let s = hl_ingest::leagues::fetch(&db, &sources, |done, total| eprint!("\r  competitions {done}/{total}  ")).await?;
+            eprintln!();
+            println!("{} competitions, {} results, {} match pages ({} failed) in {:.0}s", s.competitions, s.results, s.details, s.failed, started.elapsed().as_secs_f64());
+            Ok(())
+        }
+
+        ["leagues", rest @ ..] => {
+            let db = Db::connect(&db_path).await?;
+            let season = rest.first().and_then(|s| s.parse::<i64>().ok());
+            let v = hl_ingest::leagues::season(&db, season).await?;
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&v)?);
+                return Ok(());
+            }
+            println!("seasons: {}", v.seasons.iter().map(|s| format!("{} ({})", s.season, s.name)).collect::<Vec<_>>().join(", "));
+            if let Some(s) = &v.season {
+                println!("\nSeason {} ({}) · pool: {} · {} matches still to read in detail", s.season, s.name, s.pool.join(", "), v.pending_details);
+            }
+            for d in &v.divisions {
+                println!("\n{}", d.division);
+                for t in &d.teams {
+                    let name: String = t.name.chars().take(28).collect();
+                    println!("  {:>6}  {:<28} {:>2}-{:<2} {:>2}d  {:>4}:{:<4}", t.team_id, name, t.record.won, t.record.lost, t.record.drawn, t.score_for, t.score_against);
+                }
+            }
+            Ok(())
+        }
+
+        ["team", id, rest @ ..] => {
+            let db = Db::connect(&db_path).await?;
+            let Some(t) = hl_ingest::leagues::team(&db, id.parse()?).await? else {
+                println!("no team {id} stored; run `hl leagues fetch`");
+                return Ok(());
+            };
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&t)?);
+                return Ok(());
+            }
+            println!("{} ({}) · {}-{}-{} · seasons {}", t.name, t.country.as_deref().unwrap_or("?"), t.record.won, t.record.lost, t.record.drawn, t.seasons.iter().map(|(s, d)| format!("S{s} {d}")).collect::<Vec<_>>().join(", "));
+            println!("\n{:<24} {:>5} {:>5} {:>7}", "map", "W-L", "win%", "rounds");
+            for m in &t.maps {
+                let pct = if m.record.played > 0 { 100.0 * f64::from(m.record.won) / f64::from(m.record.played) } else { 0.0 };
+                println!("{:<24} {:>2}-{:<2} {:>4.0}% {:>3}:{:<3}{}", m.map, m.record.won, m.record.lost, pct, m.rounds_for, m.rounds_against, if m.in_pool { "" } else { "  (not in pool)" });
+            }
+            println!("\nroster:");
+            for r in t.roster.iter().take(15) {
+                let rating = r.rating.map_or("-".to_string(), |x| format!("{x:.2} {} ({} games)", r.class.as_deref().unwrap_or(""), r.games));
+                println!("  {:<22} {:>3} matches  {rating}", r.name.chars().take(22).collect::<String>(), r.matches);
+            }
+            Ok(())
+        }
+
         ["spychecks", path, rest @ ..] => {
             // Q27's spike: hits on fully cloaked Spies in one demo, listed
             // with the demo's own tick so each can be checked in game with

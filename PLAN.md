@@ -1451,7 +1451,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q26~~ | ~~**Demo and Sniper valued by mode and side**~~ (ivg) | medium | **Closed: measured, half right, and not applied.** `hl situation --victims` now also splits stopwatch by the killer's side, each side against **its own** baseline -- pooled, every attacking kill read +30% and every defending one -26% whoever died, because the attackers win a stopwatch round by capping and the defenders by the clock. **On KOTH, ivg is right:** Demo +7.40% and Sniper +6.09% over the situation, against a +6.48% average, within 2 SE of each other. **On payload, neither claim shows up:** attacking, Demo +3.71% / Sniper +3.25%; defending, Demo +1.97% / Sniper +2.63% -- both gaps under half a standard error. So the data says Demo = Sniper everywhere, where the live table has them at 2.2 and 1.8. **But equalising them at 2.0 makes the rating slightly worse at its one job:** lower on the full sample in 7 of 9 models and held-out in 6 of 9, about -1.7 points in total. The same thing Q4 found: a kill's worth measured against the round and a victim value that helps pick the better player are not the same number. The 2.2/1.8 split stays. |
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
 | Q28 | **Callouts, positions and tendencies** (Flashy) | large | Named zones per map, stored like `.lang` files (seeded, user-editable, never overwritten), drawn as a jigsaw on the fullscreen overview. Then kills per zone for every match, and time per zone (anchors, rotators) from STV timelines. See §21. |
-| Q29 | **Teams and seasons** (Flashy) | large | Team pages for a year of ETF2L Highlander: rosters, results, win % per map, season tables -- all from ETF2L's API. Best players per team needs those matches' logs, which is Q14b; built together. See §22. |
+| Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
 
 ### Reported by testers, and fixed
 
@@ -2198,6 +2198,26 @@ owner played on. Every other team is unknown.
    a percentile against the owner's pool, which the page says.
 
 **Order:** part 1 as its own release; part 2 together with Q14b.
+
+**Part 1 built (27 Sept 2026).** `hl_ingest::leagues`, migration 0030 (its
+own tables, never the owner's `etf2l_match`: the context pass links logs
+to that one by time, and a table of every team's matches would hand it the
+wrong ones).
+
+- **What ETF2L gives.** `/competition/list` (20 a page, newest first, all
+  formats mixed); `/competition/{id}` with the map `pool`; `/competition/{id}/results`
+  with both teams, score, maps and each match's own division and tier; and
+  `/matches/{id}` with who played and each map's rounds.
+- **Found on the way.** A season's main competition ("Highlander Season 36
+  (Autumn 2026)", 110 matches) holds Mid, Low and Open together, so the
+  division is read from each match, not the competition's name. A stopwatch
+  map is two rows on the match page, one per half, and is one map won or lost.
+- **The cost.** 60 requests a minute is ETF2L's limit. The list walk stops at
+  a page with an older Highlander season on it and none of the wanted ones;
+  an archived competition already held is not asked for again; 60 match pages
+  a sync. First fetch on a copy: 19 competitions, 430 results, 60 pages, 289 s.
+- **Ratings on a team page** are the pool's: a player shows one only where
+  they appear in the owner's matches, and the page says so.
 
 ---
 

@@ -19,8 +19,12 @@ import mapviewUpward from "./fixtures/mapview_upward.json";
 import teammatesAll from "./fixtures/teammates_all.json";
 import seasonsSniper from "./fixtures/seasons_sniper.json";
 import fightsSniper from "./fixtures/fights_sniper.json";
+import leagues from "./fixtures/leagues.json";
+import team37805 from "./fixtures/team_37805.json";
 import type {
   SpyReport,
+  LeagueView,
+  TeamView,
   DemoImported,
   CartView,
   Analysis,
@@ -805,6 +809,14 @@ export const mockApi: Api = {
       },
       900,
     ),
+
+  // From `hl leagues --json` and `hl team 37805 --json` on a real fetch.
+  getLeagues: (_season?: number) => delay(leagues as unknown as LeagueView),
+  getTeam: (teamId: number) => {
+    const row = (leagues as unknown as LeagueView).divisions.flatMap((d) => d.teams).find((x) => x.teamId === teamId);
+    const base = team37805 as unknown as TeamView;
+    return delay<TeamView | null>(teamId === base.teamId ? base : row ? { ...base, teamId, name: row.name, avatar: row.avatar, record: row.record } : null);
+  },
 
   getMatchAnalysis: (logId: number) =>
     delay(

@@ -1262,3 +1262,82 @@ export interface DemoImported extends Imported {
   /** Where the demo is kept now (copied into tf/demos when picked from elsewhere). */
   path: string;
 }
+
+/** Q29: ETF2L Highlander seasons, every team. */
+export interface LeagueSeason {
+  season: number;
+  name: string;
+  divisions: string[];
+  pool: string[];
+}
+
+export interface LeagueRecord {
+  played: number;
+  won: number;
+  lost: number;
+  drawn: number;
+}
+
+export interface LeagueTableRow {
+  teamId: number;
+  name: string;
+  avatar: string | null;
+  record: LeagueRecord;
+  scoreFor: number;
+  scoreAgainst: number;
+}
+
+export interface LeagueView {
+  seasons: LeagueSeason[];
+  season: LeagueSeason | null;
+  divisions: Array<{ division: string; teams: LeagueTableRow[] }>;
+  /** Matches whose own page is still to be read: the per-map numbers are partial until then. */
+  pendingDetails: number;
+}
+
+export interface TeamMapRecord {
+  map: string;
+  record: LeagueRecord;
+  roundsFor: number;
+  roundsAgainst: number;
+  inPool: boolean;
+}
+
+export interface TeamResult {
+  matchId: number;
+  season: number;
+  division: string;
+  stage: string;
+  round: string | null;
+  time: number | null;
+  opponentId: number;
+  opponent: string;
+  scoreFor: number | null;
+  scoreAgainst: number | null;
+  defaultWin: boolean;
+  maps: string[];
+}
+
+export interface TeamRosterRow {
+  accountId: number;
+  name: string;
+  matches: number;
+  lastPlayed: number;
+  /** Most played class in your match pool, games on it, and average rating there. */
+  class: string | null;
+  games: number;
+  rating: number | null;
+}
+
+export interface TeamView {
+  teamId: number;
+  name: string;
+  country: string | null;
+  avatar: string | null;
+  /** [season, division], newest first. */
+  seasons: Array<[number, string]>;
+  record: LeagueRecord;
+  maps: TeamMapRecord[];
+  results: TeamResult[];
+  roster: TeamRosterRow[];
+}

@@ -8,6 +8,7 @@ mod aim;
 mod context;
 mod demos;
 mod fights;
+mod leagues;
 mod matches;
 mod players;
 mod ratings;
@@ -28,6 +29,7 @@ pub use roundmap::{
 };
 pub use ratings::{HistoryDbRow, RatingRow, VsTotals};
 pub use timeline::{TimelineRow, TimelineTotals};
+pub use leagues::{Competition, CompetitionRow, SeasonMap, SeasonMatch, SeasonMatchRow};
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
 pub use matches::{
     FailedLog, IndexInfo, IndexStats, LogsTfIndexRow, MatchFilter, MatchPage, MatchSummary, PartSummary, MyLine,
@@ -359,6 +361,7 @@ mod frozen_migrations {
         ("0027_kill_credit.sql", 0x795e229217b08f1d),
         ("0028_demo_timeline.sql", 0xac25a93f8002f17d),
         ("0029_cap_spawn_delay.sql", 0x35e56160a46ca344),
+        ("0030_etf2l_seasons.sql", 0x96e012b7662cc3a6),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {
