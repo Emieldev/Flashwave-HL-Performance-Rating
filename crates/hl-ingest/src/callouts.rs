@@ -49,6 +49,9 @@ const BUILT_IN: &[(&str, &str)] = &[
     ("upward", include_str!("../../../callouts/upward.json")),
     ("steel", include_str!("../../../callouts/steel.json")),
     ("swiftwater", include_str!("../../../callouts/swiftwater.json")),
+    ("proot", include_str!("../../../callouts/proot.json")),
+    ("ashville", include_str!("../../../callouts/ashville.json")),
+    ("vigil", include_str!("../../../callouts/vigil.json")),
 ];
 
 fn user_path(data: &Path, base: &str) -> PathBuf {
