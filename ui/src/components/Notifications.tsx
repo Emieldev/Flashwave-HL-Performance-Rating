@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
 import { dismissSync, fractionOf, labelOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
@@ -102,7 +103,13 @@ function UpdateCard() {
  */
 function DemoSeenCard() {
   const d = useDemoSeen();
-  if (!d) return null;
+  const sync = useSyncStatus();
+  // Its log is fetched: the sync card beside it says the rest.
+  const fetched = d?.state === "syncing" && (sync.state === "done" || sync.state === "error");
+  useEffect(() => {
+    if (fetched) dismissDemoSeen();
+  }, [fetched]);
+  if (!d || fetched) return null;
   const gaveUp = d.state === "gaveup";
   return (
     <div className={gaveUp ? "dl dl-failed" : "dl dl-running"}>
@@ -116,9 +123,11 @@ function DemoSeenCard() {
       <p className="dl-sub">
         {gaveUp
           ? t("logs.tf has nothing for this match yet. Press Sync once it is uploaded.")
-          : d.tries === 1
-            ? t("Looking for the log…")
-            : t("Still looking — logs.tf can take a minute (try {tries}).", { tries: d.tries })}
+          : d.state === "waiting"
+            ? t("Giving the server a few seconds to upload the log…")
+            : d.state === "syncing"
+              ? t("The log is up. Fetching it…")
+              : t("Looking for the log — logs.tf can take a minute (look {tries}).", { tries: d.tries })}
       </p>
     </div>
   );

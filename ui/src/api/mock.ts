@@ -240,6 +240,8 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
   };
 });
 
+let newestLooks = 0;
+
 const FAKE_MATCHES: MatchSummary[] = (() => {
   const r = rng(42);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
@@ -966,7 +968,11 @@ export const mockApi: Api = {
     return true;
   },
 
-  onNewDemo: async () => () => {},
+  // The browser build: `mockNewDemo()` in the console plays the part of TF2.
+  onNewDemo: async (h) => {
+    (window as unknown as { mockNewDemo: () => void }).mockNewDemo = () => h({ fileName: "flashwav2026-09-28_22-18-30.dem", bytes: 48_000_000 });
+    return () => {};
+  },
 
   onStv: async (h) => {
     stvHandlers = h;
@@ -1035,6 +1041,8 @@ export const mockApi: Api = {
 
   indexStats: () => delay(fakeStats(pending)),
   syncBusy: () => delay(busy),
+  // The browser build: a new log turns up on the third look.
+  newestLog: () => delay({ logId: 4200000, source: "logs.tf", known: ++newestLooks < 3 }),
 
   syncStart: () => {
     if (busy) return Promise.reject({ kind: "busy", message: "A sync is already running." });

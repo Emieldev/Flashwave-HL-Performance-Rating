@@ -245,6 +245,28 @@ pub async fn reprocess_start(app: AppHandle, state: State<'_, AppState>) -> CmdR
     Ok(())
 }
 
+/// The newest log the owner is in, and whether a sync has seen it yet.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewestLog {
+    pub log_id: i64,
+    pub source: &'static str,
+    pub known: bool,
+}
+
+/// One small request: is there a log newer than what is stored? What the
+/// app asks every few seconds after a match, rather than syncing each time.
+#[tauri::command]
+pub async fn newest_log(state: State<'_, AppState>) -> CmdResult<Option<NewestLog>> {
+    let me = state
+        .db
+        .get_me()
+        .await?
+        .ok_or_else(|| CmdError::new("missing_config", "Set your SteamID before syncing."))?;
+    let Some((log_id, source)) = state.sources.newest_log(&me.to_steamid64()).await? else { return Ok(None) };
+    Ok(Some(NewestLog { log_id, source, known: state.db.is_indexed(log_id).await? }))
+}
+
 #[tauri::command]
 pub async fn sync_busy(state: State<'_, AppState>) -> CmdResult<bool> {
     Ok(state.busy.load(Ordering::Acquire))

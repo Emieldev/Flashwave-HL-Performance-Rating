@@ -54,6 +54,7 @@ import type {
   PlayerHit,
   PlayerResponse,
   NewDemo,
+  NewestLog,
 } from "./types";
 
 /** True inside the Tauri window, false in a plain browser tab. */
@@ -84,6 +85,7 @@ const realApi = {
   listMatches: (q: MatchQuery) => invoke<MatchPage>("list_matches", { ...q }),
   indexStats: () => invoke<IndexStats>("index_stats"),
   syncBusy: () => invoke<boolean>("sync_busy"),
+  newestLog: () => invoke<NewestLog | null>("newest_log"),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

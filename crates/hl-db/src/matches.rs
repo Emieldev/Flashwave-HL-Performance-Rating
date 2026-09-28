@@ -476,6 +476,15 @@ impl Db {
         Ok(())
     }
 
+    /// Whether the index knows this log: a sync has seen it, whatever its format.
+    pub async fn is_indexed(&self, log_id: i64) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, i64>("SELECT 1 FROM log_index WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(self.pool())
+            .await?
+            .is_some())
+    }
+
     pub async fn raw_log_ids(&self) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar("SELECT log_id FROM log_raw ORDER BY log_id")
             .fetch_all(self.pool())

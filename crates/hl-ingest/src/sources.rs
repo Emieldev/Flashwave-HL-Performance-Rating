@@ -159,6 +159,26 @@ impl Sources {
         Ok(body)
     }
 
+    /// The newest log this player is in: one small request, for "is the game
+    /// I just played up yet" every few seconds after a match (ivg, Flashy).
+    /// logs.tf first, as the upload lands there; trends.tf, which lists it a
+    /// minute or so later, while logs.tf is refusing us.
+    pub async fn newest_log(&self, steamid64: &str) -> Result<Option<(i64, &'static str)>> {
+        let first = |body: &str, key: &str| -> Result<Option<i64>> {
+            let v: Value = serde_json::from_str(body).context("parsing the newest log")?;
+            Ok(v.get("logs").and_then(|l| l.get(0)).and_then(|l| l.get(key)).and_then(Value::as_i64))
+        };
+        if !self.logstf_resting() {
+            let url = format!("https://logs.tf/api/v1/log?player={steamid64}&limit=1");
+            match self.logstf_gated(self.logstf.get_text(&url)).await {
+                Ok(body) => return Ok(first(&body, "id")?.map(|id| (id, "logs.tf"))),
+                Err(e) => tracing::info!(error = %format!("{e:#}"), "logs.tf would not say; asking trends.tf"),
+            }
+        }
+        let body = self.trends.get_text(&format!("https://trends.tf/api/v1/logs?steamid64={steamid64}&limit=1")).await?;
+        Ok(first(&body, "logid")?.map(|id| (id, "trends.tf")))
+    }
+
     /// Whether logs.tf turned us away within the last [`LOGSTF_REST`]: the
     /// sync then goes to more.tf for new logs without asking logs.tf first.
     pub fn logstf_resting(&self) -> bool {

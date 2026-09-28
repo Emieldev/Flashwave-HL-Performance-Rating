@@ -30,8 +30,10 @@ pub mod validate;
 pub mod kills;
 
 /// At most this many bulk requests to logs.tf in one sync (raw logs, parts).
-/// A backlog drains over several syncs instead of tripping its limit.
-pub const BULK_PER_SYNC: usize = 100;
+/// A backlog drains over several syncs instead of tripping its limit. 100
+/// still earned a 403 (Flashy, September 2026), so it is 30: the newest
+/// matches first, the backlog over a few more syncs.
+pub const BULK_PER_SYNC: usize = 30;
 pub mod aim;
 pub mod backup;
 pub mod lock;

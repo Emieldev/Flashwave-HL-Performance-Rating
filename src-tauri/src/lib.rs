@@ -195,6 +195,7 @@ pub fn run() {
             sync_commands::sync_start,
             sync_commands::reprocess_start,
             sync_commands::sync_busy,
+            sync_commands::newest_log,
             sync_commands::index_stats,
             sync_commands::list_matches,
             sync_commands::get_match,

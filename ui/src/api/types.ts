@@ -166,6 +166,13 @@ export type Progress =
   /** logs.tf refused us: new logs come from more.tf's copy instead. */
   | { kind: "standIns"; done: number; total: number };
 
+/** The newest log the owner is in, and whether a sync has seen it. */
+export interface NewestLog {
+  logId: number;
+  source: string;
+  known: boolean;
+}
+
 /** Sent once on `sync://done`. */
 export interface SyncDone {
   kind: "sync" | "reprocess";
