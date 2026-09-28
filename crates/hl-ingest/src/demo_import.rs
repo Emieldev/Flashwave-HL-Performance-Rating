@@ -68,7 +68,8 @@ fn place(tf: &Path, file: &Path) -> Result<PathBuf> {
     Ok(dest)
 }
 
-fn zip_text(text: &str) -> Result<Vec<u8>> {
+/// A server log zipped the way logs.tf serves one.
+pub(crate) fn zip_text(text: &str) -> Result<Vec<u8>> {
     let mut buf = std::io::Cursor::new(Vec::new());
     {
         let mut z = zip::ZipWriter::new(&mut buf);

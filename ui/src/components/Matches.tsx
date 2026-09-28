@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { errorMessage, type ContextKind, type MatchSummary } from "../api/types";
 import { capitalize, formatDate, rating, splitMap } from "../lib/format";
+import { startSync, useSyncStatus } from "../lib/sync";
 import { bounds, usePeriod } from "../lib/period";
 import { ContextBadge } from "./ContextBadge";
 import { ClassIcon } from "./ClassIcon";
@@ -62,6 +63,14 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
     placeholderData: keepPreviousData,
   });
 
+  // Refresh means "is the game I just played here yet": a sync, which asks
+  // logs.tf for new logs. The list refreshes itself as they land and again
+  // when it finishes.
+  const syncing = useSyncStatus().state === "running";
+  const refresh = async () => {
+    if (!(await api.syncBusy())) await startSync(false);
+  };
+
   const items = matches.data?.items ?? [];
   const total = matches.data?.total ?? 0;
 
@@ -113,6 +122,15 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
         <span className="fi-count">
           {matches.isPending ? t("Loading…") : t("{0} match{1}", { "0": total.toLocaleString(), "1": total === 1 ? "" : "es" })}
         </span>
+        <button
+          className={syncing ? "km-chip fi-refresh busy" : "km-chip fi-refresh"}
+          onClick={() => void refresh()}
+          disabled={syncing}
+          title={t("Look for new matches now. A log can take a minute or two to show up on logs.tf after the game.")}
+        >
+          <span className="fi-refresh-icon" aria-hidden>↻</span>
+          {syncing ? t("Syncing…") : t("Refresh")}
+        </button>
         </div>
 
       {(filters.data?.classes.length ?? 0) > 0 && (

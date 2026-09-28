@@ -338,7 +338,8 @@ impl Db {
             "SELECT i.log_id FROM log_index i
              LEFT JOIN log_raw r         ON r.log_id = i.log_id
              LEFT JOIN log_fetch_error e ON e.log_id = i.log_id
-             WHERE r.log_id IS NULL
+             -- A log stored from more.tf is asked of logs.tf again (0031).
+             WHERE (r.log_id IS NULL OR i.log_id IN (SELECT log_id FROM log_stand_in))
                AND i.superseded_by IS NULL
                AND ( {EFFECTIVE_FORMAT} = 'highlander'
                   OR ({EFFECTIVE_FORMAT} IS NULL AND COALESCE(i.player_count, 0) >= 16) )

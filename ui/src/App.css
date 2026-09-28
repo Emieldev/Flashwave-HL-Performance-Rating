@@ -451,7 +451,7 @@
 
 .filter-row {
   display: grid;
-  grid-template-columns: auto minmax(230px, auto) 210px 1fr;
+  grid-template-columns: auto minmax(230px, auto) 210px 1fr auto;
   align-items: center;
   gap: 14px;
   /* Anything taller than one line pushes the row down rather than sitting
@@ -480,6 +480,11 @@
 .filter-row select {
   width: 100%;
 }
+
+.fi-refresh { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fi-refresh-icon { display: inline-block; font-size: 1rem; line-height: 1; }
+.fi-refresh.busy .fi-refresh-icon { animation: fi-spin 1s linear infinite; }
+@keyframes fi-spin { to { transform: rotate(360deg); } }
 
 .fi-count {
   text-align: right;

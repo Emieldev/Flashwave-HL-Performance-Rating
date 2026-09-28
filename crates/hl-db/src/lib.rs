@@ -362,6 +362,7 @@ mod frozen_migrations {
         ("0028_demo_timeline.sql", 0xac25a93f8002f17d),
         ("0029_cap_spawn_delay.sql", 0x35e56160a46ca344),
         ("0030_etf2l_seasons.sql", 0x96e012b7662cc3a6),
+        ("0031_log_stand_in.sql", 0xc1cb597e502e6f16),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {

@@ -98,7 +98,8 @@ pub async fn fetch_parts(db: &Db, sources: &Sources, mut progress: impl FnMut(Pr
                 tracing::warn!(log_id = id, error = %format!("{e:#}"), "part fetch failed");
                 s.failed += 1;
                 failing += 1;
-                if failing >= GIVE_UP_AFTER {
+                // A refusal ends the pass at once (see `http::Refused`).
+                if failing >= GIVE_UP_AFTER || crate::http::refused(&e) {
                     s.gave_up = true;
                     break;
                 }

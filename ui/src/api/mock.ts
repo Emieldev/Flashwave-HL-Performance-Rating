@@ -472,7 +472,8 @@ export const mockApi: Api = {
   // relabelled, so every row in browser mode leads somewhere.
   getMatch: (logId: number) => {
     const exact = FIXTURES.find((f) => f.logId === logId);
-    return delay(exact ?? { ...FIXTURES[0], logId });
+    // The list's second match was stored from more.tf, so its banner can be seen.
+    return delay(exact ?? { ...FIXTURES[0], logId, standIn: logId === FAKE_MATCHES[1]?.logId ? "more.tf" : null });
   },
 
   // Real profiles exported with `hl profile <class> --json`. Classes without

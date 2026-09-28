@@ -135,6 +135,11 @@ export function explain(raw: string): string {
   if (m.includes("404") || m.includes("not found")) {
     return t("the server does not have this log");
   }
+  // logs.tf turns a connection away for a while once it has had too many
+  // requests from it; nothing in the app fixes that but waiting.
+  if (m.includes("403") || m.includes("forbidden")) {
+    return t("the server is refusing requests from this connection for now, usually after too many; try again later");
+  }
   if (m.includes("429") || m.includes("too many")) {
     return t("asked for too much too quickly; it will be retried");
   }
@@ -196,6 +201,7 @@ export function fractionOf(p: Progress | null): number | null {
     case "parts":
     case "fights":
     case "readingDemos":
+    case "standIns":
       return p.total > 0 ? p.done / p.total : 1;
     case "etf2l":
       return p.total > 0 ? p.done / p.total : null;
@@ -249,6 +255,8 @@ export function labelOf(p: Progress | null): string {
       return t("{source} could not be reached; carrying on without it.", { source: p.source });
     case "gaveUp":
       return t("{source} stopped answering; the rest waits for the next sync.", { source: p.source });
+    case "standIns":
+      return p.total === 0 ? t("Nothing new on more.tf.") : t("logs.tf is refusing us: new matches from more.tf, {done} of {total}", { done: n(p.done), total: n(p.total) });
   }
 }
 

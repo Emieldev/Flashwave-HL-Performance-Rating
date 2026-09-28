@@ -350,3 +350,40 @@ async fn write_kill_events(
     }
     Ok(())
 }
+
+impl Db {
+    /// Mark a log as stored from a stand-in source rather than logs.tf.
+    pub async fn mark_stand_in(&self, log_id: i64, source: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO log_stand_in (log_id, source) VALUES (?1, ?2)
+             ON CONFLICT (log_id) DO UPDATE SET source = excluded.source, stored_at = unixepoch()",
+        )
+        .bind(log_id)
+        .bind(source)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
+
+    /// Where a stand-in log came from; `None` for a log from logs.tf.
+    pub async fn stand_in(&self, log_id: i64) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar("SELECT source FROM log_stand_in WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(self.pool())
+            .await?)
+    }
+
+    /// The real JSON is in: the stand-in's row goes, and so does its made-up
+    /// raw log, which puts the log back in the raw-log queue for the real one.
+    /// Its kills stay until that arrives and replaces them.
+    pub async fn clear_stand_in(&self, log_id: i64) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        let was = sqlx::query("DELETE FROM log_stand_in WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
+        if was.rows_affected() > 0 {
+            sqlx::query("DELETE FROM rawlog WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
+            sqlx::query("DELETE FROM rawlog_missing WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+}

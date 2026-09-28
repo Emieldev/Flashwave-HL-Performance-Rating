@@ -1,13 +1,18 @@
-//! Clients for trends.tf, logs.tf, demos.tf and ETF2L.
+//! Clients for trends.tf, logs.tf, more.tf, demos.tf and ETF2L.
 //!
 //! Each returns both a typed view and the verbatim JSON, because the verbatim
 //! JSON is what gets stored: parsing rules change, source rows don't.
 
-use crate::http::{download_client, download_to, Throttled};
+use crate::http::{download_client, download_to, refused, Refused, Throttled};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// How long logs.tf is left alone after it refuses us. Its bans lift on
+/// their own; asking during one is what keeps them going.
+const LOGSTF_REST: Duration = Duration::from_secs(10 * 60);
 
 /// One row of the trends.tf log index.
 #[derive(Debug, Clone, Deserialize)]
@@ -38,6 +43,9 @@ pub struct LogsTfRow {
 pub struct Sources {
     trends: Throttled,
     logstf: Throttled,
+    /// When logs.tf last turned us away, if it did within [`LOGSTF_REST`].
+    logstf_refused_at: Mutex<Option<Instant>>,
+    moretf: Throttled,
     demostf: Throttled,
     etf2l: Throttled,
     /// Steam profiles and avatar images, for the owner's picture.
@@ -69,6 +77,9 @@ impl Sources {
             // address), so it gets a slower pace; bulk jobs are also capped
             // per sync (`BULK_PER_SYNC`).
             logstf: Throttled::new(Duration::from_millis(2000))?,
+            logstf_refused_at: Mutex::new(None),
+            // A single volunteer's server: as slow as logs.tf.
+            moretf: Throttled::new(Duration::from_millis(2000))?,
             demostf: Throttled::new(Duration::from_millis(1000))?,
             // ETF2L does publish a limit: 60 requests a minute. Stay under it.
             etf2l: Throttled::new(Duration::from_millis(1500))?,
@@ -115,7 +126,7 @@ impl Sources {
     /// trends.tf never indexed — mostly 2014-2019 on this account.
     pub async fn logstf_search(&self, steamid64: &str) -> Result<Vec<(LogsTfRow, String)>> {
         let url = format!("https://logs.tf/api/v1/log?player={steamid64}&limit=10000");
-        let body = self.logstf.get_text(&url).await?;
+        let body = self.logstf_gated(self.logstf.get_text(&url)).await?;
         let page: Value = serde_json::from_str(&body).context("parsing logs.tf search")?;
         page.get("logs")
             .and_then(Value::as_array)
@@ -132,15 +143,12 @@ impl Sources {
     /// The raw server log behind a logs.tf page, as the zip logs.tf serves;
     /// `None` when logs.tf has none.
     pub async fn logstf_rawlog(&self, log_id: i64) -> Result<Option<Vec<u8>>> {
-        self.logstf.get_bytes_opt(&format!("https://logs.tf/logs/log_{log_id}.log.zip")).await
+        self.logstf_gated(self.logstf.get_bytes_opt(&format!("https://logs.tf/logs/log_{log_id}.log.zip"))).await
     }
 
     /// Full JSON for one log, verbatim.
     pub async fn logstf_log(&self, log_id: i64) -> Result<String> {
-        let body = self
-            .logstf
-            .get_text(&format!("https://logs.tf/api/v1/log/{log_id}"))
-            .await?;
+        let body = self.logstf_gated(self.logstf.get_text(&format!("https://logs.tf/api/v1/log/{log_id}"))).await?;
         // Validate before storing: a truncated or HTML error body must not
         // become a "raw source" that reprocess later chokes on.
         let v: Value = serde_json::from_str(&body)
@@ -149,6 +157,45 @@ impl Sources {
             anyhow::bail!("log {log_id}: response has no players");
         }
         Ok(body)
+    }
+
+    /// Whether logs.tf turned us away within the last [`LOGSTF_REST`]: the
+    /// sync then goes to more.tf for new logs without asking logs.tf first.
+    pub fn logstf_resting(&self) -> bool {
+        self.logstf_refused_at.lock().unwrap().is_some_and(|at| at.elapsed() < LOGSTF_REST)
+    }
+
+    /// A logs.tf request, unless logs.tf refused us recently; a refusal
+    /// starts the rest. One place, so every pass that talks to logs.tf --
+    /// the sync, raw logs, part logs, round maps -- stops together.
+    async fn logstf_gated<T>(&self, request: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+        if self.logstf_resting() {
+            return Err(anyhow::Error::new(Refused { status: reqwest::StatusCode::FORBIDDEN })
+                .context("logs.tf refused us a few minutes ago; not asking again yet"));
+        }
+        let result = request.await;
+        if let Err(e) = &result {
+            if refused(e) {
+                tracing::warn!("logs.tf is refusing requests; leaving it alone for {} minutes", LOGSTF_REST.as_secs() / 60);
+                *self.logstf_refused_at.lock().unwrap() = Some(Instant::now());
+            }
+        }
+        result
+    }
+
+    /// more.tf's own parse of a logs.tf log: `None` when more.tf does not
+    /// have it. The stand-in for logs.tf while logs.tf refuses us
+    /// (see `moretf.rs`).
+    pub async fn moretf_log(&self, log_id: i64) -> Result<Option<String>> {
+        let Some(body) = self.moretf.get_text_opt(&format!("https://more.tf/api/log/{log_id}")).await? else {
+            return Ok(None);
+        };
+        // A cut-off body is not a log (seen once, 177 kB of a 359 kB answer).
+        let v: Value = serde_json::from_str(&body).with_context(|| format!("more.tf log {log_id}: response is not JSON"))?;
+        if v.get("success").and_then(Value::as_bool) != Some(true) || v.get("players").is_none() {
+            return Ok(None);
+        }
+        Ok(Some(body))
     }
 }
 

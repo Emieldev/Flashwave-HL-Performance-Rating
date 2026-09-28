@@ -84,6 +84,10 @@ pub enum Progress {
     /// is left waits for the next sync, unmarked.
     #[serde(rename_all = "camelCase")]
     GaveUp { source: &'static str, done: usize, total: usize },
+    /// logs.tf refused us, so new logs come from more.tf's copy instead
+    /// (see `moretf.rs`).
+    #[serde(rename_all = "camelCase")]
+    StandIns { done: usize, total: usize },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,8 +183,10 @@ pub async fn sync(
     // log gets before it waits for a retry by hand — so an outage must not
     // spend them. Consecutive unreachable logs end the pass instead.
     let mut unreachable_run = 0usize;
+    // Where logs.tf stopped giving us logs, if it did.
+    let mut stopped_at: Option<usize> = None;
 
-    for (i, log_id) in queue.into_iter().enumerate() {
+    for (i, log_id) in queue.iter().copied().enumerate() {
         progress(Progress::Fetching { done: i, total, log_id });
         let result = async {
             let json = sources.logstf_log(log_id).await?;
@@ -193,6 +199,8 @@ pub async fn sync(
             Ok(()) => {
                 unreachable_run = 0;
                 fetched += 1;
+                // A log stored from more.tf has its real JSON now.
+                db.clear_stand_in(log_id).await?;
                 // Rated now rather than at the end of the sync, so the row
                 // that just appeared in the list arrives with its number on
                 // it. Against the stored baselines, which a few new games
@@ -204,9 +212,12 @@ pub async fn sync(
             Err(e) if crate::http::unreachable(&e) => {
                 unreachable_run += 1;
                 tracing::warn!(log_id, error = %format!("{e:#}"), "logs.tf unreachable");
-                if unreachable_run >= GIVE_UP_AFTER {
+                // A refusal ends the pass at once: every further request
+                // only keeps logs.tf's ban on this address going.
+                if unreachable_run >= GIVE_UP_AFTER || crate::http::refused(&e) {
                     tracing::warn!(done = i, total, "logs.tf stopped answering; the rest waits for the next sync");
                     progress(Progress::GaveUp { source: "logs.tf", done: i, total });
+                    stopped_at = Some(i + 1 - unreachable_run);
                     break;
                 }
             }
@@ -221,10 +232,79 @@ pub async fn sync(
         }
     }
     progress(Progress::Fetching { done: total, total, log_id: 0 });
+
+    // What logs.tf would not give us, from more.tf's copy of it.
+    if let Some(from) = stopped_at {
+        fetched += stand_ins(db, sources, w, &queue[from..], &mut progress).await?;
+    }
     // New logs have rounds now: catch any that are parts of another.
     recompute_supersessions(db).await?;
 
     Ok(SyncSummary { fetched, failed, stats: db.index_stats().await? })
+}
+
+/// How many logs one sync takes from more.tf. Newest first, so the game just
+/// played is the first of them; the rest wait for logs.tf or the next sync.
+const STAND_INS_PER_SYNC: usize = 30;
+
+/// Store logs from more.tf while logs.tf refuses us: its JSON and a server
+/// log written from it, rated like any other, and marked as stand-ins so the
+/// sync asks logs.tf for the real ones again. Returns how many were stored.
+async fn stand_ins(db: &Db, sources: &Sources, w: &hl_rating::Weights, ids: &[i64], progress: &mut impl FnMut(Progress)) -> Result<usize> {
+    let mut todo = Vec::new();
+    for &id in ids {
+        if todo.len() == STAND_INS_PER_SYNC {
+            break;
+        }
+        // Already a stand-in: more.tf's copy has not changed.
+        if db.stand_in(id).await?.is_none() {
+            todo.push(id);
+        }
+    }
+    let total = todo.len();
+    let (mut stored, mut unreachable_run) = (0, 0);
+    for (i, log_id) in todo.into_iter().enumerate() {
+        progress(Progress::StandIns { done: i, total });
+        let result = async {
+            let Some(body) = sources.moretf_log(log_id).await? else { return Ok(false) };
+            let v: serde_json::Value = serde_json::from_str(&body)?;
+            let s = crate::moretf::stand_in(&v)?;
+            let json = serde_json::to_string(&s.json)?;
+            db.store_raw_log(log_id, &json).await?;
+            db.store_rawlog(log_id, &crate::demo_import::zip_text(&s.text)?).await?;
+            db.mark_stand_in(log_id, crate::moretf::SOURCE).await?;
+            process_raw(db, log_id, &json).await?;
+            crate::kills::derive_log(db, log_id).await?;
+            anyhow::Ok(true)
+        }
+        .await;
+        match result {
+            Ok(true) => {
+                unreachable_run = 0;
+                stored += 1;
+                tracing::info!(log_id, "stored from more.tf while logs.tf refuses us");
+                if let Err(e) = crate::rating::rate_logs(db, w, &[log_id]).await {
+                    tracing::warn!(log_id, error = %format!("{e:#}"), "rating a new log failed");
+                }
+            }
+            Ok(false) => {
+                unreachable_run = 0;
+                tracing::info!(log_id, "more.tf does not have this log either");
+            }
+            Err(e) if crate::http::unreachable(&e) => {
+                unreachable_run += 1;
+                tracing::warn!(log_id, error = %format!("{e:#}"), "more.tf unreachable");
+                if unreachable_run >= GIVE_UP_AFTER || crate::http::refused(&e) {
+                    progress(Progress::GaveUp { source: "more.tf", done: i, total });
+                    break;
+                }
+            }
+            // Nothing is marked: the log stays in the queue for logs.tf.
+            Err(e) => tracing::warn!(log_id, error = %format!("{e:#}"), "more.tf stand-in failed"),
+        }
+    }
+    progress(Progress::StandIns { done: total, total });
+    Ok(stored)
 }
 
 /// Rebuild every derived table from stored sources. No network.

@@ -56,6 +56,9 @@ pub struct MatchDetail {
     pub demos: Vec<DemoView>,
     /// The per-round logs this one was combined from; filled in by the caller.
     pub parts: Vec<PartView>,
+    /// Where the log came from when logs.tf would not give it (`"more.tf"`),
+    /// until the real one replaces it; filled in by the caller.
+    pub stand_in: Option<String>,
 }
 
 /// One of the logs a combined log was built from.
@@ -297,6 +300,7 @@ pub fn build(
         weights_warning: None,
         demos: Vec::new(),
         parts: Vec::new(),
+        stand_in: None,
     }
 }
 

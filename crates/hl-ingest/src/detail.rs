@@ -108,5 +108,6 @@ pub async fn match_detail_from(
         detail.etf2l_match_id = info.etf2l_match_id;
         detail.demos_tf_id = info.demos_tf_id;
     }
+    detail.stand_in = db.stand_in(log_id).await?;
     Ok(detail)
 }

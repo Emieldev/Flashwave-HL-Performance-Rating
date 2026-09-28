@@ -1789,6 +1789,7 @@ fn print_progress(p: Progress) {
         Progress::Etf2l { done, total } => print!("\rETF2L matches {done}/{total}          "),
         Progress::RawLogs { done, total } => print!("\rraw logs {done}/{total}          "),
         Progress::Parts { done, total } => print!("\rparts {done}/{total}          "),
+        Progress::StandIns { done, total } => print!("\rfrom more.tf {done}/{total}          "),
         Progress::Stage { what } => print!("\r{what}...          "),
         Progress::Fights { done, total } => print!("\rfights {done}/{total}          "),
         Progress::ReadingDemos { done, total, log_id } => match log_id {

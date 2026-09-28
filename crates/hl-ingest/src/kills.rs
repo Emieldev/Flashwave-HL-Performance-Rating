@@ -78,7 +78,8 @@ pub async fn fetch(
             Err(e) if crate::http::unreachable(&e) => {
                 unreachable_run += 1;
                 tracing::warn!(log_id, error = %format!("{e:#}"), "logs.tf unreachable");
-                if unreachable_run >= GIVE_UP_AFTER {
+                // A refusal ends the pass at once (see `http::Refused`).
+                if unreachable_run >= GIVE_UP_AFTER || crate::http::refused(&e) {
                     s.gave_up = true;
                     progress(Progress::GaveUp { source: "logs.tf", done: i, total });
                     break;

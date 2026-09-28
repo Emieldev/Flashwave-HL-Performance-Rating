@@ -162,7 +162,9 @@ export type Progress =
   /** A source could not be reached; the sync carries on without it. */
   | { kind: "sourceFailed"; source: string; error: string }
   /** Downloading stopped early because the server stopped answering. */
-  | { kind: "gaveUp"; source: string; done: number; total: number };
+  | { kind: "gaveUp"; source: string; done: number; total: number }
+  /** logs.tf refused us: new logs come from more.tf's copy instead. */
+  | { kind: "standIns"; done: number; total: number };
 
 /** Sent once on `sync://done`. */
 export interface SyncDone {
@@ -355,6 +357,9 @@ export interface MatchDetail {
   segments: Segment[];
   /** The per-round logs this one was combined from; empty for a normal log. */
   parts: PartView[];
+  /** Where the log came from while logs.tf refused us ("more.tf"), until the
+   *  real one replaces it. Absent from older builds' fixtures. */
+  standIn?: string | null;
 }
 
 /** One of the logs a combined log was built from. */

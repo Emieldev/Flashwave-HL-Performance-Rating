@@ -79,6 +79,11 @@ impl Throttled {
                     if status.as_u16() == 404 {
                         return Ok(None);
                     }
+                    // Turned away: asking again, now or in ten seconds, only
+                    // keeps the ban going.
+                    if status.as_u16() == 403 {
+                        return Err(anyhow::Error::new(Refused { status }).context(url.to_string()));
+                    }
                     // 400s other than rate limiting will not improve on retry.
                     if status.is_client_error() && status.as_u16() != 429 {
                         bail!("{url}: HTTP {status}");
@@ -91,7 +96,11 @@ impl Throttled {
                         .map(|s| Duration::from_secs(s.min(90)))
                         .unwrap_or(Duration::ZERO);
                     tracing::warn!(url, %status, attempt, "transient HTTP failure");
-                    last_err = Some(anyhow::anyhow!("{url}: HTTP {status}"));
+                    last_err = Some(if status.as_u16() == 429 {
+                        anyhow::Error::new(Refused { status }).context(url.to_string())
+                    } else {
+                        anyhow::anyhow!("{url}: HTTP {status}")
+                    });
                 }
                 Err(e) => {
                     tracing::warn!(url, error = %e, attempt, "request failed");
@@ -176,9 +185,34 @@ pub async fn download_to(
 /// the log — only that the server is down or the network is — and marking
 /// hundreds of them during an outage would park a whole history behind a
 /// manual retry.
+///
+/// A server refusing us ([`Refused`]) counts too: it says nothing about the
+/// log either.
 pub fn unreachable(e: &anyhow::Error) -> bool {
-    e.chain().any(|c| {
-        c.downcast_ref::<reqwest::Error>()
-            .is_some_and(|r| r.is_connect() || r.is_timeout() || r.is_request())
-    })
+    refused(e)
+        || e.chain().any(|c| {
+            c.downcast_ref::<reqwest::Error>()
+                .is_some_and(|r| r.is_connect() || r.is_timeout() || r.is_request())
+        })
+}
+
+/// A server that has turned this address away: a 403 on requests that
+/// normally work, or a 429 that outlasted the retries. logs.tf does this for
+/// a while after too many requests, and every further request only prolongs
+/// it, so a pass that meets one stops asking at once.
+#[derive(Debug)]
+pub struct Refused {
+    pub status: reqwest::StatusCode,
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HTTP {}: the server is refusing requests from this address for now", self.status)
+    }
+}
+
+impl std::error::Error for Refused {}
+
+pub fn refused(e: &anyhow::Error) -> bool {
+    e.chain().any(|c| c.is::<Refused>())
 }

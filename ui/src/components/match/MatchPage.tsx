@@ -70,6 +70,15 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
       {q.data && shown && (
         <>
           <Header d={shown} />
+          {q.data.standIn && (
+            <div className="stv-banner stand-in-banner">
+              <span className="stv-banner-icon" aria-hidden>!</span>
+              <p>
+                <strong>{t("Built from {source}'s copy: logs.tf was refusing us.", { source: q.data.standIn })}</strong>{" "}
+                <span className="hint">{t("The scoreboard and every kill are the same as logs.tf's. It lacks who assisted each kill and when each point was capped after the first, so ratings may move a little when a later sync swaps in the real log.")}</span>
+              </p>
+            </div>
+          )}
           <StvBanner d={q.data} />
           {/* The scoreboard first, as on logs.tf; the matchups read it next. */}
           <Fold id="scoreboard">
