@@ -77,7 +77,7 @@ updater's `latest.json`.
      "target/release/bundle/nsis/Flashwave.tf_<version>_x64-setup.exe" \
      "target/release/bundle/msi/Flashwave.tf_<version>_x64_en-US.msi" \
      "target/release/bundle/nsis/latest.json" \
-     --title "Flashwave.tf <version> beta" \
+     --title "Flashwave.tf <version> alpha" \
      --notes-file docs/release-<version>.md \
      --latest
    ```
@@ -85,8 +85,9 @@ updater's `latest.json`.
    **`latest.json` must be attached to the release.** Without it the
    updater has nothing to read and every client silently stays put.
 
-   **And the release must be marked Latest -- not a pre-release.** "beta"
-   (before 0.7.0, "alpha") lives in the title and the app's badge only.
+   **And the release must be marked Latest -- not a pre-release.** "alpha"
+   lives in the title and the app's badge only. (0.7.0 shipped saying
+   "beta" by mistake; its release page and update card were corrected.)
 
 6. **Check what the updater will actually see** -- give GitHub's cache a
    minute:

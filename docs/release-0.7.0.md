@@ -1,4 +1,4 @@
-# Flashwave.tf 0.7.0 beta
+# Flashwave.tf 0.7.0 alpha
 
 Windows only. **On 0.5.0 or later?** The app offers this update itself: take
 it from the card, or Settings › Updates › Check for updates.
@@ -16,7 +16,7 @@ The hash is at the bottom. Updating keeps everything.
 
 ---
 
-Out of alpha. Your game shows up after the match even when logs.tf is
+Your game shows up after the match even when logs.tf is
 refusing you, every class's rating is explained on its own page, and the
 kill map ships with map images for everyone.
 
