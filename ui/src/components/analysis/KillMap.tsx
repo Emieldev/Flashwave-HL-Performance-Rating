@@ -1117,9 +1117,10 @@ function blur(g: number[], w: number, h: number): number[] {
   return out;
 }
 
-/** An overview image's square, as a drawing frame of 1024 units a side. */
+/** An overview image as a drawing frame 1024 units across, and as many
+ *  down as its shape needs (square for the built-in renders). */
 function overviewFrame(o: Overview): Frame {
-  return { minX: o.minX, maxY: o.maxY, cell: o.size / 1024, width: 1024, height: 1024 };
+  return { minX: o.minX, maxY: o.maxY, cell: o.size / 1024, width: 1024, height: Math.round(1024 * (o.aspect || 1)) };
 }
 
 /** Marks per callout zone, by where each landed (Q28). */

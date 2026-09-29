@@ -41,6 +41,9 @@ import type {
   MapView,
   MatchDetail,
   Overview,
+  OverviewImage,
+  Placement,
+  MapsOverview,
   Profile,
   MatchPage,
   MatchQuery,
@@ -63,6 +66,22 @@ const state: AppConfig = startInSetup
 
 // URLs only: Vite serves the files, nothing is read into the bundle.
 const OVERVIEW_URLS = import.meta.glob("../../../overviews/*.png", { query: "?url", import: "default", eager: true }) as Record<string, string>;
+
+// more.tf's placement for the maps the browser preview has fixtures on.
+const MOCK_PLACEMENTS: Record<string, [number, number, number]> = {
+  upward: [5.5, -4956, 2216],
+  ashville: [8, -7322, 4101],
+  vigil: [7.5, -5802, 4940],
+  proot: [7.75, -7054, 3968],
+};
+
+function mockPlacement(base: string): Placement | null {
+  const p = MOCK_PLACEMENTS[base];
+  if (!p) return null;
+  const [s, x, y] = p;
+  const size = 1024 * s;
+  return { minX: x + 910 * s - size / 2, maxY: y - 512 * s + size / 2, size };
+}
 
 const delay = <T,>(value: T, ms = 120): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), ms));
@@ -930,19 +949,40 @@ export const mockApi: Api = {
 
   // The map images the app ships (overviews/ in the repo, more.tf's renders).
   getMapOverview: async (map: string): Promise<Overview | null> => {
-    const placements: Record<string, [number, number, number]> = {
-      upward: [5.5, -4956, 2216],
-      ashville: [8, -7322, 4101],
-      vigil: [7.5, -5802, 4940],
-      proot: [7.75, -7054, 3968],
-    };
-    const base = Object.keys(placements).find((b) => map.includes(b));
+    const base = Object.keys(MOCK_PLACEMENTS).find((b) => map.includes(b));
     if (!base) return null;
     const url = OVERVIEW_URLS[`../../../overviews/${base}.png`];
     if (!url) return null;
-    const [s, x, y] = placements[base];
-    const size = 1024 * s;
-    return { mapBase: base, minX: x + 910 * s - size / 2, maxY: y - 512 * s + size / 2, size, image: url };
+    return { mapBase: base, ...mockPlacement(base)!, aspect: 1, image: url };
+  },
+
+  mapsOverview: () =>
+    delay<MapsOverview>({
+      unknownMatches: 3,
+      maps: [
+        { base: "product", name: "koth_product_final", matches: 182, image: "built in", placement: "built in", callouts: "built in", zones: 27, unplaced: 0, draft: true },
+        { base: "upward", name: "pl_upward_f12", matches: 120, image: "built in", placement: "built in", callouts: "built in", zones: 0, unplaced: 14, draft: true },
+        { base: "vigil", name: "pl_vigil_rc10", matches: 96, image: "yours", placement: "yours", callouts: "yours", zones: 12, unplaced: 0, draft: false },
+        { base: "ashville", name: "koth_ashville_final1", matches: 61, image: "built in", placement: "built in", callouts: "none", zones: 0, unplaced: 0, draft: false },
+        { base: "lakeside", name: "koth_lakeside_final", matches: 9, image: "none", placement: "none", callouts: "none", zones: 0, unplaced: 0, draft: false },
+      ],
+    }),
+  overviewImage: async (map: string): Promise<OverviewImage | null> => {
+    const base = Object.keys(MOCK_PLACEMENTS).find((b) => map.includes(b));
+    const url = base && OVERVIEW_URLS[`../../../overviews/${base}.png`];
+    return url ? { image: url, aspect: 1, placement: mockPlacement(base) } : null;
+  },
+  importOverview: async (map: string) => {
+    console.info("would pick an image for", map);
+    return delay(true);
+  },
+  saveOverviewPlacement: (map: string, placement: Placement) => {
+    console.info("would save placement", map, placement);
+    return delay(undefined);
+  },
+  removeOverview: (map: string) => {
+    console.info("would remove the image of", map);
+    return delay(undefined);
   },
 
   rawlogStats: () => delay({ stored: 740, pending: 16, missing: 2, bytes: 79_900_000, kills: 226_784 }),

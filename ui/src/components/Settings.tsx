@@ -4,6 +4,7 @@ import { api, inTauri } from "../api/client";
 import { errorMessage, type AppStatus, type Cleaned, type DemoIndexSummary } from "../api/types";
 import { formatDate } from "../lib/format";
 import { HistoryPanel } from "./HistoryPanel";
+import { MapsPanel } from "./MapsPanel";
 import { ImportPanel } from "./ImportPanel";
 import { startRebuild, useSyncStatus } from "../lib/sync";
 import { setTheme, THEMES, useTheme } from "../lib/theme";
@@ -33,6 +34,7 @@ export function Settings({
       <ProblemsPanel version={status.version} />
       <LanguagePanel />
       <NamesPanel />
+      <MapsPanel />
       <ThemePanel />
       <HistoryPanel />
       <ImportPanel />

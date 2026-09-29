@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   StvStage,
   LanguageFiles,
@@ -19,6 +19,9 @@ import type {
   DemoStats,
   IndexStats,
   MapView,
+  MapsOverview,
+  OverviewImage,
+  Placement,
   MatchDetail,
   Overview,
   MatchPage,
@@ -175,6 +178,23 @@ const realApi = {
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */
   getMapOverview: (map: string) => invoke<Overview | null>("get_map_overview", { map }),
+  /** Q31: the Maps section of Settings. */
+  mapsOverview: () => invoke<MapsOverview>("maps_overview"),
+  overviewImage: (map: string) => invoke<OverviewImage | null>("overview_image", { map }),
+  /** Pick an image and put it in for this map; false when the dialog was closed. */
+  importOverview: async (map: string): Promise<boolean> => {
+    const path = await open({
+      title: "Top-down image of the map",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    if (typeof path !== "string") return false;
+    await invoke<void>("import_overview", { map, path });
+    return true;
+  },
+  saveOverviewPlacement: (map: string, placement: Placement) => invoke<void>("save_overview_placement", { map, placement }),
+  removeOverview: (map: string) => invoke<void>("remove_overview", { map }),
   /** Opens in the system browser, never inside the app window. */
   openExternal: (url: string) => openUrl(url),
   copyText: (text: string) => writeText(text),

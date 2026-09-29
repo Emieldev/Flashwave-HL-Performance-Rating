@@ -1453,7 +1453,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | Q28 | **Callouts, positions and tendencies** (Flashy) | large | **Built; the callouts are drafts.** Zones in game units, one JSON file a map: seeds in `callouts/`, the owner's copy in `<data>/callouts/` always wins. Product is drawn (27 zones from the TF2 wiki's descriptions; 69% of 65,266 kill positions land in one, RED/BLU mirror to within 3%); Upward, Steel and Swiftwater ship their wiki names unplaced; Vigil, Ashville and Proot have no written source. The kill map draws the jigsaw, counts kills per zone, and has an editor (click corners, name, save). A Positions panel shows each player's time per zone from the STV. Still to come: tendencies across matches. See §21. |
 | Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
 | ~~Q30~~ | ~~**Maps recognised from the STV when logs.tf cannot say** (Flashy)~~ | medium | **Done (29-30 Sept).** A linked demo's header now names the map of every round inside its recording, ahead of the raw log's map line (it agrees with the log's own field on 77 of 77 rounds, and beat the map line both times they differed); linking or downloading a demo re-resolves at once; and the app ships map shapes for 24 maps (`maps/geometry.json`), so a fresh install recognises Vigil from kill positions alone. With every map name logs.tf gives wiped from a copy of the database, 92 of 94 rounds with a demo and 95% of the rest still resolve correctly, against none before. The kill map says when the map is unknown and how to fix it. The missing images were the other half, fixed by shipping more.tf's. **Done (30 Sept):** a "this was on ___" picker under the kill map, and demos.tf now finds the STV of a log whose map is unknown, by time alone. See §24. |
-| Q31 | **A Maps section in Settings, with top-down image import** (Flashy) | medium | One row per map: image yes/no, placement known, callouts yours/built-in/none, matches on it. Import a top-down image per map; maps in the placement table line up by themselves, others are dragged and scaled into line over the kill outline. Depends on nothing, but reads best after Q30, since it lists what Q30 found. See §24. |
+| ~~Q31~~ | ~~**A Maps section in Settings, with top-down image import** (Flashy)~~ | medium | **Done (30 Sept).** Settings, Maps: every map you played (the rest on ask) with where its image, placement and callouts come from, how many matches were on it, and how many matches have a round on no known map. Import a PNG, JPEG or WebP for any map; it wins over the built-in one, and Remove mine goes back. Line up drags this install's kill positions over the image and scrolls to scale; the placement is saved beside the image. Images need not be square. See §24. |
 | Q32 | **Callout presets: import and export per map** (Flashy) | small | Callouts will be passed round on Discord and adjusted in the app, like `.lang` files. Export writes one map's zones to a file, import validates it and replaces your copy with an undo. Sits in Q31's rows and in the kill map's editor. See §24. |
 
 ### Reported by testers, and fixed
@@ -2406,6 +2406,16 @@ the callout seeds, and every map in the database):
   twelve are built in since 29 Sept. Import is for the maps they do not
   cover and for a player who wants a different render; the player's own
   image always wins, and Remove goes back to the built-in one.
+
+**Built (30 Sept 2026).** `overview.rs` gained the player's own image
+(`<data>/overviews/<map>.{png,jpg,webp}`) and placement
+(`<map>.placement.json`), both winning over the built-in ones; image sizes
+are read from the file headers, so no image library was added, and an
+image that is not square keeps its shape on the kill map (`aspect`). A file
+that is not an image, over 25 MB or under 64 px is refused. The list is
+`mapsettings.rs`; the section is `MapsPanel.tsx`, the aligner
+`MapAligner.tsx`. Measured nothing; checked in the browser against the
+fixtures: rows, import, line up, save.
 
 ### Q32. Callout presets
 

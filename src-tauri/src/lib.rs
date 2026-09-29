@@ -245,6 +245,11 @@ pub fn run() {
             sync_commands::reset_callouts,
             sync_commands::known_maps,
             sync_commands::set_round_map,
+            sync_commands::maps_overview,
+            sync_commands::overview_image,
+            sync_commands::import_overview,
+            sync_commands::save_overview_placement,
+            sync_commands::remove_overview,
             sync_commands::get_positions,
         ])
         .run(tauri::generate_context!())

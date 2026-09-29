@@ -1047,6 +1047,53 @@ pub async fn set_round_map(state: State<'_, AppState>, log_id: i64, rounds: Vec<
     Ok(hl_ingest::maps::set_round_map(&state.db, log_id, &rounds, map.as_deref()).await?)
 }
 
+/// Q31: every map the app knows, for the Maps section in Settings.
+#[tauri::command]
+pub async fn maps_overview(state: State<'_, AppState>) -> CmdResult<hl_ingest::mapsettings::MapsOverview> {
+    Ok(hl_ingest::mapsettings::list(&state.db, &data_folder(&state)).await?)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverviewImage {
+    image: String,
+    aspect: f64,
+    placement: Option<hl_ingest::overview::Placement>,
+}
+
+/// Q31: a map's image and where it sits now, placed or not, for lining up.
+#[tauri::command]
+pub async fn overview_image(state: State<'_, AppState>, map: String) -> CmdResult<Option<OverviewImage>> {
+    let dir = state.db_path.with_file_name("overviews");
+    let base = hl_core::maps::map_base(&map);
+    Ok(hl_ingest::overview::image(&dir, &map)?.map(|(image, aspect)| OverviewImage {
+        image,
+        aspect,
+        placement: hl_ingest::overview::placement_for(&dir, &base),
+    }))
+}
+
+/// Q31: put the player's own top-down image in for a map.
+#[tauri::command]
+pub async fn import_overview(state: State<'_, AppState>, map: String, path: String) -> CmdResult<()> {
+    let dir = state.db_path.with_file_name("overviews");
+    Ok(hl_ingest::overview::import(&dir, &map, std::path::Path::new(&path))?)
+}
+
+/// Q31: save where the player lined the image up.
+#[tauri::command]
+pub async fn save_overview_placement(state: State<'_, AppState>, map: String, placement: hl_ingest::overview::Placement) -> CmdResult<()> {
+    let dir = state.db_path.with_file_name("overviews");
+    Ok(hl_ingest::overview::save_placement(&dir, &map, placement)?)
+}
+
+/// Q31: back to the built-in image and placement.
+#[tauri::command]
+pub async fn remove_overview(state: State<'_, AppState>, map: String) -> CmdResult<()> {
+    let dir = state.db_path.with_file_name("overviews");
+    Ok(hl_ingest::overview::remove(&dir, &map)?)
+}
+
 /// Q28: where each player spent their time, by callout, from the STV.
 #[tauri::command]
 pub async fn get_positions(state: State<'_, AppState>, log_id: i64, map: String) -> CmdResult<Option<hl_ingest::callouts::PositionsView>> {

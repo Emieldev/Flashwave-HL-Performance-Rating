@@ -1019,10 +1019,48 @@ export interface Overview {
   mapBase: string;
   minX: number;
   maxY: number;
-  /** Game units the square image spans on each side. */
+  /** Game units the image spans across. */
   size: number;
+  /** Height over width: 1 for the built-in renders. */
+  aspect: number;
   /** A data URL (or, in the browser mock, a plain URL). */
   image: string;
+}
+
+/** Where an overview image sits, in game units (Q31). */
+export interface Placement {
+  minX: number;
+  maxY: number;
+  size: number;
+}
+
+/** A map's image for lining up, placed or not (Q31). */
+export interface OverviewImage {
+  image: string;
+  aspect: number;
+  placement: Placement | null;
+}
+
+/** "yours", "built in" or "none". */
+export type Origin = "yours" | "built in" | "none";
+
+/** One map in the Maps section of Settings (Q31). */
+export interface MapRow {
+  base: string;
+  name: string;
+  matches: number;
+  image: Origin;
+  placement: Origin;
+  callouts: Origin;
+  zones: number;
+  unplaced: number;
+  draft: boolean;
+}
+
+export interface MapsOverview {
+  maps: MapRow[];
+  /** Matches with a round on no known map. */
+  unknownMatches: number;
 }
 
 export interface MapView {

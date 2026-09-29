@@ -1355,6 +1355,30 @@ th.num {
   z-index: 40;
 }
 
+.modal.map-aligner {
+  max-width: 720px;
+}
+
+.align-canvas {
+  display: block;
+  margin-top: 10px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: grab;
+  touch-action: none;
+}
+
+.align-canvas:active {
+  cursor: grabbing;
+}
+
+.maps-actions {
+  display: inline-flex;
+  gap: 10px;
+  margin-left: 10px;
+}
+
 .modal {
   width: 100%;
   max-width: 520px;

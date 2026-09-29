@@ -140,6 +140,20 @@ impl Db {
         Ok(rows.into_iter().collect())
     }
 
+    /// Every map a round has been resolved to, with how many logs.
+    pub async fn map_log_counts(&self) -> Result<Vec<(String, i64)>> {
+        Ok(sqlx::query_as("SELECT map, COUNT(DISTINCT log_id) FROM round_map WHERE map IS NOT NULL GROUP BY map")
+            .fetch_all(self.pool())
+            .await?)
+    }
+
+    /// Logs with at least one round on no known map.
+    pub async fn unknown_map_logs(&self) -> Result<i64> {
+        Ok(sqlx::query_scalar("SELECT COUNT(DISTINCT log_id) FROM round_map WHERE map IS NULL")
+            .fetch_one(self.pool())
+            .await?)
+    }
+
     /// Every map a round has been resolved to, with how many rounds.
     pub async fn round_map_counts(&self) -> Result<Vec<(String, i64)>> {
         Ok(sqlx::query_as("SELECT map, COUNT(*) FROM round_map WHERE map IS NOT NULL GROUP BY map")

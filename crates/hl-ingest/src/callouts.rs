@@ -58,6 +58,20 @@ fn user_path(data: &Path, base: &str) -> PathBuf {
     data.join("callouts").join(format!("{base}.json"))
 }
 
+/// Maps with a built-in seed.
+pub fn built_in_bases() -> impl Iterator<Item = &'static str> {
+    BUILT_IN.iter().map(|(b, _)| *b)
+}
+
+/// Maps the player has their own callouts for.
+pub fn user_bases(data: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(data.join("callouts")) else { return Vec::new() };
+    entries
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok()?.strip_suffix(".json").map(str::to_string))
+        .collect()
+}
+
 /// The callouts for `map`: the owner's copy, else the built-in seed, else
 /// an empty file to start drawing on.
 pub fn load(data: &Path, map: &str) -> Result<CalloutFile> {
