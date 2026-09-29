@@ -59,6 +59,9 @@ const state: AppConfig = startInSetup
       tfPath: "D:\\SteamLibrary\\steamapps\\common\\Team Fortress 2\\tf",
     };
 
+// URLs only: Vite serves the files, nothing is read into the bundle.
+const OVERVIEW_URLS = import.meta.glob("../../../overviews/*.png", { query: "?url", import: "default", eager: true }) as Record<string, string>;
+
 const delay = <T,>(value: T, ms = 120): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), ms));
 
@@ -918,8 +921,7 @@ export const mockApi: Api = {
       150,
     ),
 
-  // Map images are third-party files kept out of the repo. For local UI work,
-  // put them in ui/public/overviews-local/ (git-ignored) and they are used.
+  // The map images the app ships (overviews/ in the repo, more.tf's renders).
   getMapOverview: async (map: string): Promise<Overview | null> => {
     const placements: Record<string, [number, number, number]> = {
       upward: [5.5, -4956, 2216],
@@ -929,9 +931,8 @@ export const mockApi: Api = {
     };
     const base = Object.keys(placements).find((b) => map.includes(b));
     if (!base) return null;
-    const url = `/overviews-local/${base}.png`;
-    const ok = await fetch(url, { method: "HEAD" }).then((r) => r.ok && (r.headers.get("content-type") ?? "").startsWith("image"), () => false);
-    if (!ok) return null;
+    const url = OVERVIEW_URLS[`../../../overviews/${base}.png`];
+    if (!url) return null;
     const [s, x, y] = placements[base];
     const size = 1024 * s;
     return { mapBase: base, minX: x + 910 * s - size / 2, maxY: y - 512 * s + size / 2, size, image: url };

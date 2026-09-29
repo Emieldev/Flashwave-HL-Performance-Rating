@@ -703,9 +703,9 @@ pub async fn get_map_view(state: State<'_, AppState>, map: String) -> CmdResult<
     Ok(hl_ingest::mapview::load(&state.db, &map, me).await?)
 }
 
-/// The overview image for a map, when one is saved in the app's `overviews`
-/// folder and its placement is known. `None` otherwise: the kill map then
-/// draws the outline from kills.
+/// The overview image for a map: the player's own from the app's `overviews`
+/// folder, else the built-in one, when its placement is known. `None`
+/// otherwise: the kill map then draws the outline from kills.
 #[tauri::command]
 pub async fn get_map_overview(state: State<'_, AppState>, map: String) -> CmdResult<Option<hl_ingest::overview::Overview>> {
     let dir = state.db_path.with_file_name("overviews");

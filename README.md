@@ -128,6 +128,7 @@ has the whole of it, including what to do if one does break.
 | [trends.tf](https://trends.tf) | Which matches you played, which logs were combined from which |
 | [ETF2L](https://etf2l.org) | Officials, divisions, rosters and seasons |
 | [demos.tf](https://demos.tf) | STV demos, downloaded only when you ask |
+| [more.tf](https://more.tf) | The top-down map images under the kill map, shipped with their permission |
 | Your own `.dem` files | Aim, deaths and movement: read on your PC, never uploaded |
 
 Every rating comes from logs alone — the raw logs.tf log covers all 18 players

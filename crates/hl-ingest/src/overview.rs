@@ -1,9 +1,10 @@
-//! Map overview images under the kill map, where one is on this machine.
+//! Map overview images under the kill map.
 //!
-//! Images live in `<app data>/overviews/<map>.png`, named by map base
-//! (`upward.png` for `pl_upward_f12`). They are not part of the app: the ones
-//! used here are more.tf's renders, saved locally with the owner's say-so and
-//! never committed. A map with no image keeps the outline drawn from kills.
+//! The app ships more.tf's renders of the Highlander pool (`overviews/` in
+//! the repository, used with more.tf's permission), named by map base
+//! (`upward.png` for `pl_upward_f12`). An image in `<app data>/overviews/`
+//! of the same name wins, so a player can put a better one in. A map with
+//! no image keeps the outline drawn from kills.
 //!
 //! **Placement.** Each image is square and covers `1024 × scale` game units,
 //! centred on `(x + 910·scale, y − 512·scale)`: the transform more.tf uses for
@@ -39,6 +40,22 @@ const PLACEMENT: &[(&str, f64, f64, f64)] = &[
     ("steel", 8.0, -6740.0, 3196.0),
 ];
 
+/// The built-in images, by map base: more.tf's renders, with permission.
+const BUILT_IN: &[(&str, &[u8])] = &[
+    ("ashville", include_bytes!("../../../overviews/ashville.png")),
+    ("bagel", include_bytes!("../../../overviews/bagel.png")),
+    ("cascade", include_bytes!("../../../overviews/cascade.png")),
+    ("gullywash", include_bytes!("../../../overviews/gullywash.png")),
+    ("process", include_bytes!("../../../overviews/process.png")),
+    ("product", include_bytes!("../../../overviews/product.png")),
+    ("proot", include_bytes!("../../../overviews/proot.png")),
+    ("proplant", include_bytes!("../../../overviews/proplant.png")),
+    ("steel", include_bytes!("../../../overviews/steel.png")),
+    ("swiftwater", include_bytes!("../../../overviews/swiftwater.png")),
+    ("upward", include_bytes!("../../../overviews/upward.png")),
+    ("vigil", include_bytes!("../../../overviews/vigil.png")),
+];
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Overview {
@@ -61,15 +78,19 @@ pub fn placement(map: &str) -> Option<(f64, f64, f64)> {
     Some((cx - size / 2.0, cy + size / 2.0, size))
 }
 
-/// The overview for a map, when both its placement and its image are known.
+/// The overview for a map, when both its placement and its image are known:
+/// the player's own image in `dir` first, then the built-in one.
 pub fn load(dir: &Path, map: &str) -> Result<Option<Overview>> {
     let Some((min_x, max_y, size)) = placement(map) else { return Ok(None) };
     let base = map_base(map);
     let path = dir.join(format!("{base}.png"));
-    if !path.exists() {
+    let bytes = if path.exists() {
+        std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?
+    } else if let Some(&(_, b)) = BUILT_IN.iter().find(|i| i.0 == base) {
+        b.to_vec()
+    } else {
         return Ok(None);
-    }
-    let bytes = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+    };
     let image = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
     Ok(Some(Overview { map_base: base, min_x, max_y, size, image }))
 }
@@ -94,6 +115,17 @@ mod tests {
             let (mx, my) = moretf(gx, gy);
             let (ox, oy) = ((gx - min_x) / size * 100.0, (max_y - gy) / size * 100.0);
             assert!((mx - ox).abs() < 0.01 && (my - oy).abs() < 0.01, "{gx},{gy}: {mx},{my} vs {ox},{oy}");
+        }
+    }
+
+    #[test]
+    fn built_in_images_are_used_and_every_one_has_a_placement() {
+        let empty = std::env::temp_dir().join(format!("hl-overviews-none-{}", std::process::id()));
+        let o = load(&empty, "pl_vigil_rc10").unwrap().expect("vigil ships an image");
+        assert!(o.image.starts_with("data:image/png;base64,iVBORw0KGgo"), "a PNG");
+        for (base, bytes) in BUILT_IN {
+            assert!(placement(base).is_some(), "{base} has an image but no placement");
+            assert_eq!(&bytes[..4], [0x89, b'P', b'N', b'G'], "{base}");
         }
     }
 

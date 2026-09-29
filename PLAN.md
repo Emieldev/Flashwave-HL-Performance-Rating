@@ -1452,6 +1452,9 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
 | Q28 | **Callouts, positions and tendencies** (Flashy) | large | **Built; the callouts are drafts.** Zones in game units, one JSON file a map: seeds in `callouts/`, the owner's copy in `<data>/callouts/` always wins. Product is drawn (27 zones from the TF2 wiki's descriptions; 69% of 65,266 kill positions land in one, RED/BLU mirror to within 3%); Upward, Steel and Swiftwater ship their wiki names unplaced; Vigil, Ashville and Proot have no written source. The kill map draws the jigsaw, counts kills per zone, and has an editor (click corners, name, save). A Positions panel shows each player's time per zone from the STV. Still to come: tendencies across matches. See §21. |
 | Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
+| Q30 | **Maps recognised from the STV when logs.tf cannot say** (Flashy) | medium | **First of the three because it is a bug testers have now:** a Vigil match with no map drawn. Two causes, one of them ours to fix today. (1) The map of each round comes from the log's map field, its parts on logs.tf, or the geometry model (`mapres.rs`). When logs.tf leaves the field blank and refuses the parts fetch, and a fresh install's geometry has never seen Vigil, the round has no map. A linked STV's header *names* the map and is never asked. (2) **Fixed 29 Sept:** overview images were not shipped, so on a tester's install every map was the outline from kills. more.tf gave permission, and their renders of twelve maps (Ashville, Bagel, Cascade, Gullywash, Process, Product, Proot, Proplant, Steel, Swiftwater, Upward, Vigil; 18 MB) are now built in (`overviews/`, `overview.rs`), with a player's own image still winning. Q30 is now (1), and saying which case a player is looking at. See §24. |
+| Q31 | **A Maps section in Settings, with top-down image import** (Flashy) | medium | One row per map: image yes/no, placement known, callouts yours/built-in/none, matches on it. Import a top-down image per map; maps in the placement table line up by themselves, others are dragged and scaled into line over the kill outline. Depends on nothing, but reads best after Q30, since it lists what Q30 found. See §24. |
+| Q32 | **Callout presets: import and export per map** (Flashy) | small | Callouts will be passed round on Discord and adjusted in the app, like `.lang` files. Export writes one map's zones to a file, import validates it and replaces your copy with an undo. Sits in Q31's rows and in the kill map's editor. See §24. |
 
 ### Reported by testers, and fixed
 
@@ -2280,3 +2283,105 @@ refused: the match exists, and a second copy would count it twice.
 
 Imported on a copy: koth_proot, 3 rounds, 262 kills, 18 players rated, aim
 read for 239 kills, in 10 s.
+
+---
+
+## 24. Maps: recognition, top-down images and callout presets (Q30-Q32, Flashy)
+
+> "I need preset files for the callouts since people will be sharing them
+> and adjusting them in the app, I need an import and export per map. Can I
+> get a maps section in the settings with a top-down image import, callouts
+> import and a fix for people who on their current installs do not see the
+> maps ... making sure that the map gets recognized correctly from the STV
+> if logs.tf isn't working."
+
+### Q30. The map from the STV
+
+**What happens now.** `maps::resolve_all` gives every round a map from, in
+order: the log's map field, the raw log's `meta_data` line, a part of a
+combined log, the part's upload window, the geometry model, and its
+neighbours (`mapres.rs`). Three of those need logs.tf (the field, parts,
+windows), and since `9acb2c9` a refusal from logs.tf stops the parts fetch
+outright. The geometry model is trained on *this install's* single-map logs,
+so a new player with twenty logs and no clean Vigil log has no Vigil
+outline, and a round there comes out unsure or on the wrong map. Nothing
+asks the demo, whose header says `pl_vigil_rc10` in plain text and is
+already stored (`demo.map`).
+
+**The fix.**
+
+1. **A `demo` source**, second only to `log`: every round inside the
+   recording span of a linked STV (`start_utc` + `playback_s`, with the
+   log's clock offset) takes the demo's map. A demo that covers part of a
+   combined log names only those rounds, so a two-map log with one STV per
+   map is resolved exactly. A demo whose map disagrees with the log's own
+   field loses and is logged; that is a wrong link, not a map question.
+2. **Re-resolve when a demo is linked**, not only after a sync: linking,
+   downloading and dropping a demo each rerun `resolve_all` for that log.
+   It is local and takes milliseconds.
+3. **Ship the geometry outlines** for the Highlander pool, like the callout
+   seeds, so a fresh install recognises Vigil before it has seen a Vigil
+   log. Built from the owner's database by an `hl` command and committed
+   as data; a user's own logs are added on top.
+4. **Say which problem it is.** The kill map's empty state tells three
+   cases apart: map unknown ("no map for this round — link the STV and it
+   will be read from it"), map known but no image ("drawn from kills;
+   Settings, Maps, to add an image"), and map known with no placement.
+5. **A manual override per segment**, last resort: "this was on ___", kept
+   in the database and ranked above everything but `log`.
+
+**Checked by:** a copy of a database with the log map fields blanked and
+parts removed: every round with a linked STV must still resolve to the
+same map as before, and the kill map must draw.
+
+### Q31. The Maps section
+
+A panel in Settings, one row per map the app knows (the placement table,
+the callout seeds, and every map in the database):
+
+| Map | Image | Callouts | Matches |
+|---|---|---|---|
+| Vigil | none · Import… | built in, draft · Export · Import… | 41 (3 unknown) |
+
+- **Top-down image import.** Pick a PNG or JPG; it is copied into
+  `<data>/overviews/<map>.png`, which `overview.rs` already reads. For a map
+  in the placement table the image is assumed to be a more.tf-style render
+  and lines up by itself; the panel then shows it with this install's kill
+  positions on top, so a wrong image is visible at once.
+- **Alignment for other images.** For a map with no placement, or an image
+  that does not line up: drag and scale it over the outline drawn from
+  kills, and the placement is saved beside the image
+  (`<map>.placement.json`), overriding the built-in one.
+- **Remove / reset** per map, back to the built-in state.
+- **Built-in images:** more.tf gave permission to ship their renders, and
+  twelve are built in since 29 Sept. Import is for the maps they do not
+  cover and for a player who wants a different render; the player's own
+  image always wins, and Remove goes back to the built-in one.
+
+### Q32. Callout presets
+
+Callouts get passed round and corrected like `.lang` files, so they are
+handled like them.
+
+- **The file.** `<map>.callouts.json`, the shape the app already stores
+  (`CalloutFile`: map, draft, source, zones in game units, names) plus
+  `format: 1` and an optional `author`. Game units, so a preset survives a
+  different overview image.
+- **Export** from the Maps row and from the kill map's editor: a save
+  dialog, defaulting to `vigil.callouts.json`.
+- **Import:** checked before anything is replaced: the file names this
+  map (or the player confirms a mismatch), every zone has at least three
+  finite points, names are non-empty, under 1 MB. It says what it will do
+  ("27 zones, replaces your 24"), keeps the replaced copy as
+  `<map>.previous.json` for one Undo, and becomes the player's own copy,
+  so the built-in seed never overwrites it.
+- **Drag and drop** a `.callouts.json` onto the window imports it, like a
+  demo.
+- Later, if asked for: a **map pack** — image, placement and callouts in
+  one zip — so a whole map is one file to share.
+
+### Order and release
+
+Q30, then Q31, then Q32: the bug first, then the section, then the files
+that live in it. New features, so they go out as **0.7.0** with the ETF2L
+names option.
