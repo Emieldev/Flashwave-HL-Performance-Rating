@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type TeamEra, type Teammate } from "../../api/types";
-import { capitalize, formatDate, signed } from "../../lib/format";
+import { capitalize, formatDate, rating, signed } from "../../lib/format";
 import "./teammates.css";
-import { t as tr, tx, k } from "../../lib/i18n";
+import { t as tr, tx, k, locale } from "../../lib/i18n";
 
 type SortKey = "games" | "officials" | "winRate" | "lastPlayed" | "delta";
 
@@ -21,7 +21,7 @@ const winRate = (m: { wins: number; losses: number }) =>
 
 /** "Jul 2023". */
 function month(unix: number): string {
-  return new Date(unix * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  return new Date(unix * 1000).toLocaleDateString(locale(), { month: "short", year: "numeric" });
 }
 
 export function TeammatesPage() {
@@ -155,7 +155,7 @@ function TeamCard({ t }: { t: TeamEra }) {
         </div>
         <div>
           <dt>{tr("Your rating")}</dt>
-          <dd>{t.myAvg === null ? <span className="muted">—</span> : t.myAvg.toFixed(0)}</dd>
+          <dd>{t.myAvg === null ? <span className="muted">—</span> : rating(t.myAvg)}</dd>
         </div>
       </dl>
       <ul className="core" aria-label={tr("Most frequent teammates")}>
@@ -200,12 +200,12 @@ function MateRow({ m }: { m: Teammate }) {
           <span className="muted" title={tr("Too few rated games to compare")}>—</span>
         ) : (
           <>
-            {m.myAvgWith.toFixed(0)}{" "}
-            <span className={m.myAvgDelta! >= 0 ? "delta up" : "delta down"}>({signed(m.myAvgDelta!)})</span>
+            {rating(m.myAvgWith)}{" "}
+            <span className={m.myAvgDelta! > 0 ? "delta up" : m.myAvgDelta! < 0 ? "delta down" : "delta"}>({signed(m.myAvgDelta!, 2)})</span>
           </>
         )}
       </td>
-      <td className="muted mate-teams">{m.teams.join(", ")}</td>
+      <td className="muted mate-teams" title={m.teams.join(", ")}>{m.teams.join(", ")}</td>
     </tr>
   );
 }

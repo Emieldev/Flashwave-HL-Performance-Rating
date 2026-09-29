@@ -19,7 +19,7 @@ const CURRENT_S: i64 = 60 * 24 * 3600;
 /// A team's core is its most frequent players.
 const CORE_SIZE: usize = 9;
 /// With/without comparisons need at least this many rated games on each side.
-/// Below ten, one great game swings the average by several points.
+/// Below ten, one great game swings the average by a tenth of a rating.
 const MIN_RATED: usize = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,7 +125,7 @@ pub fn summarize(games: &[OwnGameRow], mates: &[MateRow], scope: Scope) -> Teamm
             let (avg_with, delta) = if with.len() >= MIN_RATED && without_n >= MIN_RATED {
                 let a = mean(&with);
                 let b = (total_score - with.iter().sum::<f64>()) / without_n as f64;
-                (Some(round1(a)), Some(round1(a - b)))
+                (Some(round2(a)), Some(round2(a - b)))
             } else {
                 (None, None)
             };
@@ -189,7 +189,7 @@ pub fn summarize(games: &[OwnGameRow], mates: &[MateRow], scope: Scope) -> Teamm
                 officials: gs.iter().filter(|g| g.kind == "official").count(),
                 wins: gs.iter().filter(|g| g.result == "W").count(),
                 losses: gs.iter().filter(|g| g.result == "L").count(),
-                my_avg: (!scores.is_empty()).then(|| round1(mean(&scores))),
+                my_avg: (!scores.is_empty()).then(|| round2(mean(&scores))),
                 core,
             }
         })
@@ -232,8 +232,10 @@ fn mean(xs: &[f64]) -> f64 {
     }
 }
 
-fn round1(x: f64) -> f64 {
-    (x * 10.0).round() / 10.0
+/// Ratings run around 1.00, so two decimals: one would round 1.04 and 0.96
+/// to the same 1.0.
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
 }
 
 #[cfg(test)]
@@ -258,9 +260,9 @@ mod tests {
 
     #[test]
     fn counts_rates_and_compares_with_the_other_games() {
-        // Twenty team games; teammate 7 plays the first twelve, where the owner scores 70.
+        // Twenty team games; teammate 7 plays the first twelve, where the owner rates 1.30.
         let games: Vec<_> = (1..=20)
-            .map(|i| game(i, "scrim", Some((5, "SBQRRA")), if i <= 12 { "W" } else { "L" }, if i <= 12 { 70.0 } else { 40.0 }))
+            .map(|i| game(i, "scrim", Some((5, "SBQRRA")), if i <= 12 { "W" } else { "L" }, if i <= 12 { 1.3 } else { 0.9 }))
             .collect();
         let mates: Vec<_> = (1..=12).map(|i| mate(i, 7, if i == 12 { "new name" } else { "old" }, "medic")).collect();
         let t = summarize(&games, &mates, Scope::Team);
@@ -271,16 +273,16 @@ mod tests {
         assert_eq!(m.teams, vec!["SBQRRA".to_string()]);
         assert_eq!(m.my_avg_with, None, "only eight games without them: too few to compare");
 
-        let more: Vec<_> = (21..=22).map(|i| game(i, "scrim", None, "L", 40.0)).collect();
+        let more: Vec<_> = (21..=22).map(|i| game(i, "scrim", None, "L", 0.9)).collect();
         let games2: Vec<_> = games.into_iter().chain(more).collect();
         let m = summarize(&games2, &mates, Scope::Team).teammates[0].clone();
-        assert_eq!(m.my_avg_with, Some(70.0));
-        assert_eq!(m.my_avg_delta, Some(30.0));
+        assert_eq!(m.my_avg_with, Some(1.3));
+        assert_eq!(m.my_avg_delta, Some(0.4));
     }
 
     #[test]
     fn pugs_are_out_of_team_scope() {
-        let games: Vec<_> = (1..=6).map(|i| game(i, "pug", None, "W", 50.0)).collect();
+        let games: Vec<_> = (1..=6).map(|i| game(i, "pug", None, "W", 1.0)).collect();
         let mates: Vec<_> = (1..=6).map(|i| mate(i, 7, "p", "scout")).collect();
         assert!(summarize(&games, &mates, Scope::Team).teammates.is_empty());
         assert_eq!(summarize(&games, &mates, Scope::All).teammates.len(), 1);
@@ -289,16 +291,16 @@ mod tests {
     #[test]
     fn teams_group_games_and_take_the_latest_name() {
         let games = vec![
-            game(1, "official", Some((5, "Old Name")), "W", 60.0),
-            game(2, "scrim", Some((5, "New Name")), "L", 40.0),
-            game(3, "scrim", Some((9, "Other")), "W", 50.0),
+            game(1, "official", Some((5, "Old Name")), "W", 1.12),
+            game(2, "scrim", Some((5, "New Name")), "L", 0.9),
+            game(3, "scrim", Some((9, "Other")), "W", 1.0),
         ];
         let t = summarize(&games, &[mate(1, 7, "a", "medic"), mate(2, 7, "a", "medic")], Scope::Team);
         assert_eq!(t.teams.len(), 2);
         let five = t.teams.iter().find(|x| x.team_id == 5).unwrap();
         assert_eq!(five.name, "New Name");
         assert_eq!((five.games, five.officials, five.wins, five.losses), (2, 1, 1, 1));
-        assert_eq!(five.my_avg, Some(50.0));
+        assert_eq!(five.my_avg, Some(1.01));
         assert_eq!(five.core[0].games, 2);
         assert_eq!(t.teams[0].team_id, 9, "most recent team first");
     }

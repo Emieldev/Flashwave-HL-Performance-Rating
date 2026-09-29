@@ -10,7 +10,7 @@
       "officials": 1,
       "wins": 4,
       "losses": 1,
-      "myAvg": 39.4,
+      "myAvg": 0.89,
       "core": [
         {
           "accountId": 134106724,
@@ -77,7 +77,7 @@
       "officials": 44,
       "wins": 277,
       "losses": 229,
-      "myAvg": 49.1,
+      "myAvg": 0.99,
       "core": [
         {
           "accountId": 139431148,
@@ -144,7 +144,7 @@
       "officials": 8,
       "wins": 16,
       "losses": 10,
-      "myAvg": 47.3,
+      "myAvg": 0.97,
       "core": [
         {
           "accountId": 219019757,
@@ -211,7 +211,7 @@
       "officials": 3,
       "wins": 2,
       "losses": 3,
-      "myAvg": 26.7,
+      "myAvg": 0.77,
       "core": [
         {
           "accountId": 231026021,
@@ -278,7 +278,7 @@
       "officials": 2,
       "wins": 2,
       "losses": 0,
-      "myAvg": 86.6,
+      "myAvg": 1.37,
       "core": [
         {
           "accountId": 131572900,
@@ -347,8 +347,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 48.8,
-      "myAvgDelta": -0.9
+      "myAvgWith": 0.99,
+      "myAvgDelta": -0.01
     },
     {
       "accountId": 288145794,
@@ -365,8 +365,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.0,
-      "myAvgDelta": -0.3
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 177761417,
@@ -383,8 +383,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.6,
-      "myAvgDelta": 1.0
+      "myAvgWith": 1.0,
+      "myAvgDelta": 0.01
     },
     {
       "accountId": 114651287,
@@ -401,8 +401,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 48.1,
-      "myAvgDelta": -1.7
+      "myAvgWith": 0.98,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 335061281,
@@ -419,8 +419,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 46.7,
-      "myAvgDelta": -3.6
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.04
     },
     {
       "accountId": 207562627,
@@ -437,8 +437,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 50.7,
-      "myAvgDelta": 2.1
+      "myAvgWith": 1.01,
+      "myAvgDelta": 0.02
     },
     {
       "accountId": 333479718,
@@ -455,8 +455,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.5,
-      "myAvgDelta": 3.1
+      "myAvgWith": 1.01,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 84558776,
@@ -473,8 +473,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 52.8,
-      "myAvgDelta": 4.8
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.05
     },
     {
       "accountId": 294594853,
@@ -491,8 +491,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.1,
-      "myAvgDelta": 2.6
+      "myAvgWith": 1.01,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 279623496,
@@ -510,8 +510,8 @@
         "SBQRRA",
         "DD14"
       ],
-      "myAvgWith": 52.2,
-      "myAvgDelta": 3.9
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 323155729,
@@ -528,8 +528,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 52.2,
-      "myAvgDelta": 3.6
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 138485346,
@@ -546,8 +546,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 45.4,
-      "myAvgDelta": -4.2
+      "myAvgWith": 0.95,
+      "myAvgDelta": -0.04
     },
     {
       "accountId": 895262774,
@@ -564,8 +564,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.0,
-      "myAvgDelta": 2.2
+      "myAvgWith": 1.01,
+      "myAvgDelta": 0.02
     },
     {
       "accountId": 1392784928,
@@ -583,8 +583,8 @@
         "SBQRRA",
         "DD14"
       ],
-      "myAvgWith": 42.8,
-      "myAvgDelta": -7.1
+      "myAvgWith": 0.93,
+      "myAvgDelta": -0.07
     },
     {
       "accountId": 103369113,
@@ -601,8 +601,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 45.0,
-      "myAvgDelta": -4.5
+      "myAvgWith": 0.95,
+      "myAvgDelta": -0.04
     },
     {
       "accountId": 158510613,
@@ -619,8 +619,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 54.1,
-      "myAvgDelta": 5.5
+      "myAvgWith": 1.04,
+      "myAvgDelta": 0.06
     },
     {
       "accountId": 145784226,
@@ -637,8 +637,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 41.9,
-      "myAvgDelta": -7.9
+      "myAvgWith": 0.92,
+      "myAvgDelta": -0.08
     },
     {
       "accountId": 424899657,
@@ -655,8 +655,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 42.0,
-      "myAvgDelta": -7.5
+      "myAvgWith": 0.92,
+      "myAvgDelta": -0.07
     },
     {
       "accountId": 1273713998,
@@ -673,8 +673,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 53.5,
-      "myAvgDelta": 4.7
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.05
     },
     {
       "accountId": 422332781,
@@ -691,8 +691,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 47.1,
-      "myAvgDelta": -2.1
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 130976609,
@@ -709,8 +709,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 40.6,
-      "myAvgDelta": -9.0
+      "myAvgWith": 0.91,
+      "myAvgDelta": -0.09
     },
     {
       "accountId": 297570966,
@@ -727,8 +727,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.7,
-      "myAvgDelta": 2.8
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 81083162,
@@ -745,8 +745,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 53.2,
-      "myAvgDelta": 4.4
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 67500577,
@@ -763,8 +763,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 48.4,
-      "myAvgDelta": -0.8
+      "myAvgWith": 0.98,
+      "myAvgDelta": -0.01
     },
     {
       "accountId": 63123057,
@@ -781,8 +781,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 43.5,
-      "myAvgDelta": -5.8
+      "myAvgWith": 0.94,
+      "myAvgDelta": -0.06
     },
     {
       "accountId": 65771489,
@@ -799,8 +799,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 45.5,
-      "myAvgDelta": -3.7
+      "myAvgWith": 0.95,
+      "myAvgDelta": -0.04
     },
     {
       "accountId": 311972513,
@@ -817,8 +817,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.4,
-      "myAvgDelta": 2.4
+      "myAvgWith": 1.01,
+      "myAvgDelta": 0.02
     },
     {
       "accountId": 138380504,
@@ -835,8 +835,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 48.7,
-      "myAvgDelta": -0.4
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 213870269,
@@ -853,8 +853,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 54.4,
-      "myAvgDelta": 5.5
+      "myAvgWith": 1.04,
+      "myAvgDelta": 0.06
     },
     {
       "accountId": 195105626,
@@ -871,8 +871,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 46.2,
-      "myAvgDelta": -3.0
+      "myAvgWith": 0.96,
+      "myAvgDelta": -0.03
     },
     {
       "accountId": 67905517,
@@ -889,8 +889,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 47.8,
-      "myAvgDelta": -1.3
+      "myAvgWith": 0.98,
+      "myAvgDelta": -0.01
     },
     {
       "accountId": 93350099,
@@ -907,8 +907,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 49.2,
-      "myAvgDelta": 0.1
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 79888733,
@@ -925,8 +925,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 43.3,
-      "myAvgDelta": -6.0
+      "myAvgWith": 0.93,
+      "myAvgDelta": -0.06
     },
     {
       "accountId": 416877169,
@@ -941,8 +941,8 @@
       "mainClass": "pyro",
       "current": false,
       "teams": [],
-      "myAvgWith": 57.2,
-      "myAvgDelta": 8.4
+      "myAvgWith": 1.07,
+      "myAvgDelta": 0.08
     },
     {
       "accountId": 1128456352,
@@ -959,8 +959,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.5,
-      "myAvgDelta": 0.4
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 219019757,
@@ -977,8 +977,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 47.3,
-      "myAvgDelta": -1.9
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 210807329,
@@ -995,8 +995,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 47.3,
-      "myAvgDelta": -1.9
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 254738923,
@@ -1013,8 +1013,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 46.0,
-      "myAvgDelta": -3.2
+      "myAvgWith": 0.96,
+      "myAvgDelta": -0.03
     },
     {
       "accountId": 441563150,
@@ -1031,8 +1031,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 55.7,
-      "myAvgDelta": 6.9
+      "myAvgWith": 1.06,
+      "myAvgDelta": 0.07
     },
     {
       "accountId": 383062580,
@@ -1049,8 +1049,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 52.9,
-      "myAvgDelta": 4.0
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 1114019411,
@@ -1067,8 +1067,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 47.5,
-      "myAvgDelta": -1.7
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 203015372,
@@ -1085,8 +1085,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 55.7,
-      "myAvgDelta": 6.8
+      "myAvgWith": 1.06,
+      "myAvgDelta": 0.07
     },
     {
       "accountId": 909443993,
@@ -1101,8 +1101,8 @@
       "mainClass": "soldier",
       "current": false,
       "teams": [],
-      "myAvgWith": 54.3,
-      "myAvgDelta": 5.4
+      "myAvgWith": 1.04,
+      "myAvgDelta": 0.05
     },
     {
       "accountId": 1185016329,
@@ -1117,8 +1117,8 @@
       "mainClass": "medic",
       "current": false,
       "teams": [],
-      "myAvgWith": 53.1,
-      "myAvgDelta": 4.2
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 190113798,
@@ -1135,8 +1135,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.6,
-      "myAvgDelta": 0.5
+      "myAvgWith": 1.0,
+      "myAvgDelta": 0.01
     },
     {
       "accountId": 835892855,
@@ -1153,8 +1153,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 53.4,
-      "myAvgDelta": 4.4
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 294853651,
@@ -1171,8 +1171,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.5,
-      "myAvgDelta": 0.4
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 860852017,
@@ -1189,8 +1189,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.3,
-      "myAvgDelta": 0.2
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 240331975,
@@ -1207,8 +1207,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 57.7,
-      "myAvgDelta": 8.9
+      "myAvgWith": 1.08,
+      "myAvgDelta": 0.09
     },
     {
       "accountId": 240487583,
@@ -1225,8 +1225,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 51.9,
-      "myAvgDelta": 2.9
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 322753362,
@@ -1243,8 +1243,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 52.0,
-      "myAvgDelta": 3.0
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 87984987,
@@ -1261,8 +1261,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.2,
-      "myAvgDelta": 0.2
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 282134566,
@@ -1277,8 +1277,8 @@
       "mainClass": "spy",
       "current": false,
       "teams": [],
-      "myAvgWith": 59.5,
-      "myAvgDelta": 10.6
+      "myAvgWith": 1.09,
+      "myAvgDelta": 0.11
     },
     {
       "accountId": 90900287,
@@ -1295,8 +1295,8 @@
       "teams": [
         "Amicitia"
       ],
-      "myAvgWith": 54.7,
-      "myAvgDelta": 5.8
+      "myAvgWith": 1.05,
+      "myAvgDelta": 0.06
     },
     {
       "accountId": 145082321,
@@ -1313,8 +1313,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 45.4,
-      "myAvgDelta": -3.8
+      "myAvgWith": 0.95,
+      "myAvgDelta": -0.04
     },
     {
       "accountId": 1081348750,
@@ -1329,8 +1329,8 @@
       "mainClass": "demoman",
       "current": false,
       "teams": [],
-      "myAvgWith": 58.4,
-      "myAvgDelta": 9.5
+      "myAvgWith": 1.08,
+      "myAvgDelta": 0.1
     },
     {
       "accountId": 137154322,
@@ -1348,8 +1348,8 @@
         "SBQRRA",
         "DD14"
       ],
-      "myAvgWith": 52.4,
-      "myAvgDelta": 3.4
+      "myAvgWith": 1.02,
+      "myAvgDelta": 0.03
     },
     {
       "accountId": 330517268,
@@ -1366,8 +1366,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 37.4,
-      "myAvgDelta": -11.9
+      "myAvgWith": 0.87,
+      "myAvgDelta": -0.12
     },
     {
       "accountId": 85803721,
@@ -1384,8 +1384,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 47.2,
-      "myAvgDelta": -1.9
+      "myAvgWith": 0.97,
+      "myAvgDelta": -0.02
     },
     {
       "accountId": 312023592,
@@ -1400,8 +1400,8 @@
       "mainClass": "engineer",
       "current": false,
       "teams": [],
-      "myAvgWith": 57.5,
-      "myAvgDelta": 8.6
+      "myAvgWith": 1.07,
+      "myAvgDelta": 0.09
     },
     {
       "accountId": 236778486,
@@ -1418,8 +1418,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 41.4,
-      "myAvgDelta": -7.9
+      "myAvgWith": 0.91,
+      "myAvgDelta": -0.08
     },
     {
       "accountId": 91882858,
@@ -1436,8 +1436,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 48.7,
-      "myAvgDelta": -0.4
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 107108814,
@@ -1452,8 +1452,8 @@
       "mainClass": "soldier",
       "current": false,
       "teams": [],
-      "myAvgWith": 39.5,
-      "myAvgDelta": -9.7
+      "myAvgWith": 0.9,
+      "myAvgDelta": -0.1
     },
     {
       "accountId": 285837700,
@@ -1468,8 +1468,8 @@
       "mainClass": "scout",
       "current": true,
       "teams": [],
-      "myAvgWith": 45.8,
-      "myAvgDelta": -3.3
+      "myAvgWith": 0.96,
+      "myAvgDelta": -0.03
     },
     {
       "accountId": 130582892,
@@ -1486,8 +1486,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.4,
-      "myAvgDelta": 0.3
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 82123920,
@@ -1505,8 +1505,8 @@
         "bik is ti",
         "Undercover Prodigies"
       ],
-      "myAvgWith": 48.3,
-      "myAvgDelta": -0.8
+      "myAvgWith": 0.98,
+      "myAvgDelta": -0.01
     },
     {
       "accountId": 158962796,
@@ -1521,8 +1521,8 @@
       "mainClass": "spy",
       "current": false,
       "teams": [],
-      "myAvgWith": 49.4,
-      "myAvgDelta": 0.3
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 435117887,
@@ -1537,8 +1537,8 @@
       "mainClass": "spy",
       "current": false,
       "teams": [],
-      "myAvgWith": 56.1,
-      "myAvgDelta": 7.1
+      "myAvgWith": 1.06,
+      "myAvgDelta": 0.07
     },
     {
       "accountId": 34044692,
@@ -1555,8 +1555,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 52.7,
-      "myAvgDelta": 3.7
+      "myAvgWith": 1.03,
+      "myAvgDelta": 0.04
     },
     {
       "accountId": 178408897,
@@ -1573,8 +1573,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 50.3,
-      "myAvgDelta": 1.2
+      "myAvgWith": 1.0,
+      "myAvgDelta": 0.01
     },
     {
       "accountId": 131984023,
@@ -1591,8 +1591,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 49.2,
-      "myAvgDelta": 0.1
+      "myAvgWith": 0.99,
+      "myAvgDelta": 0.0
     },
     {
       "accountId": 843944788,
@@ -1609,8 +1609,8 @@
       "teams": [
         "SBQRRA"
       ],
-      "myAvgWith": 58.1,
-      "myAvgDelta": 9.1
+      "myAvgWith": 1.08,
+      "myAvgDelta": 0.09
     },
     {
       "accountId": 279708566,
