@@ -245,6 +245,14 @@ pub async fn reprocess_start(app: AppHandle, state: State<'_, AppState>) -> CmdR
     Ok(())
 }
 
+/// Every class's model as the rating uses it, for the "How ratings work"
+/// page: built from the live weights, so the page follows every retune.
+#[tauri::command]
+pub async fn get_rating_guide(state: State<'_, AppState>) -> CmdResult<hl_rating::guide::ModelGuide> {
+    let (weights, _) = hl_rating::Weights::load(&state.db_path.with_file_name("weights.toml"));
+    Ok(hl_rating::guide::guide(&weights))
+}
+
 /// The newest log the owner is in, and whether a sync has seen it yet.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

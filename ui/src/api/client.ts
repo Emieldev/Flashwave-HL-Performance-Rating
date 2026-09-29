@@ -55,6 +55,7 @@ import type {
   PlayerResponse,
   NewDemo,
   NewestLog,
+  RatingGuide,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -87,6 +88,7 @@ const realApi = {
   indexStats: () => invoke<IndexStats>("index_stats"),
   syncBusy: () => invoke<boolean>("sync_busy"),
   newestLog: () => invoke<NewestLog | null>("newest_log"),
+  getRatingGuide: () => invoke<RatingGuide>("get_rating_guide"),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

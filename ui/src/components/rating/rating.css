@@ -1,0 +1,89 @@
+/* How ratings work (Flashy) */
+
+/* One colour per group: the reference categorical palette's dark steps, in
+   its validated order (all checks pass on --panel #25201c). Every use also
+   carries its label, so colour is never the only way to tell them apart. */
+.rg-g-fragging { background: #3987e5; }
+.rg-g-survival { background: #d95926; }
+.rg-g-teamplay { background: #199e70; }
+.rg-g-objective { background: #c98500; }
+.rg-g-medic { background: #d55181; }
+.rg-g-speciality { background: #008300; }
+
+.rg-page { max-width: var(--page-w, 1180px); margin: 0 auto; padding: 16px var(--gutter, 16px) 48px; display: flex; flex-direction: column; gap: 16px; }
+.rg-head h1 { margin: 6px 0 4px; font-family: var(--font-display); letter-spacing: 0.02em; }
+.rg-page section.panel { padding: 18px 20px; }
+.rg-page h2 { margin: 0 0 10px; }
+
+/* The four steps */
+.rg-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; counter-reset: step; }
+.rg-step { position: relative; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--sunken); }
+.rg-step:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 14px; color: var(--faint); }
+.rg-step-n { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--accent-2); color: var(--bg); font-weight: 700; font-size: 0.8rem; }
+.rg-step strong { font-size: 0.95rem; }
+.rg-step .hint { margin: 8px 0 0; font-size: 0.84rem; line-height: 1.4; }
+@media (max-width: 860px) {
+  .rg-steps { grid-template-columns: 1fr 1fr; }
+  .rg-step::after { display: none; }
+}
+
+/* The scale */
+.rg-scale { position: relative; margin: 18px 4px 4px; }
+.rg-curve { display: block; width: 100%; height: 56px; }
+.rg-curve path { fill: rgba(224, 118, 58, 0.16); stroke: var(--accent-2); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.rg-scale-marks { position: relative; height: 38px; border-top: 1px solid var(--line); }
+.rg-scale-marks span { position: absolute; top: 4px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; white-space: nowrap; }
+.rg-scale-marks b { font-variant-numeric: tabular-nums; }
+.rg-scale-marks small { color: var(--muted); font-size: 0.72rem; }
+
+/* Class picker */
+.rg-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.rg-pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--sunken); color: var(--text); cursor: pointer; font: inherit; font-size: 0.85rem; }
+.rg-pick:hover { border-color: var(--line-2); }
+.rg-pick.on { border-color: var(--accent-2); background: rgba(224, 118, 58, 0.14); }
+
+.rg-class-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.rg-class-head h3 { margin: 0; font-size: 1.2rem; }
+.rg-class-head .hint { margin: 2px 0 0; }
+
+/* The stacked share bar: 2px gaps between segments, rounded ends. */
+.rg-share { display: flex; gap: 2px; height: 30px; border-radius: 6px; overflow: hidden; }
+.rg-seg { display: flex; align-items: center; justify-content: center; min-width: 4px; }
+.rg-seg em { font-style: normal; font-size: 0.78rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.rg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 14px; font-size: 0.82rem; color: var(--muted); }
+.rg-legend i, .rg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+
+/* Component rows */
+.rg-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rg-row { padding: 12px 0; border-top: 1px solid var(--rule); }
+.rg-row-top { display: grid; grid-template-columns: minmax(150px, 220px) 1fr 48px; align-items: center; gap: 12px; }
+.rg-row-label { font-weight: 600; }
+.rg-row-bar { height: 10px; border-radius: 5px; background: var(--sunken); overflow: hidden; }
+.rg-row-bar i { display: block; height: 100%; border-radius: 0 5px 5px 0; }
+.rg-row-share { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.rg-row-desc { margin: 6px 0 6px; color: var(--text); opacity: 0.85; font-size: 0.88rem; line-height: 1.45; max-width: 820px; }
+.rg-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.rg-tag { font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.rg-tag-src { border-style: dashed; }
+@media (max-width: 620px) {
+  .rg-row-top { grid-template-columns: 1fr 44px; }
+  .rg-row-bar { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* The overview table: one hue, stronger for a bigger share, number in text ink. */
+.rg-table-wrap { overflow-x: auto; }
+.rg-table { border-collapse: separate; border-spacing: 2px; width: 100%; font-size: 0.82rem; }
+.rg-table th { font-weight: 500; color: var(--muted); }
+.rg-table tbody th { text-align: left; white-space: nowrap; padding-right: 10px; color: var(--text); }
+.rg-table td { text-align: center; min-width: 46px; height: 26px; padding: 0; }
+.rg-cell { display: block; line-height: 26px; border-radius: 4px; background: rgba(57, 135, 229, var(--rg-a)); color: var(--text-hi); font-variant-numeric: tabular-nums; }
+.rg-th-class { background: none; border: 0; padding: 2px; cursor: pointer; border-radius: 6px; }
+.rg-th-class:hover { background: var(--raised); }
+
+/* What a kill is worth */
+.rg-kill-rows { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+.rg-kill-rows li { display: grid; grid-template-columns: 120px 1fr 40px; align-items: center; gap: 10px; }
+.rg-kill-class { display: inline-flex; align-items: center; gap: 6px; }
+.rg-kill-bar { height: 12px; background: var(--sunken); border-radius: 6px; overflow: hidden; }
+.rg-kill-bar i { display: block; height: 100%; background: var(--accent-2); border-radius: 0 6px 6px 0; }
+.rg-kill-v { text-align: right; font-variant-numeric: tabular-nums; }

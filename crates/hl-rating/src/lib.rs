@@ -4,6 +4,7 @@
 //! reading an optional weights file.
 
 pub mod detail;
+pub mod guide;
 pub mod impact;
 pub mod model;
 pub mod profile;

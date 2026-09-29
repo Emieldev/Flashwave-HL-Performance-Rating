@@ -4,6 +4,7 @@ import { rating, RATING_GAP_FULL, teamLabel } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { t, tx } from "../../lib/i18n";
 import { classLabel } from "../analysis/common";
+import { goTo } from "../../lib/goto";
 
 /**
  * The nine class matchups: the headline of the match page.
@@ -43,10 +44,13 @@ export function Matchups({ d }: { d: MatchDetail }) {
             )}
           </p>
         </div>
-        <span
-          className="model-tag"
-          title={t("1.00 is the typical player you face; one standard deviation is 0.25.")}
-        >{tx("model {modelVersion} · one model per class", { modelVersion: d.modelVersion })}</span>
+        <div className="mu-head-right">
+          <span
+            className="model-tag"
+            title={t("1.00 is the typical player you face; one standard deviation is 0.25.")}
+          >{tx("model {modelVersion} · one model per class", { modelVersion: d.modelVersion })}</span>
+          <button className="km-chip mu-guide-link" onClick={() => goTo("rating")}>{t("How ratings work →")}</button>
+        </div>
       </header>
 
       <div className="mu-cols" aria-hidden>

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { t, useLanguage, t as tr, tx } from "./lib/i18n";
 import { errorMessage } from "./api/types";
@@ -20,12 +20,14 @@ import { watchSync } from "./lib/sync";
 import { watchDemos } from "./lib/demowatch";
 import { checkForUpdate } from "./lib/update";
 import { useNavigation } from "./lib/navigation";
+import { onGoTo } from "./lib/goto";
+import { RatingGuidePage } from "./components/rating/RatingGuide";
 import { OwnerBadge } from "./components/OwnerBadge";
 import { RestoreBanner } from "./components/RestoreBanner";
 import "./App.css";
 import "./components/match/match.css";
 
-type Tab = "matches" | "profile" | "teammates" | "teams" | "players" | "settings";
+type Tab = "matches" | "profile" | "teammates" | "teams" | "players" | "settings" | "rating";
 
 // Settings is not one of these: it is the cog on the far right, where a
 // setting belongs, rather than a fourth thing to read.
@@ -61,6 +63,10 @@ export default function App() {
     void checkForUpdate();
   }, []);
   useEffect(() => watchSync(qc), [qc]);
+  // "How ratings work", asked for from inside a match page.
+  const goRef = useRef(nav.go);
+  goRef.current = nav.go;
+  useEffect(() => onGoTo((page) => goRef.current(page)), []);
   // Pages stay mounted once visited, so their filters and scroll survive a
   // trip to a match and back.
   const [visited, setVisited] = useState<Set<Tab>>(new Set(["matches"]));
@@ -190,6 +196,9 @@ export default function App() {
         <div hidden={tab !== "players" || openLog !== null}>
           <ErrorBoundary what="Players"><PlayersPage onOpenMatch={setOpenLog} /></ErrorBoundary>
         </div>
+      )}
+      {tab === "rating" && openLog === null && (
+        <ErrorBoundary what="How ratings work"><RatingGuidePage onBack={nav.back} /></ErrorBoundary>
       )}
       {tab === "settings" && openLog === null && (
         <ErrorBoundary what="Settings"><Settings

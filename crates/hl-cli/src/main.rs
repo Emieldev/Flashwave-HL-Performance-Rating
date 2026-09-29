@@ -45,6 +45,9 @@ COMMANDS:
                            nine classes. Ends with a model proposed from the
                            fit and what it is worth cross-validated. --weights
                            takes a TOML file with a [model.CLASS] table; repeatable
+    guide [--json]         Every class's model: its components, their share of
+                           the rating and what each one means (the app's 'How
+                           ratings work' page)
     who NAME|STEAMID       Look up another player in your matches
     failed                 Logs that would not import, and why
     import ID|URL          Fetch one log now, whatever the index thinks of it
@@ -1100,6 +1103,27 @@ async fn main() -> Result<()> {
             for r in t.roster.iter().take(15) {
                 let rating = r.rating.map_or("-".to_string(), |x| format!("{x:.2} {} ({} games)", r.class.as_deref().unwrap_or(""), r.games));
                 println!("  {:<22} {:>3} matches  {rating}", r.name.chars().take(22).collect::<String>(), r.matches);
+            }
+            Ok(())
+        }
+
+        ["guide", rest @ ..] => {
+            let (w, warning) = hl_rating::Weights::load(&db_path.with_file_name("weights.toml"));
+            if let Some(w) = warning {
+                eprintln!("warning: {w}");
+            }
+            let g = hl_rating::guide::guide(&w);
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string_pretty(&g)?);
+                return Ok(());
+            }
+            println!("model {} -- 1.00 is a typical game, one standard deviation is {:.2}", g.model_version, g.rating_spread);
+            for c in &g.classes {
+                println!("
+{}{}", c.class, if c.own_model { "" } else { " (generic model)" });
+                for x in &c.components {
+                    println!("  {:>4.0}%  {}", x.share * 100.0, x.label);
+                }
             }
             Ok(())
         }

@@ -8,6 +8,8 @@ import type { Api, StvHandlers, SyncHandlers } from "./client";
 import match4109131 from "./fixtures/match_4109131.json";
 import match4114301 from "./fixtures/match_4114301.json";
 import match4111116 from "./fixtures/match_4111116.json";
+// `hl guide --json`: the live models, as the built app serves them.
+import ratingGuide from "./fixtures/rating_guide.json";
 import match3863290 from "./fixtures/match_3863290.json";
 import analysis3863290 from "./fixtures/analysis_3863290.json";
 import mapviewAshville from "./fixtures/mapview_ashville.json";
@@ -47,7 +49,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage } from "./types";
+  SeasonsView, StvStage, RatingGuide } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -1050,6 +1052,7 @@ export const mockApi: Api = {
 
   indexStats: () => delay(fakeStats(pending)),
   syncBusy: () => delay(busy),
+  getRatingGuide: () => delay(ratingGuide as unknown as RatingGuide),
   // The browser build: a new log turns up on the third look.
   newestLog: () => delay({ logId: 4200000, source: "logs.tf", known: ++newestLooks < 3 }),
 

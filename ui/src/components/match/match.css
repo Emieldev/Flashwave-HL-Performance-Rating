@@ -124,6 +124,9 @@
   margin-top: 4px;
 }
 
+.mu-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex: none; }
+.mu-guide-link { white-space: nowrap; }
+
 .model-tag {
   font-size: 0.72rem;
   color: var(--warn);

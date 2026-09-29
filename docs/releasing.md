@@ -50,7 +50,10 @@ updater's `latest.json`.
    more (there used to be, and 0.4.0 shipped calling itself 0.3).
 
 2. **Write `docs/release-<version>.md`.** The updater card shows its first
-   few lines, so lead with what changed rather than with a heading.
+   few lines, so lead with what changed rather than with a heading. If the
+   rating model changed, regenerate the browser mock of "How ratings work"
+   (`hl guide --json > ui/src/api/fixtures/rating_guide.json`); the app's
+   own page reads the live model and needs nothing.
 
 3. **Build it signed:**
 

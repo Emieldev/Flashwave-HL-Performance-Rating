@@ -166,6 +166,38 @@ export type Progress =
   /** logs.tf refused us: new logs come from more.tf's copy instead. */
   | { kind: "standIns"; done: number; total: number };
 
+/** One component of a class's model, for "How ratings work". */
+export interface ComponentGuide {
+  key: string;
+  label: string;
+  unit: string;
+  higherIsBetter: boolean;
+  /** Its share of the class's rating, 0 to 1. */
+  share: number;
+  group: "fragging" | "survival" | "teamplay" | "objective" | "medic" | "speciality";
+  /** logs.tf's summary, or the raw server log. */
+  source: "log" | "serverLog";
+  description: string;
+}
+
+export interface ClassGuide {
+  class: string;
+  ownModel: boolean;
+  /** Biggest share first. */
+  components: ComponentGuide[];
+}
+
+/** Every class's model as the rating uses it, from the live weights. */
+export interface RatingGuide {
+  modelVersion: string;
+  ratingSpread: number;
+  minMinutes: number;
+  classes: ClassGuide[];
+  /** What killing each class is worth, before map and side. */
+  victimValues: [string, number][];
+  glossary: ComponentGuide[];
+}
+
 /** The newest log the owner is in, and whether a sync has seen it. */
 export interface NewestLog {
   logId: number;
