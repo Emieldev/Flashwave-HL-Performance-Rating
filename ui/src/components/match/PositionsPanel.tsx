@@ -68,9 +68,13 @@ export function PositionsPanel({ d }: { d: MatchDetail }) {
         </div>
       )}
       <div className="pos-teams">
-        {[2, 3].map((team) => (
+        {/* Your team first, named as yours: in a combined log the colours
+            swap between halves and maps, so "RED" said less than it seemed. */}
+        {(d.myTeam === "Blue" ? [3, 2] : [2, 3]).map((team) => (
           <div key={team} className="pos-team">
-            <h3 className={team === 2 ? "team-red" : "team-blue"}>{team === 2 ? "RED" : "BLU"}</h3>
+            <h3 className={team === 2 ? "team-red" : "team-blue"}>
+              {d.myTeam ? ((team === 2) === (d.myTeam === "Red") ? t("Your team") : t("Enemy team")) : team === 2 ? "RED" : "BLU"}
+            </h3>
             {v.players
               .filter((p) => p.team === team)
               .map((p) => (

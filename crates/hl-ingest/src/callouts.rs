@@ -155,6 +155,9 @@ pub struct PlayerPositions {
     pub name: String,
     /// 1 Scout ... 9 Engineer (`tf_demo_parser`'s numbering): their most played.
     pub class: u8,
+    /// 2 RED, 3 BLU: the player's team for the whole match, as the log has
+    /// it -- not the colour worn in a demo, which swaps between the halves
+    /// and maps of a combined log.
     pub team: u8,
     pub alive_s: u32,
     /// Most time first; time in no zone is left out.
@@ -249,9 +252,16 @@ pub async fn positions(db: &Db, data: &Path, log_id: i64, map: &str) -> Result<O
     if !any {
         return Ok(None);
     }
+    // Sides from the log (Flashy): a combined log's demos can have the teams
+    // in each other's colours, and a player's colour in whichever demo came
+    // first put half of one team with the other. The log's team is one per
+    // player for the whole match. Anyone the log does not have keeps the
+    // colour they wore most.
+    let sides = log_sides(db, log_id).await?;
     let mut players: Vec<PlayerPositions> = acc
         .into_iter()
-        .map(|(account_id, (name, classes, team, alive_s, zones))| {
+        .map(|(account_id, (name, classes, worn, alive_s, zones))| {
+            let team = sides.get(&account_id).copied().unwrap_or(worn);
             let class = (1..=9u8).max_by_key(|c| classes[usize::from(*c)]).unwrap_or(0);
             let mut zones: Vec<ZoneTime> = zones.into_iter().map(|(z, seconds)| ZoneTime { zone: callouts.zones[z].name.clone(), seconds }).collect();
             zones.sort_by_key(|z| std::cmp::Reverse(z.seconds));
@@ -260,6 +270,18 @@ pub async fn positions(db: &Db, data: &Path, log_id: i64, map: &str) -> Result<O
         .collect();
     players.sort_by_key(|p| (p.team, p.class));
     Ok(Some(PositionsView { map: callouts.map.clone(), zones: callouts.zones.len(), draft: callouts.draft, players }))
+}
+
+/// Each player's team for the whole match, from the stored log: 2 RED, 3 BLU.
+async fn log_sides(db: &Db, log_id: i64) -> Result<HashMap<u32, u8>> {
+    let Some(json) = db.raw_log(log_id).await? else { return Ok(HashMap::new()) };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else { return Ok(HashMap::new()) };
+    let Ok(log) = crate::normalize::normalize(log_id, &value) else { return Ok(HashMap::new()) };
+    Ok(log
+        .players
+        .iter()
+        .map(|p| (p.id.account_id(), if p.team == hl_core::matchdata::Team::Red { 2 } else { 3 }))
+        .collect())
 }
 
 #[cfg(test)]
