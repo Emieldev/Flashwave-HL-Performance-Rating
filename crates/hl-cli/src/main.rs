@@ -86,6 +86,9 @@ COMMANDS:
     maps [--fetch] [--log ID]
                            Resolve every round's map (combined logs included);
                            --fetch first downloads the parts of combined logs
+    maps --export-geometry <PATH> [--min N]
+                           Write this database's map shapes, the file shipped
+                           as maps/geometry.json (maps with N+ positions)
     etf2l [--offline]      Fetch ETF2L officials and classify every match (official/scrim/pug)
     teammates [--all] [--json]
                            Your teams and regular teammates (officials and scrims unless --all)
@@ -1425,6 +1428,16 @@ async fn main() -> Result<()> {
 
         ["maps", rest @ ..] => {
             let db = Db::connect(&db_path).await?;
+            if let Some(out) = flag_value::<String>(rest, "--export-geometry")? {
+                let min = flag_value::<u32>(rest, "--min")?.unwrap_or(500);
+                let f = hl_ingest::maps::export_geometry(&db, min).await?;
+                std::fs::write(&out, serde_json::to_string(&f)?)?;
+                for (base, m) in &f.maps {
+                    println!("  {base:<14} {:<22} {:>6} cells {:>8} positions", m.name, m.cells.len(), m.cells.iter().map(|c| c[2]).sum::<i64>());
+                }
+                println!("{} maps written to {out}", f.maps.len());
+                return Ok(());
+            }
             if rest.contains(&"--fetch") {
                 let sources = Sources::new()?;
                 let p = hl_ingest::maps::fetch_parts(&db, &sources, print_progress).await?;

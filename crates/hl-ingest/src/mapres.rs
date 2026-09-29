@@ -4,13 +4,23 @@
 //! Pure. Each round takes the first source that answers:
 //!
 //! 1. `log`: the log names one real map, so every round is on it.
-//! 2. `meta`: the raw log's own `meta_data (map ...)` line before the round.
-//! 3. `part`: a part the log was combined from has a round starting at the
+//! 2. `demo`: a linked demo names its map in its header, and a round inside
+//!    its recording, on the real clock, is on that map. Measured on this
+//!    account: it agrees with `log` on all 77 rounds both answer, and where
+//!    it disagreed with `meta` (2 of 5) the demo was right both times -- a
+//!    map line lands a second either side of the round it belongs to. What
+//!    answers when logs.tf leaves the map field blank and the parts cannot
+//!    be fetched.
+//! 3. `meta`: the raw log's own `meta_data (map ...)` line before the round.
+//! 4. `part`: a part the log was combined from has a round starting at the
 //!    same second (logs.tf copies rounds verbatim when combining).
-//! 4. `window`: the round falls in exactly one part's upload window on the
+//! 5. `window`: the round falls in exactly one part's upload window on the
 //!    real clock. Never wrong where checked, but windows leave gaps.
-//! 5. `geometry`: the round's kill positions scored against every map's
-//!    outline (see [`Geometry`]). On 310 held-out single-map rounds it picks
+//! 6. Demos with no clock to place them: a log whose demos all name one map,
+//!    and that nothing else says was on another, is on it.
+//! 7. `geometry`: the round's kill positions scored against every map's
+//!    outline (see [`Geometry`]), the app's shipped shapes plus this install's
+//!    own logs. On 310 held-out single-map rounds it picks
 //!    the right map 97% of the time from 18 maps, and 99.7% from three. On
 //!    this account it agrees with `window` on 680 of 692 rounds; the 12 others
 //!    were on maps with no outline yet (Bagel, Valor), which the geometry
@@ -40,6 +50,7 @@ const GEO_CONFIDENT: f64 = 0.5;
 pub enum Source {
     Log,
     Meta,
+    Demo,
     Part,
     Window,
     Geometry,
@@ -51,6 +62,7 @@ impl Source {
         match self {
             Source::Log => "log",
             Source::Meta => "meta",
+            Source::Demo => "demo",
             Source::Part => "part",
             Source::Geometry => "geometry",
             Source::Window => "window",
@@ -66,7 +78,67 @@ pub struct Geometry {
     totals: HashMap<String, u32>,
 }
 
+/// The shapes that ship with the app (`maps/geometry.json`), so a new install
+/// recognises a map before it has a log that names it. Written by
+/// `hl maps --export-geometry` from a database with plenty of each map.
+const BUILT_IN_GEOMETRY: &str = include_str!("../../../maps/geometry.json");
+
+/// The file's shape: per map base, its usual full name and `[cx, cy, n]`
+/// cells of `cell` units.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct GeometryFile {
+    pub cell: f64,
+    pub maps: std::collections::BTreeMap<String, GeometryMap>,
+}
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct GeometryMap {
+    pub name: String,
+    pub cells: Vec<[i64; 3]>,
+}
+
+impl GeometryFile {
+    pub fn built_in() -> Self {
+        // Checked by a test; an unreadable file would only cost the head start.
+        serde_json::from_str(BUILT_IN_GEOMETRY).unwrap_or_default()
+    }
+}
+
 impl Geometry {
+    /// Start from a shipped file. Its counts add to whatever this install
+    /// learns from its own logs.
+    pub fn from_file(f: &GeometryFile) -> Self {
+        let mut g = Geometry::default();
+        if f.cell != GEO_CELL {
+            return g;
+        }
+        for (base, m) in &f.maps {
+            let cells = g.cells.entry(base.clone()).or_default();
+            for &[cx, cy, n] in &m.cells {
+                let n = n.max(0) as u32;
+                *cells.entry((cx, cy)).or_default() += n;
+                *g.totals.entry(base.clone()).or_default() += n;
+            }
+        }
+        g
+    }
+
+    /// This geometry as a file, with each base's full name, keeping maps
+    /// with at least `min_points` positions.
+    pub fn to_file(&self, name: &dyn Fn(&str) -> Option<String>, min_points: u32) -> GeometryFile {
+        let mut out = GeometryFile { cell: GEO_CELL, maps: Default::default() };
+        for (base, cells) in &self.cells {
+            let (Some(full), Some(&total)) = (name(base), self.totals.get(base)) else { continue };
+            if total < min_points {
+                continue;
+            }
+            let mut v: Vec<[i64; 3]> = cells.iter().map(|(&(x, y), &n)| [x, y, i64::from(n)]).collect();
+            v.sort_unstable();
+            out.maps.insert(base.clone(), GeometryMap { name: full, cells: v });
+        }
+        out
+    }
+
     pub fn add(&mut self, base: &str, x: i32, y: i32) {
         *self.cells.entry(base.to_string()).or_default().entry(cell(x, y)).or_default() += 1;
         *self.totals.entry(base.to_string()).or_default() += 1;
@@ -135,6 +207,15 @@ pub struct PartIn {
     pub duration: Option<i64>,
 }
 
+/// A demo linked to the log: the map its header names, and when it was
+/// recording on the real clock, when that is known.
+#[derive(Debug, Clone)]
+pub struct DemoIn {
+    pub map: String,
+    pub start: Option<f64>,
+    pub end: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct LogIn {
     /// logs.tf's map field: a real map, free text, or nothing.
@@ -146,6 +227,8 @@ pub struct LogIn {
     pub meta_maps: Vec<(i64, String)>,
     /// ETF2L's maps for an official, in order.
     pub etf2l_maps: Vec<String>,
+    /// Demos linked to the log.
+    pub demos: Vec<DemoIn>,
     /// Shift from logs.tf's frame to real time (the M4 log clock).
     pub clock_offset: Option<i64>,
 }
@@ -213,7 +296,8 @@ pub fn resolve(log: &LogIn, geo: &Geometry, full_name: &dyn Fn(&str) -> Option<S
     let known: HashSet<String> = geo.bases().map(str::to_string).collect();
     let mut candidates: HashSet<String> = HashSet::new();
     let mut full: HashMap<String, String> = HashMap::new();
-    for m in log.parts.iter().map(|p| p.map.as_str()).chain(log.etf2l_maps.iter().map(String::as_str)) {
+    let demo_maps = || log.demos.iter().map(|d| d.map.as_str());
+    for m in log.parts.iter().map(|p| p.map.as_str()).chain(log.etf2l_maps.iter().map(String::as_str)).chain(demo_maps()) {
         if is_map_name(m) {
             let b = map_base(m);
             full.entry(b.clone()).or_insert_with(|| m.to_ascii_lowercase());
@@ -224,13 +308,27 @@ pub fn resolve(log: &LogIn, geo: &Geometry, full_name: &dyn Fn(&str) -> Option<S
         candidates.extend(named_bases(text, &known));
     }
     let name_of = |b: &str| full.get(b).cloned().or_else(|| full_name(b));
+    // With no clock to place them, demos still settle a log that can only be
+    // on their map: they all name it, and nothing names another. Where the
+    // clock *can* place them, a round outside every demo was played before
+    // or after them, and they say nothing about it.
+    let placed = log.clock_offset.is_some() && log.demos.iter().all(|d| d.start.is_some());
+    let demo_whole: Option<String> = {
+        let bases: HashSet<String> = demo_maps().filter(|m| is_map_name(m)).map(map_base).collect();
+        match bases.iter().next() {
+            Some(b) if !placed && bases.len() == 1 && candidates.iter().all(|c| c == b) => name_of(b),
+            _ => None,
+        }
+    };
 
     let mut out: Vec<(RoundOut, f64)> = Vec::new();
     for r in &rounds {
-        let answer: Option<(String, Source, f64)> = meta_map(log, r)
-            .map(|m| (m, Source::Meta, f64::INFINITY))
+        let answer: Option<(String, Source, f64)> = demo_span(log, r)
+            .map(|m| (m, Source::Demo, f64::INFINITY))
+            .or_else(|| meta_map(log, r).map(|m| (m, Source::Meta, f64::INFINITY)))
             .or_else(|| part_exact(log, r).map(|m| (m, Source::Part, f64::INFINITY)))
             .or_else(|| part_window(log, r).map(|m| (m, Source::Window, f64::INFINITY)))
+            .or_else(|| demo_whole.clone().map(|m| (m, Source::Demo, f64::INFINITY)))
             .or_else(|| {
                 geo.best(&r.points, &candidates)
                     .and_then(|(b, margin)| Some((name_of(&b)?, Source::Geometry, margin)))
@@ -273,6 +371,20 @@ fn meta_map(log: &LogIn, r: &RoundIn) -> Option<String> {
         .max_by_key(|(t, _)| *t)
         .map(|(_, m)| m.to_ascii_lowercase())
         .filter(|m| is_map_name(m))
+}
+
+/// The map of the demos recording at the middle of the round, when they
+/// agree. Needs the log's clock and each demo's start.
+fn demo_span(log: &LogIn, r: &RoundIn) -> Option<String> {
+    let mid = (r.start + log.clock_offset? + r.length / 2) as f64;
+    let maps: HashSet<String> = log
+        .demos
+        .iter()
+        .filter(|d| is_map_name(&d.map))
+        .filter(|d| matches!((d.start, d.end), (Some(s), Some(e)) if mid >= s && mid <= e))
+        .map(|d| d.map.to_ascii_lowercase())
+        .collect();
+    (maps.len() == 1).then(|| maps.into_iter().next().unwrap())
 }
 
 fn part_exact(log: &LogIn, r: &RoundIn) -> Option<String> {
@@ -407,6 +519,92 @@ mod tests {
         let out = resolve(&log, &geo(), &names);
         assert_eq!(out[1].map.as_deref(), Some("koth_left"));
         assert_eq!(out[1].source, Some(Source::Neighbour));
+    }
+
+    fn demo(map: &str, start: Option<f64>, len: f64) -> DemoIn {
+        DemoIn { map: map.into(), start, end: start.map(|s| s + len) }
+    }
+
+    #[test]
+    fn a_demo_names_the_map_when_logs_tf_does_not() {
+        // No map field, no parts, and kills the geometry has never seen.
+        let log = LogIn {
+            map_field: Some("".into()),
+            rounds: vec![round(1, 0, pts(20_000)), round(2, 400, pts(20_000))],
+            demos: vec![demo("pl_vigil_rc10", None, 0.0)],
+            ..Default::default()
+        };
+        let out = resolve(&log, &geo(), &names);
+        assert!(out.iter().all(|o| o.map.as_deref() == Some("pl_vigil_rc10") && o.source == Some(Source::Demo)));
+    }
+
+    #[test]
+    fn demos_on_the_clock_split_a_combined_log() {
+        // Two maps under a made-up name; each STV covers its own half.
+        let log = LogIn {
+            map_field: Some("upward + vigil".into()),
+            clock_offset: Some(1_000_000),
+            rounds: vec![round(1, 0, vec![]), round(2, 400, vec![]), round(3, 2000, vec![])],
+            demos: vec![demo("pl_upward_f12", Some(999_900.0), 1200.0), demo("pl_vigil_rc10", Some(1_001_800.0), 1200.0)],
+            ..Default::default()
+        };
+        let out = resolve(&log, &Geometry::default(), &names);
+        assert_eq!(out.iter().map(|o| o.map.as_deref().unwrap()).collect::<Vec<_>>(), ["pl_upward_f12", "pl_upward_f12", "pl_vigil_rc10"]);
+    }
+
+    #[test]
+    fn an_unplaced_demo_does_not_decide_a_log_that_names_two_maps() {
+        // One STV, no clock, and the title names a second map: the demo
+        // cannot say which rounds are its own, so it answers none.
+        let log = LogIn {
+            map_field: Some("left + right".into()),
+            rounds: vec![round(1, 0, pts(-1900)), round(2, 400, pts(900))],
+            demos: vec![demo("koth_left", None, 0.0)],
+            ..Default::default()
+        };
+        let out = resolve(&log, &geo(), &names);
+        assert_eq!(out[1].map.as_deref(), Some("koth_right"), "geometry, not the demo");
+        assert_eq!(out[1].source, Some(Source::Geometry));
+    }
+
+    #[test]
+    fn a_placed_demo_says_nothing_about_rounds_before_it() {
+        // Found on a real log: two Swiftwater rounds, then a Vigil STV. The
+        // Vigil demo must not claim the rounds played before it started.
+        let log = LogIn {
+            clock_offset: Some(7200),
+            rounds: vec![round(3, 1000, vec![]), round(4, 1700, vec![]), round(1, 2600, vec![])],
+            demos: vec![demo("pl_vigil_rc10", Some(9790.0), 1300.0)],
+            ..Default::default()
+        };
+        let out = resolve(&log, &Geometry::default(), &names);
+        let by: HashMap<i64, Option<&str>> = out.iter().map(|o| (o.round_num, o.map.as_deref())).collect();
+        assert_eq!(by[&1], Some("pl_vigil_rc10"), "inside the recording");
+        assert_eq!((by[&3], by[&4]), (None, None), "before it: not the demo's to say");
+    }
+
+    #[test]
+    fn the_log_s_own_map_beats_a_demo() {
+        let log = LogIn {
+            map_field: Some("pl_upward_f12".into()),
+            rounds: vec![round(1, 0, vec![])],
+            demos: vec![demo("pl_vigil_rc10", None, 0.0)],
+            ..Default::default()
+        };
+        assert_eq!(resolve(&log, &geo(), &names)[0].source, Some(Source::Log));
+    }
+
+    #[test]
+    fn the_built_in_geometry_reads_and_round_trips() {
+        let f = GeometryFile::built_in();
+        assert_eq!(f.cell, GEO_CELL);
+        let g = Geometry::from_file(&f);
+        let back = g.to_file(&|b| f.maps.get(b).map(|m| m.name.clone()), 0);
+        assert_eq!(back.maps.len(), f.maps.len());
+        for (b, m) in &f.maps {
+            assert!(is_map_name(&m.name), "{b}: {}", m.name);
+            assert_eq!(back.maps[b].cells, m.cells, "{b}");
+        }
     }
 
     #[test]

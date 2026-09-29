@@ -30,6 +30,8 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
     void qc.invalidateQueries({ queryKey: ["matches"] });
     void qc.invalidateQueries({ queryKey: ["spychecks", d.logId] });
     void qc.invalidateQueries({ queryKey: ["cart", d.logId] });
+    // The demo names its map, which can settle rounds the log left unknown.
+    void qc.invalidateQueries({ queryKey: ["analysis", d.logId] });
   }, [download?.state, d.logId, qc]);
 
   async function fetchStv() {
@@ -124,7 +126,7 @@ function DropZone({ d }: { d: MatchDetail }) {
     try {
       const linked = await api.linkDemo(d.logId, path);
       setGot(linked);
-      for (const key of [["match", d.logId], ["spychecks", d.logId], ["cart", d.logId], ["positions", d.logId], ["aim"], ["paths", d.logId]]) {
+      for (const key of [["match", d.logId], ["spychecks", d.logId], ["cart", d.logId], ["positions", d.logId], ["aim"], ["paths", d.logId], ["analysis", d.logId]]) {
         void qc.invalidateQueries({ queryKey: key });
       }
     } catch (e) {

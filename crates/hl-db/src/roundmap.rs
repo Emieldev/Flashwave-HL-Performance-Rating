@@ -110,6 +110,25 @@ impl Db {
             .collect())
     }
 
+    /// The demos linked to each log: `(map, start, end)`, start and end on the
+    /// real clock where the demo's start is known. The header's map is what
+    /// the server had loaded, so it is right even when the log says nothing.
+    #[allow(clippy::type_complexity)]
+    pub async fn linked_demo_maps(&self) -> Result<HashMap<i64, Vec<(String, Option<f64>, Option<f64>)>>> {
+        let rows: Vec<(i64, String, Option<f64>, f64)> = sqlx::query_as(
+            "SELECT l.log_id, d.map, d.start_utc, d.playback_s FROM demo_link l
+             JOIN demo d ON d.demo_id = l.demo_id
+             WHERE d.map IS NOT NULL AND d.map != ''",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        let mut out: HashMap<i64, Vec<_>> = HashMap::new();
+        for (log_id, map, start, playback) in rows {
+            out.entry(log_id).or_default().push((map, start, start.map(|s| s + playback)));
+        }
+        Ok(out)
+    }
+
     pub async fn all_rounds(&self) -> Result<HashMap<i64, Vec<RoundRow>>> {
         let rows = sqlx::query(
             "SELECT log_id, round_num, start_time, length_s, winner FROM match_round

@@ -6,7 +6,7 @@
 //! resolve:  rounds + kills + parts + ETF2L + raw map lines -> round_map + log_segment
 //! ```
 
-use crate::mapres::{self, is_map_name, Geometry, LogIn, PartIn, RoundIn};
+use crate::mapres::{self, is_map_name, DemoIn, Geometry, GeometryFile, LogIn, PartIn, RoundIn};
 use crate::rawlog;
 use crate::sources::Sources;
 use crate::Progress;
@@ -110,17 +110,18 @@ pub async fn fetch_parts(db: &Db, sources: &Sources, mut progress: impl FnMut(Pr
     Ok(s)
 }
 
-/// Resolve every kept log's rounds to maps and store them. No network.
-pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
-    let logs = db.resolver_logs().await?;
-    let rounds = db.all_rounds().await?;
-    let points = db.kill_points().await?;
+/// Base -> full map name -> logs that named it.
+type NameCounts = HashMap<String, HashMap<String, usize>>;
 
-    // The geometry model, from logs that name one map; and the usual full
-    // name for each base (`vigil` -> the version played most).
-    let mut geo = Geometry::default();
-    let mut names: HashMap<String, HashMap<String, usize>> = HashMap::new();
-    for l in &logs {
+/// Add this install's logs that name one map to `geo`, counting the full
+/// names as it goes.
+fn own_geometry(
+    logs: &[hl_db::ResolverLog],
+    points: &HashMap<i64, Vec<(i64, i32, i32, i32, i32)>>,
+    mut geo: Geometry,
+) -> (Geometry, NameCounts) {
+    let mut names: NameCounts = HashMap::new();
+    for l in logs {
         let Some(m) = l.map_field.as_deref().filter(|m| is_map_name(m)) else { continue };
         let base = map_base(m);
         *names.entry(base.clone()).or_default().entry(m.trim().to_ascii_lowercase()).or_default() += 1;
@@ -129,8 +130,37 @@ pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
             geo.add(&base, vx, vy);
         }
     }
+    (geo, names)
+}
+
+fn most_named(names: &NameCounts, base: &str) -> Option<String> {
+    names.get(base).and_then(|m| m.iter().max_by_key(|(_, n)| **n).map(|(name, _)| name.clone()))
+}
+
+/// The map shapes this database knows, as the file that ships with the app
+/// (`maps/geometry.json`): this database's own logs only, not the shipped
+/// shapes, and only maps with `min_points` positions or more.
+pub async fn export_geometry(db: &Db, min_points: u32) -> Result<GeometryFile> {
+    let logs = db.resolver_logs().await?;
+    let points = db.kill_points().await?;
+    let (geo, names) = own_geometry(&logs, &points, Geometry::default());
+    Ok(geo.to_file(&|b| most_named(&names, b), min_points))
+}
+
+/// Resolve every kept log's rounds to maps and store them. No network.
+pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
+    let logs = db.resolver_logs().await?;
+    let rounds = db.all_rounds().await?;
+    let points = db.kill_points().await?;
+    let demos = db.linked_demo_maps().await?;
+
+    // The geometry model: the shapes that ship with the app, plus this
+    // install's logs that name one map; and the usual full name for each
+    // base (`vigil` -> the version played most here, else the shipped one).
+    let shipped = GeometryFile::built_in();
+    let (geo, names) = own_geometry(&logs, &points, Geometry::from_file(&shipped));
     let full_name = |b: &str| -> Option<String> {
-        names.get(b).and_then(|m| m.iter().max_by_key(|(_, n)| **n).map(|(name, _)| name.clone()))
+        most_named(&names, b).or_else(|| shipped.maps.get(b).map(|m| m.name.clone()))
     };
 
     let mut stored = Vec::with_capacity(logs.len());
@@ -159,6 +189,12 @@ pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
                         .flat_map(|&(_, kx, ky, vx, vy)| [(kx, ky), (vx, vy)])
                         .collect(),
                 })
+                .collect(),
+            demos: demos
+                .get(&l.log_id)
+                .into_iter()
+                .flatten()
+                .map(|(map, start, end)| DemoIn { map: map.clone(), start: *start, end: *end })
                 .collect(),
             ..Default::default()
         };

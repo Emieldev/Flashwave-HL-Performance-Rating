@@ -159,6 +159,7 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
     void qc.invalidateQueries({ queryKey: ["paths", a.logId] });
     void qc.invalidateQueries({ queryKey: ["aim", a.logId] });
     void qc.invalidateQueries({ queryKey: ["match", a.logId] });
+    void qc.invalidateQueries({ queryKey: ["analysis", a.logId] });
   }, [download?.state, a.logId, qc]);
 
   const fetchStv = async () => {
@@ -499,7 +500,11 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             </div>
           )}
           <p className="hint km-note">
-            {overview
+            {mapName === null
+              ? stvLinked
+                ? tr("Which map these rounds were on is not known, so only this match's positions are drawn.")
+                : tr("Which map these rounds were on is not known: the log does not say. Download or drop this match's STV demo and the map is read from it.")
+              : overview
               ? tr("Map image from more.tf.")
               : view
                 ? tr("Map drawn from {0} positions in {games} stored {2} matches; brighter is busier.", { "0": view.points.toLocaleString(), "2": shortMap ?? "", games: view.games })

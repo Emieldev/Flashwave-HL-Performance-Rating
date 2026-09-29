@@ -61,6 +61,15 @@ export interface StvInfo {
   hasStv: boolean;
 }
 
+/**
+ * logs.tf's map field when it names a real map (`pl_vigil_rc10`), else
+ * null. Uploaders type anything there -- "vigil scrim", an emoji -- and
+ * that is not a map to draw; unknown is the honest answer.
+ */
+function realMap(m: string | null): string | null {
+  return m && /^[a-z]{2,6}_[a-z0-9_]+$/i.test(m.trim()) ? m.trim() : null;
+}
+
 function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: number[] | null }) {
   const me = a.players.find((p) => p.isMe) ?? null;
   const [tab, setTab] = useState<Tab>("map");
@@ -86,7 +95,7 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
         startS: r?.startS ?? 0,
         endS: r?.endS ?? a.durationS,
         oneRound: true,
-        map: on?.map ?? a.map,
+        map: on?.map ?? realMap(a.map),
         multiMap,
       };
     }
@@ -108,11 +117,11 @@ function Body({ a, stv, onlyRounds }: { a: Analysis; stv: StvInfo; onlyRounds: n
         startS: mine[0]?.startS ?? 0,
         endS: mine[mine.length - 1]?.endS ?? a.durationS,
         oneRound: mine.length === 1,
-        map: a.segments.find((sg) => sg.rounds.some((n) => only.has(n)))?.map ?? a.map,
+        map: a.segments.find((sg) => sg.rounds.some((n) => only.has(n)))?.map ?? realMap(a.map),
         multiMap: false,
       };
     }
-    return { rounds: null, startS: 0, endS: a.durationS, oneRound: false, map: multiMap ? null : a.segments[0]?.map ?? a.map, multiMap };
+    return { rounds: null, startS: 0, endS: a.durationS, oneRound: false, map: multiMap ? null : a.segments[0]?.map ?? realMap(a.map), multiMap };
   }, [a, seg, round, multiMap, only]);
 
   // The round buttons show the chosen map's rounds, or only the rounds of

@@ -293,6 +293,11 @@ pub async fn fetch_stv(
         _ => 0.0,
     };
     db.add_demo_link(demo_id, log_id, "demos.tf", log_share).await?;
+    // The demo's header names its map: resolve again now, so a match whose
+    // log never said which map it was on is drawn at once (Q30).
+    if let Err(e) = crate::maps::resolve_all(db).await {
+        tracing::warn!(log_id, error = %format!("{e:#}"), "round maps not resolved again after linking a demo");
+    }
 
     Ok(StvFetched { log_id, demo_id, file_name: f.file_name, bytes, log_share })
 }

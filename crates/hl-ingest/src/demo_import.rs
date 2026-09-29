@@ -347,6 +347,11 @@ pub async fn link_to_log(
     db.set_demo_start(demo_id, (shift + clock) as f64).await?;
     let share = (matched as f64 / log_kills.len().max(1) as f64).min(1.0);
     db.add_demo_link(demo_id, log_id, MANUAL, share).await?;
+    // The demo's header names its map: resolve again now, so a match whose
+    // log never said which map it was on is drawn at once (Q30).
+    if let Err(e) = crate::maps::resolve_all(db).await {
+        tracing::warn!(log_id, error = %format!("{e:#}"), "round maps not resolved again after linking a demo");
+    }
     db.put_timeline(
         demo_id,
         &TimelineRow {
