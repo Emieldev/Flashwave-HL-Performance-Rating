@@ -4,6 +4,7 @@
 //! Pure. Each round takes the first source that answers:
 //!
 //! 1. `log`: the log names one real map, so every round is on it.
+//! 1b. `manual`: the player said which map these rounds were on.
 //! 2. `demo`: a linked demo names its map in its header, and a round inside
 //!    its recording, on the real clock, is on that map. Measured on this
 //!    account: it agrees with `log` on all 77 rounds both answer, and where
@@ -49,6 +50,7 @@ const GEO_CONFIDENT: f64 = 0.5;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Source {
     Log,
+    Manual,
     Meta,
     Demo,
     Part,
@@ -61,6 +63,7 @@ impl Source {
     pub fn as_str(self) -> &'static str {
         match self {
             Source::Log => "log",
+            Source::Manual => "manual",
             Source::Meta => "meta",
             Source::Demo => "demo",
             Source::Part => "part",
@@ -229,6 +232,8 @@ pub struct LogIn {
     pub etf2l_maps: Vec<String>,
     /// Demos linked to the log.
     pub demos: Vec<DemoIn>,
+    /// The player's own choice, by round number.
+    pub manual: HashMap<i64, String>,
     /// Shift from logs.tf's frame to real time (the M4 log clock).
     pub clock_offset: Option<i64>,
 }
@@ -297,12 +302,19 @@ pub fn resolve(log: &LogIn, geo: &Geometry, full_name: &dyn Fn(&str) -> Option<S
     let mut candidates: HashSet<String> = HashSet::new();
     let mut full: HashMap<String, String> = HashMap::new();
     let demo_maps = || log.demos.iter().map(|d| d.map.as_str());
-    for m in log.parts.iter().map(|p| p.map.as_str()).chain(log.etf2l_maps.iter().map(String::as_str)).chain(demo_maps()) {
+    // Only a demo the clock can place narrows the geometry. One that cannot
+    // be placed may cover half of a combined log, and must not stop the
+    // geometry finding the other half.
+    let placed_demos = log.demos.iter().filter(|d| d.start.is_some() && log.clock_offset.is_some()).map(|d| d.map.as_str());
+    for m in log.parts.iter().map(|p| p.map.as_str()).chain(log.etf2l_maps.iter().map(String::as_str)).chain(placed_demos) {
         if is_map_name(m) {
             let b = map_base(m);
             full.entry(b.clone()).or_insert_with(|| m.to_ascii_lowercase());
             candidates.insert(b);
         }
+    }
+    for m in demo_maps().filter(|m| is_map_name(m)) {
+        full.entry(map_base(m)).or_insert_with(|| m.to_ascii_lowercase());
     }
     for text in [log.map_field.as_deref(), log.title.as_deref()].into_iter().flatten() {
         candidates.extend(named_bases(text, &known));
@@ -311,7 +323,8 @@ pub fn resolve(log: &LogIn, geo: &Geometry, full_name: &dyn Fn(&str) -> Option<S
     // With no clock to place them, demos still settle a log that can only be
     // on their map: they all name it, and nothing names another. Where the
     // clock *can* place them, a round outside every demo was played before
-    // or after them, and they say nothing about it.
+    // or after them, and they say nothing about it. A confident geometry
+    // answer still wins: an unplaced demo may be one half of a combined log.
     let placed = log.clock_offset.is_some() && log.demos.iter().all(|d| d.start.is_some());
     let demo_whole: Option<String> = {
         let bases: HashSet<String> = demo_maps().filter(|m| is_map_name(m)).map(map_base).collect();
@@ -323,15 +336,24 @@ pub fn resolve(log: &LogIn, geo: &Geometry, full_name: &dyn Fn(&str) -> Option<S
 
     let mut out: Vec<(RoundOut, f64)> = Vec::new();
     for r in &rounds {
-        let answer: Option<(String, Source, f64)> = demo_span(log, r)
-            .map(|m| (m, Source::Demo, f64::INFINITY))
+        let answer: Option<(String, Source, f64)> = log
+            .manual
+            .get(&r.round_num)
+            .filter(|m| is_map_name(m))
+            .map(|m| (m.to_ascii_lowercase(), Source::Manual, f64::INFINITY))
+            .or_else(|| demo_span(log, r).map(|m| (m, Source::Demo, f64::INFINITY)))
             .or_else(|| meta_map(log, r).map(|m| (m, Source::Meta, f64::INFINITY)))
             .or_else(|| part_exact(log, r).map(|m| (m, Source::Part, f64::INFINITY)))
             .or_else(|| part_window(log, r).map(|m| (m, Source::Window, f64::INFINITY)))
-            .or_else(|| demo_whole.clone().map(|m| (m, Source::Demo, f64::INFINITY)))
             .or_else(|| {
-                geo.best(&r.points, &candidates)
-                    .and_then(|(b, margin)| Some((name_of(&b)?, Source::Geometry, margin)))
+                let shape = geo
+                    .best(&r.points, &candidates)
+                    .and_then(|(b, margin)| Some((name_of(&b)?, Source::Geometry, margin)));
+                match (shape, demo_whole.clone()) {
+                    (Some(s), _) if s.2 >= GEO_CONFIDENT => Some(s),
+                    (_, Some(m)) => Some((m, Source::Demo, f64::INFINITY)),
+                    (s, None) => s,
+                }
             });
         out.push(match answer {
             Some((m, s, margin)) => (RoundOut { round_num: r.round_num, map: Some(m), source: Some(s) }, margin),
@@ -581,6 +603,35 @@ mod tests {
         let by: HashMap<i64, Option<&str>> = out.iter().map(|o| (o.round_num, o.map.as_deref())).collect();
         assert_eq!(by[&1], Some("pl_vigil_rc10"), "inside the recording");
         assert_eq!((by[&3], by[&4]), (None, None), "before it: not the demo's to say");
+    }
+
+    #[test]
+    fn an_unplaced_demo_does_not_hide_the_other_half_of_a_combined_log() {
+        // demos.tf found one demo for this log, on "left"; nothing else says
+        // what it was. The kills say the second round was on "right".
+        let log = LogIn {
+            rounds: vec![round(1, 0, pts(-1900)), round(2, 400, pts(900))],
+            demos: vec![demo("koth_left", None, 0.0)],
+            ..Default::default()
+        };
+        let out = resolve(&log, &geo(), &names);
+        assert_eq!(out[0].map.as_deref(), Some("koth_left"));
+        assert_eq!((out[1].map.as_deref(), out[1].source), (Some("koth_right"), Some(Source::Geometry)));
+    }
+
+    #[test]
+    fn the_player_s_word_beats_everything_but_the_log() {
+        let mut log = LogIn {
+            map_field: Some("scrim".into()),
+            rounds: vec![round(1, 0, pts(900)), round(2, 400, pts(900))],
+            manual: HashMap::from([(1, "koth_left".to_string())]),
+            ..Default::default()
+        };
+        let out = resolve(&log, &geo(), &names);
+        assert_eq!((out[0].map.as_deref(), out[0].source), (Some("koth_left"), Some(Source::Manual)));
+        assert_eq!(out[1].source, Some(Source::Geometry), "only the round it was said of");
+        log.map_field = Some("koth_right".into());
+        assert_eq!(resolve(&log, &geo(), &names)[0].source, Some(Source::Log));
     }
 
     #[test]

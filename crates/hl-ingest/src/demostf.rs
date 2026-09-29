@@ -27,6 +27,11 @@ use serde::Serialize;
 const EARLY_S: i64 = 45 * 60;
 const LATE_S: i64 = 3 * 3600;
 
+/// For a log with no map to match on: how far after the demo's time the log
+/// may begin, beyond the demo's own length. The demo must have been
+/// recording when the log went live, which another match's demo was not.
+const UNMAPPED_SLACK_S: i64 = 60;
+
 /// Pages to walk before giving up. 100 demos a page, so this is deep history.
 const MAX_PAGES: usize = 20;
 
@@ -46,37 +51,52 @@ pub struct Found {
 /// resolved per round are the ones to match on.
 pub type Unlinked = (i64, i64, Vec<String>);
 
-/// Which log each demo belongs to, by map and time.
+/// Which log each demo belongs to: `(log_id, demo_id, the demo's map)`.
 ///
-/// A demo is stamped when it was uploaded and a log when it began, so the demo
-/// is always *later*; a demo earlier than its log is somebody else's. Where
-/// two logs could claim one demo, the closer in time takes it, and no log
-/// takes two.
-pub fn match_demos(logs: &[Unlinked], demos: &[DemosTfMeta]) -> Vec<(i64, i64)> {
-    let mut pairs: Vec<(i64, i64, i64)> = Vec::new(); // (gap, log_id, demo_id)
+/// By map and time first. Then a log whose map nobody knows (Q30) may take a
+/// demo on time alone, from what the logs with a map left over, but only a
+/// demo that was recording when the log began: one that started before it and
+/// ran past its start. Where two logs could claim one demo, the closer in time
+/// takes it, and no log takes two.
+pub fn match_demos(logs: &[Unlinked], demos: &[DemosTfMeta]) -> Vec<(i64, i64, Option<String>)> {
+    let mut mapped: Vec<(i64, i64, i64)> = Vec::new(); // (gap, log_id, demo_id)
+    let mut unmapped: Vec<(i64, i64, i64)> = Vec::new();
     for d in demos {
         let (Some(at), Some(map)) = (d.time, d.map.as_deref()) else { continue };
         let map = map_base(map);
         for (log_id, played_at, log_maps) in logs {
+            let gap = at - played_at;
+            if log_maps.is_empty() {
+                let Some(len) = d.duration else { continue };
+                if at <= *played_at && *played_at <= at + len + UNMAPPED_SLACK_S {
+                    unmapped.push((gap.abs(), *log_id, d.id));
+                }
+                continue;
+            }
             if !log_maps.iter().any(|m| map_base(m) == map) {
                 continue;
             }
-            let gap = at - played_at;
             if (-EARLY_S..=LATE_S).contains(&gap) {
-                pairs.push((gap.abs(), *log_id, d.id));
+                mapped.push((gap.abs(), *log_id, d.id));
             }
         }
     }
-    // Closest first, then each log and each demo is spoken for once.
-    pairs.sort_unstable();
-    let mut out = Vec::new();
     let mut used_logs = std::collections::HashSet::new();
     let mut used_demos = std::collections::HashSet::new();
-    for (_, log_id, demo_id) in pairs {
-        if used_logs.insert(log_id) && used_demos.insert(demo_id) {
-            out.push((log_id, demo_id));
-        } else {
-            used_logs.remove(&log_id);
+    let mut out = Vec::new();
+    for (by_time_alone, mut pairs) in [(false, mapped), (true, unmapped)] {
+        // Closest first, then each log and each demo is spoken for once.
+        pairs.sort_unstable();
+        for (_, log_id, demo_id) in pairs {
+            if used_logs.contains(&log_id) || used_demos.contains(&demo_id) {
+                continue;
+            }
+            used_logs.insert(log_id);
+            used_demos.insert(demo_id);
+            // The demo's map is kept only where the log had none: a log
+            // with maps already knows them better than one demo's listing.
+            let map = by_time_alone.then(|| demos.iter().find(|d| d.id == demo_id).and_then(|d| d.map.clone())).flatten();
+            out.push((log_id, demo_id, map));
         }
     }
     out
@@ -129,6 +149,47 @@ mod tests {
         }
     }
 
+    /// `(log, demo)` pairs, without the map, for the older tests.
+    fn ids(v: Vec<(i64, i64, Option<String>)>) -> Vec<(i64, i64)> {
+        v.into_iter().map(|(l, d, _)| (l, d)).collect()
+    }
+
+    fn long(id: i64, map: &str, time: i64, len: i64) -> DemosTfMeta {
+        DemosTfMeta { duration: Some(len), ..demo(id, map, time) }
+    }
+
+    #[test]
+    fn a_log_with_no_map_takes_the_demo_that_was_recording_when_it_began() {
+        let hour = 3600;
+        let logs = vec![(1, 10 * hour, vec![]), (2, 12 * hour, vec!["pl_upward_f12".into()])];
+        let demos = vec![
+            // Started ten minutes before log 1, ran 40: recording when it began.
+            long(100, "pl_vigil_rc10", 10 * hour - 600, 2400),
+            // Ended before log 1 began: another match.
+            long(101, "koth_product_final", 10 * hour - 3000, 1800),
+            long(200, "pl_upward_f12", 12 * hour - 600, 2400),
+        ];
+        let mut got = match_demos(&logs, &demos);
+        got.sort_unstable();
+        assert_eq!(got, vec![(1, 100, Some("pl_vigil_rc10".into())), (2, 200, None)], "only the log with no map keeps the demo's");
+    }
+
+    #[test]
+    fn a_log_with_a_map_keeps_its_demo_from_an_unmapped_neighbour() {
+        let hour = 3600;
+        // Both logs began while demo 100 was recording; the one whose map
+        // matches takes it, and the unmapped one gets nothing.
+        let logs = vec![(1, 10 * hour, vec![]), (2, 10 * hour + 300, vec!["pl_vigil_rc10".into()])];
+        let demos = vec![long(100, "pl_vigil_rc10", 10 * hour - 60, 3000)];
+        assert_eq!(ids(match_demos(&logs, &demos)), vec![(2, 100)]);
+    }
+
+    #[test]
+    fn with_no_length_a_demo_is_never_given_to_a_log_with_no_map() {
+        let logs = vec![(1, 1000, vec![])];
+        assert!(match_demos(&logs, &[demo(100, "pl_vigil_rc10", 900)]).is_empty());
+    }
+
     #[test]
     fn a_demo_belongs_to_the_log_it_followed_on_the_same_map() {
         let hour = 3600;
@@ -146,7 +207,7 @@ mod tests {
             // Right map, days later.
             demo(400, "pl_upward_f12", 40 * hour),
         ];
-        let mut got = match_demos(&logs, &demos);
+        let mut got = ids(match_demos(&logs, &demos));
         got.sort_unstable();
         assert_eq!(got, vec![(1, 100), (2, 200)]);
     }
@@ -157,7 +218,7 @@ mod tests {
         // Two Upward games the same evening, one demo between them.
         let logs = vec![(1, 10 * hour, vec!["pl_upward_f12".into()]), (2, 11 * hour, vec!["pl_upward_f12".into()])];
         let demos = vec![demo(100, "pl_upward_f12", 11 * hour - 300)];
-        assert_eq!(match_demos(&logs, &demos), vec![(2, 100)], "the one it actually followed");
+        assert_eq!(ids(match_demos(&logs, &demos)), vec![(2, 100)], "the one it actually followed");
     }
 
     #[test]
@@ -166,7 +227,7 @@ mod tests {
         let logs = vec![(1, 10 * hour, vec!["pl_upward_f12".into(), "cp_steel_f12".into()])];
         // Its own map field would read "upward + steel" and match nothing.
         let demos = vec![demo(100, "cp_steel_f12", 10 * hour - 480)];
-        assert_eq!(match_demos(&logs, &demos), vec![(1, 100)]);
+        assert_eq!(ids(match_demos(&logs, &demos)), vec![(1, 100)]);
     }
 
     #[test]

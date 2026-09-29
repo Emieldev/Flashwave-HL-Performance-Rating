@@ -9,6 +9,7 @@ import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { useMeasuredWidth } from "../../lib/measure";
 import type { StvInfo } from "./AnalysisPanel";
 import { t as tr, tx } from "../../lib/i18n";
+import { MapPicker } from "./MapPicker";
 import { CalloutEditor, useCallouts, zoneAt, ZoneShapes, type HandleDrag } from "./Callouts";
 import type { CalloutFile, CalloutZone } from "../../api/types";
 
@@ -519,6 +520,16 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
                     : tr(" One line per life, four positions a second, from your own recording. A POV demo only holds its recorder's movement; the SourceTV demo has everyone.")
                   : tr(" No demo is linked to this match, so there is no movement to draw."))}
           </p>
+          {!slice.multiMap || mapName !== null ? (
+            <div className="km-map-pick">
+              <MapPicker
+                key={`${a.logId}-${mapName ?? "none"}`}
+                logId={a.logId}
+                rounds={a.rounds.filter((r) => inSlice(r.roundNum, slice)).map((r) => r.roundNum)}
+                current={mapName}
+              />
+            </div>
+          ) : null}
           {layer === "dots" && <TimeStrip a={a} slice={slice} marks={marks} hover={hover} onHover={setHover} />}
         </>
       )}

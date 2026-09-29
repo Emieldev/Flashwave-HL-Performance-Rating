@@ -1034,6 +1034,19 @@ pub async fn reset_callouts(state: State<'_, AppState>, map: String) -> CmdResul
     Ok(hl_ingest::callouts::reset(&data_folder(&state), &map)?)
 }
 
+/// Q30: the maps a player can pick when saying which map rounds were on.
+#[tauri::command]
+pub async fn known_maps(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
+    Ok(hl_ingest::maps::known_maps(&state.db).await?)
+}
+
+/// Q30: "this was on ___" for rounds nothing else could place, or `None`
+/// to take it back.
+#[tauri::command]
+pub async fn set_round_map(state: State<'_, AppState>, log_id: i64, rounds: Vec<i64>, map: Option<String>) -> CmdResult<()> {
+    Ok(hl_ingest::maps::set_round_map(&state.db, log_id, &rounds, map.as_deref()).await?)
+}
+
 /// Q28: where each player spent their time, by callout, from the STV.
 #[tauri::command]
 pub async fn get_positions(state: State<'_, AppState>, log_id: i64, map: String) -> CmdResult<Option<hl_ingest::callouts::PositionsView>> {

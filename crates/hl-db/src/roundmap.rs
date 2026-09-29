@@ -129,6 +129,65 @@ impl Db {
         Ok(out)
     }
 
+    /// The map demos.tf lists for each log's matched demo, where the search
+    /// found one by time (Q30). Not placed on the clock: demos.tf's time is
+    /// not trusted to the second.
+    pub async fn demos_tf_maps(&self) -> Result<HashMap<i64, String>> {
+        let rows: Vec<(i64, String)> =
+            sqlx::query_as("SELECT log_id, demos_tf_map FROM log_index WHERE demos_tf_map IS NOT NULL AND demos_tf_map != ''")
+                .fetch_all(self.pool())
+                .await?;
+        Ok(rows.into_iter().collect())
+    }
+
+    /// Every map a round has been resolved to, with how many rounds.
+    pub async fn round_map_counts(&self) -> Result<Vec<(String, i64)>> {
+        Ok(sqlx::query_as("SELECT map, COUNT(*) FROM round_map WHERE map IS NOT NULL GROUP BY map")
+            .fetch_all(self.pool())
+            .await?)
+    }
+
+    /// The player's own "this was on ___", per log and round.
+    pub async fn manual_round_maps(&self) -> Result<HashMap<i64, HashMap<i64, String>>> {
+        let rows: Vec<(i64, i64, String)> = sqlx::query_as("SELECT log_id, round_num, map FROM round_map_manual")
+            .fetch_all(self.pool())
+            .await?;
+        let mut out: HashMap<i64, HashMap<i64, String>> = HashMap::new();
+        for (log, round, map) in rows {
+            out.entry(log).or_default().insert(round, map);
+        }
+        Ok(out)
+    }
+
+    /// Say which map these rounds were on, or with `None` take it back.
+    pub async fn set_manual_round_map(&self, log_id: i64, rounds: &[i64], map: Option<&str>) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        for r in rounds {
+            match map {
+                Some(m) => {
+                    sqlx::query(
+                        "INSERT INTO round_map_manual (log_id, round_num, map) VALUES (?1, ?2, ?3)
+                         ON CONFLICT (log_id, round_num) DO UPDATE SET map = excluded.map, set_at = unixepoch()",
+                    )
+                    .bind(log_id)
+                    .bind(r)
+                    .bind(m)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                None => {
+                    sqlx::query("DELETE FROM round_map_manual WHERE log_id = ?1 AND round_num = ?2")
+                        .bind(log_id)
+                        .bind(r)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn all_rounds(&self) -> Result<HashMap<i64, Vec<RoundRow>>> {
         let rows = sqlx::query(
             "SELECT log_id, round_num, start_time, length_s, winner FROM match_round

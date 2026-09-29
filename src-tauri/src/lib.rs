@@ -243,6 +243,8 @@ pub fn run() {
             sync_commands::get_callouts,
             sync_commands::save_callouts,
             sync_commands::reset_callouts,
+            sync_commands::known_maps,
+            sync_commands::set_round_map,
             sync_commands::get_positions,
         ])
         .run(tauri::generate_context!())

@@ -156,6 +156,18 @@
   font-size: 0.82rem;
 }
 
+.km-map-pick {
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+.map-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .km-strip svg {
   display: block;
   cursor: pointer;

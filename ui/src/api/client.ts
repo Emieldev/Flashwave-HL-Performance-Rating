@@ -167,6 +167,9 @@ const realApi = {
   getCallouts: (map: string) => invoke<CalloutFile>("get_callouts", { map }),
   saveCallouts: (map: string, file: CalloutFile) => invoke<CalloutFile>("save_callouts", { map, file }),
   resetCallouts: (map: string) => invoke<CalloutFile>("reset_callouts", { map }),
+  /** Q30: maps to pick from, and "these rounds were on ___" (null takes it back). */
+  knownMaps: () => invoke<string[]>("known_maps"),
+  setRoundMap: (logId: number, rounds: number[], map: string | null) => invoke<void>("set_round_map", { logId, rounds, map }),
   getPositions: (logId: number, map: string) => invoke<PositionsView | null>("get_positions", { logId, map }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),

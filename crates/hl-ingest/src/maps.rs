@@ -147,12 +147,44 @@ pub async fn export_geometry(db: &Db, min_points: u32) -> Result<GeometryFile> {
     Ok(geo.to_file(&|b| most_named(&names, b), min_points))
 }
 
+/// The maps a player can choose from when saying which map rounds were on:
+/// every map this database has resolved rounds to, and every map the app
+/// ships a shape for. Full names, one per base (the most played version).
+pub async fn known_maps(db: &Db) -> Result<Vec<String>> {
+    let mut best: HashMap<String, (i64, String)> = HashMap::new();
+    for (map, n) in db.round_map_counts().await? {
+        let e = best.entry(map_base(&map)).or_insert((0, map.clone()));
+        if n > e.0 {
+            *e = (n, map);
+        }
+    }
+    for (base, m) in GeometryFile::built_in().maps {
+        best.entry(base).or_insert((0, m.name));
+    }
+    let mut out: Vec<(String, String)> = best.into_iter().map(|(b, (_, m))| (b, m)).collect();
+    out.sort();
+    Ok(out.into_iter().map(|(_, m)| m).collect())
+}
+
+/// Say which map these rounds of a log were on (`None` takes it back), and
+/// resolve again so every page shows it.
+pub async fn set_round_map(db: &Db, log_id: i64, rounds: &[i64], map: Option<&str>) -> Result<()> {
+    if let Some(m) = map {
+        anyhow::ensure!(is_map_name(m), "`{m}` is not a map name");
+    }
+    db.set_manual_round_map(log_id, rounds, map.map(|m| m.trim().to_ascii_lowercase()).as_deref()).await?;
+    resolve_all(db).await?;
+    Ok(())
+}
+
 /// Resolve every kept log's rounds to maps and store them. No network.
 pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
     let logs = db.resolver_logs().await?;
     let rounds = db.all_rounds().await?;
     let points = db.kill_points().await?;
     let demos = db.linked_demo_maps().await?;
+    let demos_tf = db.demos_tf_maps().await?;
+    let manual = db.manual_round_maps().await?;
 
     // The geometry model: the shapes that ship with the app, plus this
     // install's logs that name one map; and the usual full name for each
@@ -195,7 +227,10 @@ pub async fn resolve_all(db: &Db) -> Result<ResolveSummary> {
                 .into_iter()
                 .flatten()
                 .map(|(map, start, end)| DemoIn { map: map.clone(), start: *start, end: *end })
+                // The map demos.tf lists for the matched demo, unplaced.
+                .chain(demos_tf.get(&l.log_id).map(|m| DemoIn { map: m.clone(), start: None, end: None }))
                 .collect(),
+            manual: manual.get(&l.log_id).cloned().unwrap_or_default(),
             ..Default::default()
         };
         if !single {

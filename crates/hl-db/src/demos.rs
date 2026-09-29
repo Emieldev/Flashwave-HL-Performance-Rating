@@ -132,21 +132,27 @@ impl Db {
                     Some(r) if !r.is_empty() => r.split(',').map(str::to_string).collect(),
                     _ => map.filter(|m| !m.is_empty()).into_iter().collect(),
                 };
-                (!maps.is_empty()).then_some((log_id, at, maps))
+                // A log with no map at all still goes: demos.tf can find its
+                // demo by time alone, and the demo names the map (Q30).
+                Some((log_id, at, maps))
             })
             .collect())
     }
 
-    /// Record the demos.tf demo each log was matched to. Only fills gaps: a
-    /// log trends.tf already linked keeps the id it was given.
-    pub async fn set_demos_tf_ids(&self, pairs: &[(i64, i64)]) -> Result<()> {
+    /// Record the demos.tf demo each log was matched to, and the map demos.tf
+    /// lists for it. Only fills gaps: a log trends.tf already linked keeps
+    /// the id it was given.
+    pub async fn set_demos_tf_ids(&self, pairs: &[(i64, i64, Option<String>)]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
-        for (log_id, demo_id) in pairs {
-            sqlx::query("UPDATE log_index SET demos_tf_id = ?2 WHERE log_id = ?1 AND demos_tf_id IS NULL")
-                .bind(log_id)
-                .bind(demo_id)
-                .execute(&mut *tx)
-                .await?;
+        for (log_id, demo_id, map) in pairs {
+            sqlx::query(
+                "UPDATE log_index SET demos_tf_id = ?2, demos_tf_map = ?3 WHERE log_id = ?1 AND demos_tf_id IS NULL",
+            )
+            .bind(log_id)
+            .bind(demo_id)
+            .bind(map)
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
         Ok(())

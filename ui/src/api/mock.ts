@@ -872,6 +872,11 @@ export const mockApi: Api = {
     }
     return delay(mockCallouts(map, file));
   },
+  knownMaps: () => delay(["koth_ashville_final1", "koth_product_final", "koth_proot_b5b", "cp_steel_f12", "pl_swiftwater_final1", "pl_upward_f12", "pl_vigil_rc10"]),
+  setRoundMap: (logId: number, rounds: number[], map: string | null) => {
+    console.info("would set", logId, rounds, map);
+    return delay(undefined);
+  },
   resetCallouts: (map: string) => {
     try {
       localStorage.removeItem(`hl.mock.callouts.${mapBase(map)}`);

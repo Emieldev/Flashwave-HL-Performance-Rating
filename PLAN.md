@@ -1452,7 +1452,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q27~~ | ~~**Spychecking**~~ (ivg) | large | **Built as a match-page panel, not a rating component.** Read off the kept STV timelines, so it works after the demo file is deleted. 10-36 per match across the 5 STVs on disk; see §20. Still a rating component only if STV coverage becomes normal. |
 | Q28 | **Callouts, positions and tendencies** (Flashy) | large | **Built; the callouts are drafts.** Zones in game units, one JSON file a map: seeds in `callouts/`, the owner's copy in `<data>/callouts/` always wins. Product is drawn (27 zones from the TF2 wiki's descriptions; 69% of 65,266 kill positions land in one, RED/BLU mirror to within 3%); Upward, Steel and Swiftwater ship their wiki names unplaced; Vigil, Ashville and Proot have no written source. The kill map draws the jigsaw, counts kills per zone, and has an editor (click corners, name, save). A Positions panel shows each player's time per zone from the STV. Still to come: tendencies across matches. See §21. |
 | Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
-| Q30 | **Maps recognised from the STV when logs.tf cannot say** (Flashy) | medium | **Mostly done (29 Sept).** A linked demo's header now names the map of every round inside its recording, ahead of the raw log's map line (it agrees with the log's own field on 77 of 77 rounds, and beat the map line both times they differed); linking or downloading a demo re-resolves at once; and the app ships map shapes for 24 maps (`maps/geometry.json`), so a fresh install recognises Vigil from kill positions alone. With every map name logs.tf gives wiped from a copy of the database, 92 of 94 rounds with a demo and 95% of the rest still resolve correctly, against none before. The kill map says when the map is unknown and how to fix it. The missing images were the other half, fixed by shipping more.tf's. **Left:** a manual "this was on ___" override, and letting demos.tf find the STV of a log whose map is unknown. See §24. |
+| ~~Q30~~ | ~~**Maps recognised from the STV when logs.tf cannot say** (Flashy)~~ | medium | **Done (29-30 Sept).** A linked demo's header now names the map of every round inside its recording, ahead of the raw log's map line (it agrees with the log's own field on 77 of 77 rounds, and beat the map line both times they differed); linking or downloading a demo re-resolves at once; and the app ships map shapes for 24 maps (`maps/geometry.json`), so a fresh install recognises Vigil from kill positions alone. With every map name logs.tf gives wiped from a copy of the database, 92 of 94 rounds with a demo and 95% of the rest still resolve correctly, against none before. The kill map says when the map is unknown and how to fix it. The missing images were the other half, fixed by shipping more.tf's. **Done (30 Sept):** a "this was on ___" picker under the kill map, and demos.tf now finds the STV of a log whose map is unknown, by time alone. See §24. |
 | Q31 | **A Maps section in Settings, with top-down image import** (Flashy) | medium | One row per map: image yes/no, placement known, callouts yours/built-in/none, matches on it. Import a top-down image per map; maps in the placement table line up by themselves, others are dragged and scaled into line over the kill outline. Depends on nothing, but reads best after Q30, since it lists what Q30 found. See §24. |
 | Q32 | **Callout presets: import and export per map** (Flashy) | small | Callouts will be passed round on Discord and adjusted in the app, like `.lang` files. Export writes one map's zones to a file, import validates it and replaces your copy with an undo. Sits in Q31's rows and in the kill map's editor. See §24. |
 
@@ -2363,10 +2363,25 @@ same map as before, and the kill map must draw.
   when no STV is linked, that downloading or dropping one fixes it. It no
   longer mistakes free text in logs.tf's map field for a map.
 
-**Left.** The manual override (5), and a knock-on found on the way:
-demos.tf's STV search (`demostf::match_demos`) matches by map *and* time,
-so a log whose map is unknown never finds its STV there. Matching such a
-log on time alone, after every map-matched pair, would close that loop.
+**Finished (30 Sept).**
+
+- **demos.tf by time alone.** The STV search matched by map *and* time, so
+  a log whose map was unknown never found its STV. Such a log now reaches
+  the matcher and may take a demo on time alone, after every map-matched
+  pair, and only a demo that was *recording when the log began* (started
+  before it, ran past its start): another match's demo was not. The map
+  demos.tf lists for it is kept (`log_index.demos_tf_map`, migration 0032)
+  and read as an unplaced demo, so the kill map draws before the STV is
+  downloaded. Kept only for logs that had no map: a log with maps knows them
+  better than one listing.
+- **Unplaced demos no longer narrow the geometry**, and a confident
+  geometry answer beats them: one demo found for a combined log names one
+  of its halves, and must not hide the other. The wipe check gives the
+  same numbers as before.
+- **"This was on ___"** (`round_map_manual`, source `manual`): a picker
+  under the kill map when the map is unknown, and a small "Wrong map?" when
+  it is known. It covers the rounds the kill map is showing, outranks
+  everything but the log's own field, and "Not sure" takes it back.
 
 ### Q31. The Maps section
 
