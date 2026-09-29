@@ -462,6 +462,16 @@ mod tests {
     }
 
     #[test]
+    fn proot_ships_as_flashy_drew_it_and_the_rest_are_drafts() {
+        let dir = scratch("seeds");
+        let proot = load(&dir, "koth_proot_b5b").unwrap();
+        assert_eq!((proot.author.as_deref(), proot.draft, proot.zones.len()), (Some("Flashy"), false, 43));
+        for (base, _) in BUILT_IN.iter().filter(|(b, _)| *b != "proot") {
+            assert!(load(&dir, base).unwrap().draft, "{base} is a draft until someone who plays it checks it");
+        }
+    }
+
+    #[test]
     fn a_preset_goes_out_and_back_in_whole() {
         let dir = scratch("roundtrip");
         let mine = CalloutFile { map: "vigil".into(), zones: vec![square("Cliff"), square("House")], names: vec!["Lobby".into()], ..Default::default() };

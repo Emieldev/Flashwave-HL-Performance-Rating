@@ -31,6 +31,8 @@ pub struct MapRow {
     /// Callouts known by name and not yet drawn.
     pub unplaced: usize,
     pub draft: bool,
+    /// Who drew the callouts, where the file says.
+    pub callouts_author: Option<String>,
     /// The last callout import can still be taken back.
     pub callouts_undo: bool,
 }
@@ -85,6 +87,7 @@ pub async fn list(db: &Db, data: &Path) -> Result<MapsOverview> {
             zones: c.zones.len(),
             unplaced: c.names.len(),
             draft: c.draft,
+            callouts_author: c.author.clone(),
             callouts_undo: callouts::has_undo(data, &base),
             name,
             base,

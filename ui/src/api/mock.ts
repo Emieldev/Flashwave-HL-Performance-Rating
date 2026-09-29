@@ -961,11 +961,11 @@ export const mockApi: Api = {
     delay<MapsOverview>({
       unknownMatches: 3,
       maps: [
-        { base: "product", name: "koth_product_final", matches: 182, image: "built in", placement: "built in", callouts: "built in", zones: 27, unplaced: 0, draft: true, calloutsUndo: false },
-        { base: "upward", name: "pl_upward_f12", matches: 120, image: "built in", placement: "built in", callouts: "built in", zones: 0, unplaced: 14, draft: true, calloutsUndo: false },
-        { base: "vigil", name: "pl_vigil_rc10", matches: 96, image: "yours", placement: "yours", callouts: "yours", zones: 12, unplaced: 0, draft: false, calloutsUndo: true },
-        { base: "ashville", name: "koth_ashville_final1", matches: 61, image: "built in", placement: "built in", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false },
-        { base: "lakeside", name: "koth_lakeside_final", matches: 9, image: "none", placement: "none", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false },
+        { base: "product", name: "koth_product_final", matches: 182, image: "built in", placement: "built in", callouts: "built in", zones: 27, unplaced: 0, draft: true, calloutsUndo: false, calloutsAuthor: null },
+        { base: "upward", name: "pl_upward_f12", matches: 120, image: "built in", placement: "built in", callouts: "built in", zones: 0, unplaced: 14, draft: true, calloutsUndo: false, calloutsAuthor: null },
+        { base: "vigil", name: "pl_vigil_rc10", matches: 96, image: "yours", placement: "yours", callouts: "yours", zones: 12, unplaced: 0, draft: false, calloutsUndo: true, calloutsAuthor: "Flashy" },
+        { base: "ashville", name: "koth_ashville_final1", matches: 61, image: "built in", placement: "built in", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false, calloutsAuthor: null },
+        { base: "lakeside", name: "koth_lakeside_final", matches: 9, image: "none", placement: "none", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false, calloutsAuthor: null },
       ],
     }),
   overviewImage: async (map: string): Promise<OverviewImage | null> => {

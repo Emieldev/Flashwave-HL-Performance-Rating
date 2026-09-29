@@ -1055,6 +1055,8 @@ export interface MapRow {
   zones: number;
   unplaced: number;
   draft: boolean;
+  /** Who drew the callouts, where the file says. */
+  calloutsAuthor: string | null;
   /** The last callout import can still be taken back. */
   calloutsUndo: boolean;
 }

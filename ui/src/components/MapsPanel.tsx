@@ -105,9 +105,9 @@ export function MapsPanel() {
                 <td>
                   <div className="map-cell">
                     <OriginTag o={m.callouts} />
-                    {(m.draft || m.zones > 0 || m.unplaced > 0) && (
+                    {(m.calloutsAuthor || m.draft || m.zones > 0 || m.unplaced > 0) && (
                       <span className="muted">
-                        {[m.draft ? t("draft") : null, m.zones > 0 ? t("{n} zones", { n: m.zones }) : null, m.unplaced > 0 ? t("{n} to place", { n: m.unplaced }) : null]
+                        {[m.calloutsAuthor ? t("by {0}", { "0": m.calloutsAuthor }) : null, m.draft ? t("draft") : null, m.zones > 0 ? t("{n} zones", { n: m.zones }) : null, m.unplaced > 0 ? t("{n} to place", { n: m.unplaced }) : null]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>

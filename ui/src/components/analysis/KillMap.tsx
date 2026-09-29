@@ -357,11 +357,12 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
                   className={showZones || editing ? "km-chip on" : "km-chip"}
                   aria-pressed={showZones || editing}
                   onClick={() => setShowZones((v) => !v)}
-                  title={callouts.draft ? tr("Draft callouts, not yet checked in game") : undefined}
+                  title={callouts.draft ? tr("Draft callouts, not yet checked in game") : callouts.author ? tr("Callouts by {0}", { "0": callouts.author }) : undefined}
                 >
                   {showZones || editing ? tr("Shown") : tr("Hidden")}
                   {callouts.draft && <span className="km-draft">{tr("draft")}</span>}
                 </button>
+                {callouts.author && <span className="km-by muted">{tr("by {0}", { "0": callouts.author })}</span>}
                 <label className="km-slider" title={tr("How solid the zones are")}>
                   <span>{tr("Opacity")}</span>
                   <input

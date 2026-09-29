@@ -1269,6 +1269,7 @@
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+.km-by { font-size: 0.78rem; }
 .km-slider { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
 .km-slider input[type="range"] { width: 90px; accent-color: var(--accent); }
 .km-zoom-n { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.82rem; }
