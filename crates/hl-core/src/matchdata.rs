@@ -50,6 +50,11 @@ pub struct LogFlags {
     pub dt: bool,
     pub airshots: bool,
     pub hr: bool,
+    /// Payload, or attack/defend on points (Steel, Gravelpit): one side
+    /// attacks, and a capture moves the attackers' spawn up. Not a logs.tf
+    /// flag: read from the map's name.
+    #[serde(default)]
+    pub attack_defend: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

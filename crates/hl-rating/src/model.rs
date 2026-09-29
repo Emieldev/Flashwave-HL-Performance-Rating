@@ -385,8 +385,11 @@ pub fn extract(
                 .then(|| impact.and_then(|i| i.fights))
                 .flatten()
                 .map(|f| f64::from(f.caps_mates_dead) * per10),
-            Component::CapsSpawnDelay => flags
-                .cp
+            // KOTH and 5CP only. On payload and attack/defend a capture
+            // moves the attackers' spawn up, so the wait it adds to their
+            // dead is the mode working, not a cost (Flashy): left out, like
+            // on a map with no points.
+            Component::CapsSpawnDelay => (flags.cp && !flags.attack_defend)
                 .then(|| impact.and_then(|i| i.fights))
                 .flatten()
                 .map(|f| f64::from(f.caps_spawn_delay) * per10),

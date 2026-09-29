@@ -76,6 +76,7 @@ pub fn normalize(log_id: i64, raw: &Value) -> anyhow::Result<NormalizedLog> {
             dt: flag(info, "hasDT"),
             airshots: flag(info, "hasAS"),
             hr: flag(info, "hasHR"),
+            attack_defend: str_field(info, "map").is_some_and(|m| crate::situation::Mode::of(&m) == crate::situation::Mode::Stopwatch),
         },
         players,
         rounds: rounds(raw),

@@ -159,6 +159,14 @@ pub struct Fights {
 }
 
 pub fn analyse(raw: &RawLog, gs: &GameState) -> Fights {
+    // The map the server says it loaded: newer raw logs write one each time.
+    let log_map = raw.map_loads.first().map(|(_, m)| m.clone());
+    analyse_on(raw, gs, &|_| log_map.clone())
+}
+
+/// [`analyse`], told each round's map (by round number), which only the
+/// capture spawn delays need.
+pub fn analyse_on(raw: &RawLog, gs: &GameState, map_of_round: &dyn Fn(u32) -> Option<String>) -> Fights {
     // The kills that count, once each. Some raw logs write lines twice or
     // hold the same match twice; a repeat is the same second, pair and weapon.
     let mut seen = HashSet::new();
@@ -301,7 +309,7 @@ pub fn analyse(raw: &RawLog, gs: &GameState) -> Fights {
         s.caps_mates_dead += mates_dead;
     }
 
-    for (account, secs) in cap_spawn_delays(gs) {
+    for (account, secs) in cap_spawn_delays(gs, map_of_round) {
         stats.entry(account).or_insert_with(|| FightStats { account_id: account, ..Default::default() }).caps_spawn_delay += secs;
     }
 
@@ -336,12 +344,24 @@ fn cap_costs(gs: &GameState) -> Vec<(u32, u32, u32)> {
 /// Per capper, per cap: the long extra waits it cost their own dead (Q25,
 /// §18b). The usual wait is per colour over the whole log, where
 /// `hl situation --spawn-delay` has the round's map to key it by.
-fn cap_spawn_delays(gs: &GameState) -> Vec<(u32, u32)> {
+///
+/// Not on payload or attack/defend (Flashy): there a capture moves the
+/// attackers' spawn up, and the wait that adds is the mode, not a mistake.
+/// A round whose map is unknown is kept.
+fn cap_spawn_delays(gs: &GameState, map_of_round: &dyn Fn(u32) -> Option<String>) -> Vec<(u32, u32)> {
     let deaths = crate::spawns::respawns(gs);
     let usual = crate::spawns::usual_waits(gs, &deaths, |_| Some(()));
+    let attack_defend = |t: i64| {
+        gs.round_at(t)
+            .and_then(|r| map_of_round(r.num))
+            .is_some_and(|m| crate::situation::Mode::of(&m) == crate::situation::Mode::Stopwatch)
+    };
     let mut out = Vec::new();
     for c in &gs.caps {
         let Some(team) = c.team else { continue };
+        if attack_defend(c.at) {
+            continue;
+        }
         let secs: f64 = deaths
             .iter()
             .filter(|d| d.team == team && d.died <= c.at && d.back > c.at)
@@ -426,7 +446,8 @@ pub fn kill_credits(raw: &RawLog) -> Vec<(i64, u32, f64)> {
 /// 5: what each capture cost -- enemies alive, own team dead (Q17, Q25).
 /// 6: each kill's credit, shared with whoever damaged the victim (Q6b).
 /// 7: the long respawn delays each capture cost the capper's dead (Q25, §18b).
-pub const VERSION: i64 = 7;
+/// 8: ...but not on payload or attack/defend (Flashy).
+pub const VERSION: i64 = 8;
 
 /// Logs written per transaction by [`derive_all`].
 const GROUP: usize = 100;
@@ -452,12 +473,25 @@ pub async fn derive_all(
     // Written a group at a time, in one transaction each (see
     // `replace_fights_many`): a commit per log cost more than the work.
     let mut group: Vec<hl_db::FightsWrite> = Vec::with_capacity(GROUP);
+    // Each round's map, so a capture knows its mode; the log's own map
+    // where the rounds have none.
+    let round_maps = db.all_round_map_names().await?;
     for (i, log_id) in todo.iter().copied().enumerate() {
         progress(i, todo.len());
         let Some(zip) = db.rawlog(log_id).await? else { continue };
         let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
         let gs = GameState::build(&raw);
-        let f = analyse(&raw, &gs);
+        let rounds = round_maps.get(&log_id);
+        let log_map = raw.map_loads.first().map(|(_, m)| m.clone());
+        // A raw log often has a Round_Start more than logs.tf has rounds (a
+        // restart at the start), so the last one has no number of its own:
+        // it takes the map of the nearest round before it.
+        let map_of = |n: u32| {
+            let m = rounds?;
+            let n = i64::from(n);
+            m.get(&n).or_else(|| m.iter().filter(|(k, _)| **k <= n).max_by_key(|(k, _)| **k).map(|(_, v)| v)).or_else(|| m.values().next()).cloned()
+        };
+        let f = analyse_on(&raw, &gs, &|n| map_of(n).or_else(|| log_map.clone()));
         let rows: Vec<hl_db::FightRow> = f.players.iter().map(row).collect();
         let situations: Vec<(i64, i8, i8)> = crate::situation::kill_states(&raw, &gs, &f.tags)
             .into_iter()
