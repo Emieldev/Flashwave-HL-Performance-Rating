@@ -44,6 +44,7 @@ import type {
   OverviewImage,
   Placement,
   MapsOverview,
+  PresetCheck,
   Profile,
   MatchPage,
   MatchQuery,
@@ -960,11 +961,11 @@ export const mockApi: Api = {
     delay<MapsOverview>({
       unknownMatches: 3,
       maps: [
-        { base: "product", name: "koth_product_final", matches: 182, image: "built in", placement: "built in", callouts: "built in", zones: 27, unplaced: 0, draft: true },
-        { base: "upward", name: "pl_upward_f12", matches: 120, image: "built in", placement: "built in", callouts: "built in", zones: 0, unplaced: 14, draft: true },
-        { base: "vigil", name: "pl_vigil_rc10", matches: 96, image: "yours", placement: "yours", callouts: "yours", zones: 12, unplaced: 0, draft: false },
-        { base: "ashville", name: "koth_ashville_final1", matches: 61, image: "built in", placement: "built in", callouts: "none", zones: 0, unplaced: 0, draft: false },
-        { base: "lakeside", name: "koth_lakeside_final", matches: 9, image: "none", placement: "none", callouts: "none", zones: 0, unplaced: 0, draft: false },
+        { base: "product", name: "koth_product_final", matches: 182, image: "built in", placement: "built in", callouts: "built in", zones: 27, unplaced: 0, draft: true, calloutsUndo: false },
+        { base: "upward", name: "pl_upward_f12", matches: 120, image: "built in", placement: "built in", callouts: "built in", zones: 0, unplaced: 14, draft: true, calloutsUndo: false },
+        { base: "vigil", name: "pl_vigil_rc10", matches: 96, image: "yours", placement: "yours", callouts: "yours", zones: 12, unplaced: 0, draft: false, calloutsUndo: true },
+        { base: "ashville", name: "koth_ashville_final1", matches: 61, image: "built in", placement: "built in", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false },
+        { base: "lakeside", name: "koth_lakeside_final", matches: 9, image: "none", placement: "none", callouts: "none", zones: 0, unplaced: 0, draft: false, calloutsUndo: false },
       ],
     }),
   overviewImage: async (map: string): Promise<OverviewImage | null> => {
@@ -980,6 +981,28 @@ export const mockApi: Api = {
     console.info("would save placement", map, placement);
     return delay(undefined);
   },
+  exportCallouts: async (map: string) => {
+    console.info("would export the callouts of", map);
+    return delay(`C:\\Users\\you\\Downloads\\${map}.callouts.json`);
+  },
+  pickCalloutFile: async () => delay("C:\\Users\\you\\Downloads\\product.callouts.json"),
+  inspectCallouts: (map: string | null, path: string) =>
+    delay<PresetCheck>({
+      map: "product",
+      target: map ?? "product",
+      zones: 27,
+      names: 2,
+      draft: false,
+      author: "boSe",
+      source: path,
+      currentOrigin: "built in",
+      currentZones: 27,
+    }),
+  importCallouts: (map: string, path: string, anyMap: boolean) => {
+    console.info("would import", path, "onto", map, anyMap ? "(another map's file)" : "");
+    return delay(mockCallouts(map));
+  },
+  undoCallouts: (map: string) => delay(mockCallouts(map)),
   removeOverview: (map: string) => {
     console.info("would remove the image of", map);
     return delay(undefined);

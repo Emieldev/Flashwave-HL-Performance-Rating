@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type CalloutFile, type CalloutZone } from "../../api/types";
 import { t, tx } from "../../lib/i18n";
+import { CalloutPresetButtons } from "../CalloutPresets";
 
 /**
  * Q28 (Flashy): callouts as zones on the map -- the jigsaw -- and an editor
@@ -350,6 +351,8 @@ export function CalloutEditor(props: {
           <button className="linkish" disabled={busy} onClick={() => void reset()}>{t("Back to the built-in callouts")}</button>
         )}
       </div>
+      {/* Save first: an export writes what is saved, and an import replaces it. */}
+      {!dirty && <CalloutPresetButtons map={map} canExport={file.origin !== "none"} canUndo={false} />}
       {error && <p className="error">{error}</p>}
       <p className="hint co-where">{t("Where zones overlap, the smaller one wins. Saved to the callouts folder in the app's data folder, one file per map, never overwritten by an update.")}</p>
     </aside>

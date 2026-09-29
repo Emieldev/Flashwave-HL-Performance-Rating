@@ -1454,7 +1454,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | Q29 | **Teams and seasons** (Flashy) | large | **Part 1 done: a Teams tab.** A year of ETF2L Highlander (three seasons, 19 competitions, 430 results on the first fetch): division tables, the season's pool, and a page per team with record, win % per map, results and who played, with each player's rating where your pool has one. A sync reads 60 match pages, so the per-map scores and rosters fill in over a few. **Part 2**, best players rated across all their games, is Q14b. See §22. |
 | ~~Q30~~ | ~~**Maps recognised from the STV when logs.tf cannot say** (Flashy)~~ | medium | **Done (29-30 Sept).** A linked demo's header now names the map of every round inside its recording, ahead of the raw log's map line (it agrees with the log's own field on 77 of 77 rounds, and beat the map line both times they differed); linking or downloading a demo re-resolves at once; and the app ships map shapes for 24 maps (`maps/geometry.json`), so a fresh install recognises Vigil from kill positions alone. With every map name logs.tf gives wiped from a copy of the database, 92 of 94 rounds with a demo and 95% of the rest still resolve correctly, against none before. The kill map says when the map is unknown and how to fix it. The missing images were the other half, fixed by shipping more.tf's. **Done (30 Sept):** a "this was on ___" picker under the kill map, and demos.tf now finds the STV of a log whose map is unknown, by time alone. See §24. |
 | ~~Q31~~ | ~~**A Maps section in Settings, with top-down image import** (Flashy)~~ | medium | **Done (30 Sept).** Settings, Maps: every map you played (the rest on ask) with where its image, placement and callouts come from, how many matches were on it, and how many matches have a round on no known map. Import a PNG, JPEG or WebP for any map; it wins over the built-in one, and Remove mine goes back. Line up drags this install's kill positions over the image and scrolls to scale; the placement is saved beside the image. Images need not be square. See §24. |
-| Q32 | **Callout presets: import and export per map** (Flashy) | small | Callouts will be passed round on Discord and adjusted in the app, like `.lang` files. Export writes one map's zones to a file, import validates it and replaces your copy with an undo. Sits in Q31's rows and in the kill map's editor. See §24. |
+| ~~Q32~~ | ~~**Callout presets: import and export per map** (Flashy)~~ | small | **Done (30 Sept).** `<map>.callouts.json`: the stored shape plus `format` and an optional author. Export from the Maps row and the kill-map editor; Import checks the file (format, every zone named with three real corners, under 1 MB), says what it replaces, warns when the file is for another map, and keeps the replaced copy for one Undo. A `.callouts.json` dropped anywhere on the window imports to the map it names. See §24. |
 
 ### Reported by testers, and fixed
 
@@ -2438,6 +2438,17 @@ handled like them.
   demo.
 - Later, if asked for: a **map pack** — image, placement and callouts in
   one zip — so a whole map is one file to share.
+
+**Built (30 Sept 2026).** `callouts.rs`: `export`, `read_preset`,
+`inspect`, `import`, `undo`. The Undo copy is `<map>.previous.json` beside
+the player's own (holding `null` when there was none, so Undo goes back to
+the built-in); saving an edit or going back to the built-in drops it, since
+Undo would throw the edit away too. A file for another map is refused by
+the backend unless the player confirms, because its zones would sit in the
+wrong places. The UI is `CalloutPresets.tsx`: the buttons, the confirm
+dialog and the window-wide drop, which the demo drop zone now leaves alone.
+Checked in the browser against the fixtures: wrong-map warning, import,
+export.
 
 ### Order and release
 

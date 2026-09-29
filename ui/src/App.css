@@ -1373,6 +1373,17 @@ th.num {
   cursor: grabbing;
 }
 
+.preset-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: 10px;
+}
+
+.preset-note {
+  flex-basis: 100%;
+}
+
 .maps-actions {
   display: inline-flex;
   gap: 10px;

@@ -1094,6 +1094,30 @@ pub async fn remove_overview(state: State<'_, AppState>, map: String) -> CmdResu
     Ok(hl_ingest::overview::remove(&dir, &map)?)
 }
 
+/// Q32: write a map's callouts to a preset file.
+#[tauri::command]
+pub async fn export_callouts(state: State<'_, AppState>, map: String, path: String) -> CmdResult<()> {
+    Ok(hl_ingest::callouts::export(&data_folder(&state), &map, std::path::Path::new(&path))?)
+}
+
+/// Q32: what importing a preset would do. With no map, the file's own.
+#[tauri::command]
+pub async fn inspect_callouts(state: State<'_, AppState>, map: Option<String>, path: String) -> CmdResult<hl_ingest::callouts::PresetCheck> {
+    Ok(hl_ingest::callouts::inspect(&data_folder(&state), map.as_deref(), std::path::Path::new(&path))?)
+}
+
+/// Q32: import a preset as the player's own callouts, keeping one Undo.
+#[tauri::command]
+pub async fn import_callouts(state: State<'_, AppState>, map: String, path: String, any_map: bool) -> CmdResult<hl_ingest::callouts::CalloutFile> {
+    Ok(hl_ingest::callouts::import(&data_folder(&state), &map, std::path::Path::new(&path), any_map)?)
+}
+
+/// Q32: take the last import back.
+#[tauri::command]
+pub async fn undo_callouts(state: State<'_, AppState>, map: String) -> CmdResult<hl_ingest::callouts::CalloutFile> {
+    Ok(hl_ingest::callouts::undo(&data_folder(&state), &map)?)
+}
+
 /// Q28: where each player spent their time, by callout, from the STV.
 #[tauri::command]
 pub async fn get_positions(state: State<'_, AppState>, log_id: i64, map: String) -> CmdResult<Option<hl_ingest::callouts::PositionsView>> {

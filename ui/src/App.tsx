@@ -13,6 +13,7 @@ import { TeammatesPage } from "./components/teammates/TeammatesPage";
 import { TeamsPage } from "./components/teams/TeamsPage";
 import { PlayersPage } from "./components/players/PlayersPage";
 import { ToastHost } from "./lib/toast";
+import { CalloutDrop } from "./components/CalloutPresets";
 import { Notifications } from "./components/Notifications";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { watchDownloads } from "./lib/downloads";
@@ -217,6 +218,7 @@ export default function App() {
       )}
       <Notifications onOpenMatch={setOpenLog} />
       <ToastHost />
+      <CalloutDrop />
     </div>
   );
 }

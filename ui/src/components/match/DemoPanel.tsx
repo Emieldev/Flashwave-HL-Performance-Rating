@@ -156,7 +156,9 @@ function DropZone({ d }: { d: MatchDetail }) {
           else if (p.type === "drop") {
             const hit = within(p.position.x, p.position.y);
             setOver(false);
-            if (hit && p.paths.length > 0) void linkRef.current(p.paths[0]);
+            // A callout file dropped here is the window's to import (Q32).
+            const file = p.paths.find((x) => !x.toLowerCase().endsWith(".callouts.json"));
+            if (hit && file) void linkRef.current(file);
           } else setOver(false);
         })
         .then((u) => {

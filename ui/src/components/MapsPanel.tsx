@@ -5,6 +5,7 @@ import { errorMessage, type MapRow } from "../api/types";
 import { capitalize, splitMap } from "../lib/format";
 import { t, tx } from "../lib/i18n";
 import { MapAligner } from "./MapAligner";
+import { CalloutPresetButtons } from "./CalloutPresets";
 
 /**
  * Settings, Maps (Q31, Flashy): every map the app knows, where its top-down
@@ -52,7 +53,7 @@ export function MapsPanel() {
     <div className="panel">
       <h2>{t("Maps")}</h2>
       <p className="hint" style={{ marginTop: 6 }}>
-        {t("The top-down image under each kill map, and its callouts. Built-in images are more.tf's; put in your own for any map, and line it up if it does not sit right.")}
+        {t("The top-down image under each kill map, and its callouts. Built-in images are more.tf's; put in your own for any map, and line it up if it does not sit right. Callouts export as a file to share, and a .callouts.json dropped on the window imports.")}
       </p>
       {q.data.unknownMatches > 0 && (
         <p className="hint" style={{ marginTop: 6 }}>
@@ -99,6 +100,7 @@ export function MapsPanel() {
                   {m.draft && <span className="muted"> · {t("draft")}</span>}
                   {m.zones > 0 && <span className="muted"> · {t("{n} zones", { n: m.zones })}</span>}
                   {m.unplaced > 0 && <span className="muted"> · {t("{n} to place", { n: m.unplaced })}</span>}
+                  <CalloutPresetButtons map={m.base} canExport={m.callouts !== "none"} canUndo={m.calloutsUndo} />
                 </td>
               </tr>
             ))}

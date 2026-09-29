@@ -22,6 +22,7 @@ import type {
   MapsOverview,
   OverviewImage,
   Placement,
+  PresetCheck,
   MatchDetail,
   Overview,
   MatchPage,
@@ -195,6 +196,25 @@ const realApi = {
   },
   saveOverviewPlacement: (map: string, placement: Placement) => invoke<void>("save_overview_placement", { map, placement }),
   removeOverview: (map: string) => invoke<void>("remove_overview", { map }),
+  /** Q32: a map's callouts to a preset file; the path, or null if cancelled. */
+  exportCallouts: async (map: string): Promise<string | null> => {
+    const path = await save({
+      title: "Save the callouts",
+      defaultPath: `${map}.callouts.json`,
+      filters: [{ name: "Callouts", extensions: ["json"] }],
+    });
+    if (!path) return null;
+    await invoke<void>("export_callouts", { map, path });
+    return path;
+  },
+  pickCalloutFile: async (): Promise<string | null> => {
+    const path = await open({ title: "Callouts to import", multiple: false, directory: false, filters: [{ name: "Callouts", extensions: ["json"] }] });
+    return typeof path === "string" ? path : null;
+  },
+  /** What importing would do; with no map, onto the map the file names. */
+  inspectCallouts: (map: string | null, path: string) => invoke<PresetCheck>("inspect_callouts", { map, path }),
+  importCallouts: (map: string, path: string, anyMap: boolean) => invoke<CalloutFile>("import_callouts", { map, path, anyMap }),
+  undoCallouts: (map: string) => invoke<CalloutFile>("undo_callouts", { map }),
   /** Opens in the system browser, never inside the app window. */
   openExternal: (url: string) => openUrl(url),
   copyText: (text: string) => writeText(text),

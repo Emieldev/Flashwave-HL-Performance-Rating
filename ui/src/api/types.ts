@@ -1055,6 +1055,8 @@ export interface MapRow {
   zones: number;
   unplaced: number;
   draft: boolean;
+  /** The last callout import can still be taken back. */
+  calloutsUndo: boolean;
 }
 
 export interface MapsOverview {
@@ -1439,8 +1441,25 @@ export interface CalloutFile {
   zones: CalloutZone[];
   /** Callouts known by name and not yet drawn. */
   names: string[];
+  /** Who drew them, when a shared preset says (Q32). */
+  author?: string;
   /** "yours", "built in" or "none". */
   origin: string;
+}
+
+/** What importing a callout preset would do (Q32). */
+export interface PresetCheck {
+  /** The map the file is for. */
+  map: string;
+  /** The map it would go to. */
+  target: string;
+  zones: number;
+  names: number;
+  draft: boolean;
+  author: string | null;
+  source: string;
+  currentOrigin: Origin;
+  currentZones: number;
 }
 
 export interface PositionsView {

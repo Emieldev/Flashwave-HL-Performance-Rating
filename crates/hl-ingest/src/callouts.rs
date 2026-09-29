@@ -39,6 +39,9 @@ pub struct CalloutFile {
     /// Callouts known by name and not yet drawn.
     #[serde(default)]
     pub names: Vec<String>,
+    /// Who drew them, when a shared preset says (Q32).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
     /// Where this copy came from: "yours", "built in" or "none". Not saved.
     #[serde(default, skip_deserializing)]
     pub origin: String,
@@ -69,6 +72,8 @@ pub fn user_bases(data: &Path) -> Vec<String> {
     entries
         .flatten()
         .filter_map(|e| e.file_name().into_string().ok()?.strip_suffix(".json").map(str::to_string))
+        // The copy an import keeps for Undo is not a map of its own.
+        .filter(|b| !b.ends_with(".previous"))
         .collect()
 }
 
@@ -102,6 +107,8 @@ pub fn save(data: &Path, map: &str, file: &CalloutFile) -> Result<CalloutFile> {
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&f)?)?;
     std::fs::rename(&tmp, &path)?;
+    // Edited since the import: Undo would throw the edits away too.
+    forget_undo(data, &base)?;
     load(data, &base)
 }
 
@@ -111,7 +118,148 @@ pub fn reset(data: &Path, map: &str) -> Result<CalloutFile> {
     if path.exists() {
         std::fs::remove_file(&path)?;
     }
+    forget_undo(data, &map_base(map))?;
     load(data, map)
+}
+
+// ---- presets (Q32) ---------------------------------------------------------
+//
+// Callouts get passed round on Discord and corrected, like `.lang` files. A
+// preset is the file the app already keeps, with `format` so a later version
+// can change it, and optionally who drew it: `<map>.callouts.json`.
+
+/// The preset format this version writes and reads.
+pub const PRESET_FORMAT: u64 = 1;
+/// Far above any real map's callouts; a file this big is something else.
+const PRESET_MAX_BYTES: u64 = 1024 * 1024;
+const PRESET_MAX_ZONES: usize = 500;
+
+/// Where an import keeps what it replaced, for one Undo. `null` inside means
+/// there was no copy of the player's own: Undo goes back to the built-in.
+fn undo_path(data: &Path, base: &str) -> PathBuf {
+    data.join("callouts").join(format!("{base}.previous.json"))
+}
+
+fn forget_undo(data: &Path, base: &str) -> Result<()> {
+    let p = undo_path(data, base);
+    if p.exists() {
+        std::fs::remove_file(&p)?;
+    }
+    Ok(())
+}
+
+/// Whether the last import on this map can still be taken back.
+pub fn has_undo(data: &Path, base: &str) -> bool {
+    undo_path(data, base).exists()
+}
+
+/// Write a map's callouts, as this player has them, to a preset file.
+pub fn export(data: &Path, map: &str, to: &Path) -> Result<()> {
+    let f = load(data, map)?;
+    let mut v = serde_json::to_value(&f)?;
+    let o = v.as_object_mut().context("callouts as an object")?;
+    o.remove("origin");
+    o.insert("format".into(), PRESET_FORMAT.into());
+    std::fs::write(to, serde_json::to_string_pretty(&v)?).with_context(|| format!("writing {}", to.display()))?;
+    Ok(())
+}
+
+/// Read a preset and check it is one: the right format, every zone named
+/// with at least three real corners, and not absurdly large.
+pub fn read_preset(from: &Path) -> Result<CalloutFile> {
+    let len = std::fs::metadata(from).with_context(|| format!("reading {}", from.display()))?.len();
+    anyhow::ensure!(len <= PRESET_MAX_BYTES, "{} is larger than 1 MB: not a callout file", from.display());
+    let text = std::fs::read_to_string(from).with_context(|| format!("reading {}", from.display()))?;
+    let v: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("{} is not a callout file", from.display()))?;
+    if let Some(n) = v.get("format").and_then(serde_json::Value::as_u64) {
+        anyhow::ensure!(n <= PRESET_FORMAT, "{} was made by a newer version of the app; update to read it", from.display());
+    }
+    let mut f: CalloutFile = serde_json::from_value(v).with_context(|| format!("{} is not a callout file", from.display()))?;
+    f.map = map_base(&f.map);
+    anyhow::ensure!(!f.map.is_empty(), "{} does not say which map it is for", from.display());
+    anyhow::ensure!(f.zones.len() <= PRESET_MAX_ZONES, "{} has {} zones; that is not a map's callouts", from.display(), f.zones.len());
+    for (i, z) in f.zones.iter().enumerate() {
+        anyhow::ensure!(!z.name.trim().is_empty(), "zone {} in {} has no name", i + 1, from.display());
+        anyhow::ensure!(z.points.len() >= 3, "\"{}\" in {} has fewer than three corners", z.name, from.display());
+        anyhow::ensure!(z.points.iter().flatten().all(|c| c.is_finite() && c.abs() < 100_000.0), "\"{}\" in {} has a corner off the map", z.name, from.display());
+    }
+    f.names.retain(|n| !n.trim().is_empty());
+    f.origin = String::new();
+    Ok(f)
+}
+
+/// What an import would do, for the player to confirm.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresetCheck {
+    /// The map the file says it is for.
+    pub map: String,
+    /// The map it would go to: the one asked for, else the file's own.
+    pub target: String,
+    pub zones: usize,
+    pub names: usize,
+    pub draft: bool,
+    pub author: Option<String>,
+    pub source: String,
+    /// What the target has now.
+    pub current_origin: String,
+    pub current_zones: usize,
+}
+
+/// Check a preset without importing it. `map` is where it would go; with
+/// `None` it goes to the map the file names (a file dropped on the window).
+pub fn inspect(data: &Path, map: Option<&str>, from: &Path) -> Result<PresetCheck> {
+    let f = read_preset(from)?;
+    let target = map.map(map_base).unwrap_or_else(|| f.map.clone());
+    let now = load(data, &target)?;
+    Ok(PresetCheck {
+        zones: f.zones.len(),
+        names: f.names.len(),
+        draft: f.draft,
+        author: f.author.clone(),
+        source: f.source.clone(),
+        current_origin: now.origin,
+        current_zones: now.zones.len(),
+        map: f.map,
+        target,
+    })
+}
+
+/// Import a preset as the player's own callouts for `map`, keeping what it
+/// replaces for one Undo. A file for another map is refused unless
+/// `any_map`: Product's zones on Vigil would sit in the wrong places.
+pub fn import(data: &Path, map: &str, from: &Path, any_map: bool) -> Result<CalloutFile> {
+    let base = map_base(map);
+    let mut f = read_preset(from)?;
+    anyhow::ensure!(any_map || f.map == base, "this file is for {}, not {base}", f.map);
+    let dir = data.join("callouts");
+    std::fs::create_dir_all(&dir)?;
+    let mine = user_path(data, &base);
+    let previous = if mine.exists() { std::fs::read_to_string(&mine)? } else { "null".to_string() };
+    std::fs::write(undo_path(data, &base), previous)?;
+    f.map = base.clone();
+    let tmp = mine.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&f)?)?;
+    std::fs::rename(&tmp, &mine)?;
+    load(data, &base)
+}
+
+/// Take the last import back: the player's previous copy, or the built-in
+/// callouts if there was none.
+pub fn undo(data: &Path, map: &str) -> Result<CalloutFile> {
+    let base = map_base(map);
+    let path = undo_path(data, &base);
+    let previous = std::fs::read_to_string(&path).context("there is no import to undo")?;
+    let mine = user_path(data, &base);
+    if previous.trim() == "null" {
+        if mine.exists() {
+            std::fs::remove_file(&mine)?;
+        }
+    } else {
+        std::fs::write(&mine, previous)?;
+    }
+    std::fs::remove_file(&path)?;
+    load(data, &base)
 }
 
 fn inside(x: f64, y: f64, poly: &[[f64; 2]]) -> bool {
@@ -301,6 +449,78 @@ async fn log_sides(db: &Db, log_id: i64) -> Result<HashMap<u32, u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hl-callouts-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn square(name: &str) -> Zone {
+        Zone { name: name.into(), points: vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]] }
+    }
+
+    #[test]
+    fn a_preset_goes_out_and_back_in_whole() {
+        let dir = scratch("roundtrip");
+        let mine = CalloutFile { map: "vigil".into(), zones: vec![square("Cliff"), square("House")], names: vec!["Lobby".into()], ..Default::default() };
+        save(&dir, "pl_vigil_rc10", &mine).unwrap();
+        let out = dir.join("vigil.callouts.json");
+        export(&dir, "vigil", &out).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(text.contains("\"format\": 1") && !text.contains("origin"), "{text}");
+
+        let other = scratch("roundtrip-other");
+        let check = inspect(&other, None, &out).unwrap();
+        assert_eq!((check.target.as_str(), check.zones, check.names, check.current_origin.as_str()), ("vigil", 2, 1, "built in"));
+        let got = import(&other, "vigil", &out, false).unwrap();
+        assert_eq!((got.origin.as_str(), got.zones.len()), ("yours", 2));
+        assert_eq!(got.zones, mine.zones);
+    }
+
+    #[test]
+    fn undo_goes_back_to_what_was_there() {
+        let dir = scratch("undo");
+        let preset = dir.join("p.callouts.json");
+        std::fs::write(&preset, r#"{"map":"koth_product_final","format":1,"zones":[{"name":"Cliff","points":[[0,0],[1,0],[1,1]]}]}"#).unwrap();
+
+        // Over the built-in copy: Undo goes back to built in.
+        import(&dir, "product", &preset, false).unwrap();
+        assert!(has_undo(&dir, "product"));
+        assert_eq!(undo(&dir, "product").unwrap().origin, "built in");
+        assert!(!has_undo(&dir, "product"));
+
+        // Over the player's own: Undo gives it back.
+        save(&dir, "product", &CalloutFile { map: "product".into(), zones: vec![square("Mine")], ..Default::default() }).unwrap();
+        import(&dir, "product", &preset, false).unwrap();
+        assert_eq!(undo(&dir, "product").unwrap().zones[0].name, "Mine");
+        assert_eq!(user_bases(&dir), vec!["product".to_string()], "the Undo copy is not listed as a map");
+    }
+
+    #[test]
+    fn a_bad_or_wrong_preset_is_refused() {
+        let dir = scratch("refuse");
+        let write = |name: &str, text: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, text).unwrap();
+            p
+        };
+        let product = write("product.json", r#"{"map":"product","zones":[{"name":"Cliff","points":[[0,0],[1,0],[1,1]]}]}"#);
+        assert!(import(&dir, "vigil", &product, false).unwrap_err().to_string().contains("for product, not vigil"));
+        assert!(import(&dir, "vigil", &product, true).is_ok(), "unless the player says so");
+
+        for (name, text) in [
+            ("two.json", r#"{"map":"vigil","zones":[{"name":"Line","points":[[0,0],[1,0]]}]}"#),
+            ("noname.json", r#"{"map":"vigil","zones":[{"name":" ","points":[[0,0],[1,0],[1,1]]}]}"#),
+            ("far.json", r#"{"map":"vigil","zones":[{"name":"X","points":[[0,0],[1e9,0],[1,1]]}]}"#),
+            ("newer.json", r#"{"map":"vigil","format":2,"zones":[]}"#),
+            ("nomap.json", r#"{"zones":[]}"#),
+            ("notjson.json", "Cliff, House, Lobby"),
+        ] {
+            assert!(read_preset(&write(name, text)).is_err(), "{name} should be refused");
+        }
+    }
 
     #[test]
     fn where_zones_overlap_the_smaller_one_wins_whatever_the_order() {

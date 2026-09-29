@@ -250,6 +250,10 @@ pub fn run() {
             sync_commands::import_overview,
             sync_commands::save_overview_placement,
             sync_commands::remove_overview,
+            sync_commands::export_callouts,
+            sync_commands::inspect_callouts,
+            sync_commands::import_callouts,
+            sync_commands::undo_callouts,
             sync_commands::get_positions,
         ])
         .run(tauri::generate_context!())
