@@ -54,9 +54,9 @@ export function CalloutPresetButtons({ map, canExport, canUndo }: { map: string;
 
   return (
     <span className="preset-buttons">
-      {canExport && <button className="linkish" onClick={() => void exportIt()}>{t("Export…")}</button>}
-      <button className="linkish" onClick={() => void importIt()}>{t("Import…")}</button>
-      {canUndo && <button className="linkish" onClick={() => void undo()}>{t("Undo import")}</button>}
+      {canExport && <button className="mini" onClick={() => void exportIt()}>{t("Export…")}</button>}
+      <button className="mini" onClick={() => void importIt()}>{t("Import…")}</button>
+      {canUndo && <button className="mini" onClick={() => void undo()}>{t("Undo import")}</button>}
       {note && <span className="hint preset-note">{note}</span>}
       {picked && (
         <CalloutImportDialog

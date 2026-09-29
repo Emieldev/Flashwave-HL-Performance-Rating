@@ -1373,21 +1373,65 @@ th.num {
   cursor: grabbing;
 }
 
+/* A small button, for rows of actions in a table: the same raised look as
+   every other button, at a size that fits a table row. */
+button.mini {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.map-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.maps-actions,
 .preset-buttons {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-left: 10px;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .preset-note {
   flex-basis: 100%;
 }
 
-.maps-actions {
-  display: inline-flex;
-  gap: 10px;
-  margin-left: 10px;
+.maps-table td {
+  vertical-align: middle;
+}
+
+/* Where an image or callouts come from. */
+.origin-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.origin-tag.default {
+  color: var(--text);
+}
+
+.origin-tag.custom {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.origin-tag.none {
+  color: var(--muted);
+  border-style: dashed;
 }
 
 .modal {

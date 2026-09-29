@@ -186,9 +186,13 @@ pub fn load(dir: &Path, map: &str) -> Result<Option<Overview>> {
 /// Where a map's image and placement come from: "yours", "built in" or
 /// "none". What the Maps section in Settings lists.
 pub fn origins(dir: &Path, base: &str) -> (&'static str, &'static str) {
-    let image = if user_image(dir, base).is_some() {
+    let built_in = BUILT_IN.iter().find(|i| i.0 == base).map(|i| i.1);
+    // A copy of the built-in image, byte for byte, is the built-in image:
+    // installs from before the images shipped kept them in this folder.
+    let own = user_image(dir, base).filter(|p| built_in.is_none_or(|b| std::fs::read(p).map_or(true, |mine| mine != b)));
+    let image = if own.is_some() {
         "yours"
-    } else if BUILT_IN.iter().any(|i| i.0 == base) {
+    } else if built_in.is_some() {
         "built in"
     } else {
         "none"
@@ -357,6 +361,15 @@ mod tests {
         remove(&o, "vigil").unwrap();
         assert_eq!(origins(&o, "vigil"), ("built in", "built in"));
         assert!(load(&o, "pl_vigil_rc10").unwrap().unwrap().image.starts_with("data:image/png"));
+    }
+
+    #[test]
+    fn a_copy_of_the_built_in_image_counts_as_built_in() {
+        let dir = scratch("copy");
+        std::fs::write(dir.join("vigil.png"), BUILT_IN.iter().find(|i| i.0 == "vigil").unwrap().1).unwrap();
+        assert_eq!(origins(&dir, "vigil").0, "built in");
+        std::fs::write(dir.join("vigil.png"), png(512, 512)).unwrap();
+        assert_eq!(origins(&dir, "vigil").0, "yours");
     }
 
     #[test]
