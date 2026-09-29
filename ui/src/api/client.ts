@@ -56,6 +56,7 @@ import type {
   NewDemo,
   NewestLog,
 } from "./types";
+import { withChosenNames } from "../lib/names";
 
 /** True inside the Tauri window, false in a plain browser tab. */
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -126,6 +127,8 @@ const realApi = {
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   languageFiles: () => invoke<LanguageFiles>("language_files"),
   saveLanguageFile: (id: string, text: string) => invoke<SavedLanguageFile>("save_language_file", { id, text }),
+  /** Players' ETF2L names by account id, from rosters already stored. */
+  etf2lNames: () => invoke<Record<string, string>>("etf2l_names"),
   /** Put a backup back and restart. Refused unless this database is empty. */
   restoreBackup: (path: string) => invoke<void>("restore_backup", { path }),
   /** Start fresh on purpose: stop offering the backup. */
@@ -229,4 +232,19 @@ export type Api = typeof realApi;
 // The mock, and the real-match fixtures it carries, load only in a plain
 // browser during development. `import.meta.env.DEV` is false in a release
 // build, so the branch and the fixtures are dropped from the bundle.
-export const api: Api = inTauri || !import.meta.env.DEV ? realApi : (await import("./mock")).mockApi;
+const base: Api = inTauri || !import.meta.env.DEV ? realApi : (await import("./mock")).mockApi;
+
+/**
+ * Every call's answer passes through the chosen player names (../lib/names.ts),
+ * so no page has to know there is a choice. Results that hold no players,
+ * and the event subscriptions, come through unchanged.
+ */
+export const api: Api = Object.fromEntries(
+  Object.entries(base).map(([key, fn]) => [
+    key,
+    (...args: unknown[]) => {
+      const out = (fn as (...a: unknown[]) => unknown)(...args);
+      return out instanceof Promise ? out.then(withChosenNames) : out;
+    },
+  ]),
+) as Api;

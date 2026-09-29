@@ -9,6 +9,7 @@ import { startRebuild, useSyncStatus } from "../lib/sync";
 import { setTheme, THEMES, useTheme } from "../lib/theme";
 import { allLanguages, languageFile, setLanguage, t, t as tr, useLanguage, userLanguageFiles, tx } from "../lib/i18n";
 import { loadUserLanguages } from "../lib/userLang";
+import { setNameSource, useNameSource } from "../lib/names";
 import { checkForUpdate, installUpdate, restartNow, useUpdate } from "../lib/update";
 import { RELEASES } from "../lib/changelog";
 import { Markdown } from "./Markdown";
@@ -31,6 +32,7 @@ export function Settings({
       <UpdatesPanel version={status.version} />
       <ProblemsPanel version={status.version} />
       <LanguagePanel />
+      <NamesPanel />
       <ThemePanel />
       <HistoryPanel />
       <ImportPanel />
@@ -328,6 +330,32 @@ function LanguagePanel() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * The name a player goes by on every page: the one from the log, or their
+ * ETF2L name. The ETF2L names come from official rosters the app has
+ * already read, so the choice costs no requests to ETF2L.
+ */
+function NamesPanel() {
+  const { source, count } = useNameSource();
+  return (
+    <div className="panel">
+      <h2>{tr("Player names")}</h2>
+      <div className="row" style={{ marginTop: 10, gap: 8, flexWrap: "wrap" }}>
+        <button className={source === "log" ? "primary" : undefined} aria-pressed={source === "log"} onClick={() => setNameSource("log")}>
+          {tr("As in the log")}
+        </button>
+        <button className={source === "etf2l" ? "primary" : undefined} aria-pressed={source === "etf2l"} onClick={() => setNameSource("etf2l")}>
+          {tr("ETF2L names")}
+        </button>
+      </div>
+      <p className="hint" style={{ marginTop: 8 }}>
+        {tr("ETF2L names come from the official rosters the app has already read, so they cost no extra requests. Players who never played an ETF2L official keep the name from the log.")}{" "}
+        {tr("{n} players have an ETF2L name.", { n: count.toLocaleString() })}
+      </p>
     </div>
   );
 }

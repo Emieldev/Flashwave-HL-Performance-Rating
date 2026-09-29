@@ -752,6 +752,14 @@ export const mockApi: Api = {
     }
     return delay({ dir: "C:\\Users\\you\\AppData\\Roaming\\gg.highlander.rating\\lang", files });
   },
+  // A few "ETF2L names" for the browser preview: the fixture teammates'
+  // names in capitals, so the swap is easy to see.
+  etf2lNames: () =>
+    delay(
+      Object.fromEntries(
+        (teammatesAll as unknown as Teammates).teammates.slice(0, 12).map((m) => [String(m.accountId), m.name.toUpperCase()]),
+      ),
+    ),
   saveLanguageFile: (id: string, text: string) => {
     console.info("would save", `${id}.lang`, `${text.length} characters`);
     return delay({ path: `C:\\Users\\you\\AppData\\Roaming\\gg.highlander.rating\\lang\\${id}.lang`, created: true });

@@ -190,6 +190,7 @@ pub fn run() {
             commands::reveal_path,
             commands::language_files,
             commands::save_language_file,
+            commands::etf2l_names,
             commands::restore_backup,
             commands::decline_restore,
             sync_commands::sync_start,

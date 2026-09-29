@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { noteError } from "./problems";
 import { errorMessage, type Progress, type SyncDone } from "../api/types";
 import { t } from "./i18n";
+import { loadEtf2lNames } from "./etf2lNames";
 
 /**
  * A sync, tracked app-wide rather than by the strip that started it.
@@ -111,6 +112,8 @@ export function watchSync(qc: QueryClient) {
         notes: status.state === "running" ? status.notes : [],
       });
       invalidateAll(qc);
+      // A sync can bring new official rosters, and with them new names.
+      void loadEtf2lNames();
     },
     onError: (e) => {
       noteError({ what: "the sync", message: explain(e.message), detail: e.message });

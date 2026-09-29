@@ -312,8 +312,52 @@ impl Db {
             .collect())
     }
 
+    /// Every player's ETF2L name, from the official rosters already stored:
+    /// the owner's matches and the season matches read for the league
+    /// pages. No request of its own. The name from the latest match wins,
+    /// since players rename.
+    pub async fn etf2l_names(&self) -> Result<std::collections::HashMap<u32, String>> {
+        let rows: Vec<(i64, String)> = sqlx::query_as(
+            "SELECT account_id, name FROM (
+                 SELECT r.account_id, r.name, COALESCE(m.time, 0) AS t, r.match_id
+                 FROM etf2l_roster r LEFT JOIN etf2l_match m ON m.match_id = r.match_id
+                 UNION ALL
+                 SELECT p.account_id, p.name, COALESCE(s.time, 0), p.match_id
+                 FROM etf2l_season_player p LEFT JOIN etf2l_season_match s ON s.match_id = p.match_id
+             )
+             WHERE name IS NOT NULL AND TRIM(name) <> ''
+             ORDER BY account_id, t, match_id",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        // Ordered oldest first, so each later row overwrites.
+        Ok(rows.into_iter().map(|(a, n)| (a as u32, n.trim().to_string())).collect())
+    }
+
     /// A stored team's name, country and avatar.
     pub async fn etf2l_team(&self, team: i64) -> Result<Option<(String, Option<String>, Option<String>)>> {
         Ok(sqlx::query_as("SELECT name, country, avatar FROM etf2l_team WHERE team_id = ?1").bind(team).fetch_optional(self.pool()).await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Db;
+
+    #[tokio::test]
+    async fn etf2l_names_take_the_latest_from_either_roster() {
+        let db = Db::connect_in_memory().await.unwrap();
+        for sql in [
+            "INSERT INTO etf2l_match (match_id, time) VALUES (1, 100), (2, 300)",
+            "INSERT INTO etf2l_roster (match_id, account_id, name) VALUES (1, 7, 'old'), (2, 7, 'owner era'), (1, 8, '  '), (1, 9, 'nine')",
+            "INSERT INTO etf2l_season_match (match_id, competition_id, time, clan1_id, clan2_id) VALUES (10, 1, 200, 1, 2), (11, 1, 400, 1, 2)",
+            "INSERT INTO etf2l_season_player (match_id, account_id, name) VALUES (10, 7, 'between'), (11, 9, 'nine renamed'), (10, 8, 'eight')",
+        ] {
+            sqlx::query(sql).execute(db.pool()).await.unwrap();
+        }
+        let names = db.etf2l_names().await.unwrap();
+        assert_eq!(names.get(&7).map(String::as_str), Some("owner era"), "time 300 beats 200 and 100");
+        assert_eq!(names.get(&8).map(String::as_str), Some("eight"), "a blank name is skipped");
+        assert_eq!(names.get(&9).map(String::as_str), Some("nine renamed"));
     }
 }

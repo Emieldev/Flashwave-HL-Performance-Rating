@@ -291,6 +291,13 @@ pub async fn language_files(state: State<'_, AppState>) -> CmdResult<LanguageFil
     Ok(LanguageFiles { dir: dir.display().to_string(), files })
 }
 
+/// Players' ETF2L names by account id, for showing in place of the name in
+/// the log. Read from rosters already stored: nothing is fetched.
+#[tauri::command]
+pub async fn etf2l_names(state: State<'_, AppState>) -> CmdResult<std::collections::HashMap<u32, String>> {
+    Ok(state.db.etf2l_names().await?)
+}
+
 #[derive(Debug, Serialize)]
 pub struct SavedLanguageFile {
     pub path: String,
