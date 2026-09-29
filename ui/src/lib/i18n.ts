@@ -36,8 +36,9 @@ import { parseLang, writeLang } from "./langfile";
 /**
  * The built-in translations: `lang/*.lang` at the top of the repository,
  * the same files volunteers edit and send back, bundled in at build time.
- * `template.lang` is the blank one a new language starts from, not a
- * language.
+ * `template.lang` is the blank one a new language starts from, and
+ * `en.lang` is the English written out for correcting (both sides the
+ * same); neither is a language to add.
  */
 const BUILT_IN = import.meta.glob("../../../lang/*.lang", {
   query: "?raw",
@@ -63,7 +64,7 @@ const BASE_TABLES: Record<Language, Record<string, string>> = {};
 const BASE_LANGUAGES: LanguageInfo[] = [{ id: "en", name: "English", locale: "en-GB" }];
 for (const [path, text] of Object.entries(BUILT_IN)) {
   const id = path.split("/").pop()!.replace(/\.lang$/, "");
-  if (id === "template") continue;
+  if (id === "template" || id === "en") continue;
   const file = parseLang(text);
   BASE_TABLES[id] = file.entries;
   BASE_LANGUAGES.push({ id, name: file.name ?? id, locale: file.locale ?? "en-GB" });
@@ -155,10 +156,13 @@ export function applyUserFiles(files: Array<{ id: string; text: string }>) {
     }
     const base = BASE_TABLES[f.id] ?? {};
     tables[f.id] = { ...(tables[f.id] ?? {}), ...entries };
+    // English ships as itself on both sides: a line differs when it no
+    // longer matches its own key.
+    const shipped = (key: string) => (f.id === "en" ? key : base[key]);
     userFiles.push({
       id: f.id,
       name: parsed.name ?? known?.name ?? f.id,
-      lines: Object.entries(entries).filter(([k, v]) => base[k] !== v).length,
+      lines: Object.entries(entries).filter(([k, v]) => shipped(k) !== v).length,
       added: !known,
       errors: parsed.errors,
     });

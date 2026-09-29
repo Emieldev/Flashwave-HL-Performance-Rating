@@ -191,6 +191,8 @@ const SHIPPED_LANGUAGES: &[(&str, &str)] = &[
     ("pt", include_str!("../../lang/pt.lang")),
     ("es", include_str!("../../lang/es.lang")),
     ("ru", include_str!("../../lang/ru.lang")),
+    // The English on both sides, for correcting the English itself.
+    ("en", include_str!("../../lang/en.lang")),
 ];
 
 /// Which shipped files this app wrote, by content hash, so it can tell its

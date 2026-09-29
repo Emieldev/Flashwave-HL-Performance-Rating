@@ -5,6 +5,7 @@
 //   npm run i18n -- --write bring every file up to date: add missing keys
 //                           with an empty value, drop stale ones, sort, and
 //                           refresh lang/template.lang for new languages
+//                           and lang/en.lang for corrections to the English
 //
 // The English text is the key (see ui/src/lib/i18n.ts), so this finds every
 // `t("...")` in the UI and compares. An empty value means "not translated
@@ -179,15 +180,26 @@ const INTRO = `# One line per piece of text: the English on the left, this langu
 # "Open the language folder") and press Reload. Send the file on Discord to
 # have it included for everyone.`;
 
-function writeLang(name, locale, entries) {
+// en.lang is not a translation: both sides start as the same English, and a
+// changed right-hand side is a correction to the English itself.
+const EN_INTRO = `# One line per piece of text: the English the app says now on the left, and
+# the same English on the right. To correct a line, change only the
+# right-hand side. Lines left as they are change nothing. Keep {placeholders}
+# like {0} or {name}: the app fills them with numbers and names.
+#
+# To try a change: put this file in the app's lang folder (Settings, Language,
+# "Show the language folder") and press Reload. Send the file on Discord and
+# the corrections go into the app itself, for every language.`;
+
+function writeLang(name, locale, entries, intro = INTRO) {
   const keys = Object.keys(entries).sort((a, b) => a.localeCompare(b));
   const body = keys.map((k) => `${JSON.stringify(k)} = ${JSON.stringify(entries[k] ?? "")}`);
-  return [`# Flashwave.tf: ${name}`, "#", INTRO, "", `language = ${JSON.stringify(name)}`, `locale = ${JSON.stringify(locale)}`, "", ...body, ""].join("\n");
+  return [`# Flashwave.tf: ${name}`, "#", intro, "", `language = ${JSON.stringify(name)}`, `locale = ${JSON.stringify(locale)}`, "", ...body, ""].join("\n");
 }
 
 let bad = 0;
 const sorted = [...keys].sort((a, b) => a.localeCompare(b));
-for (const name of readdirSync(dir).filter((n) => n.endsWith(".lang") && n !== "template.lang").sort()) {
+for (const name of readdirSync(dir).filter((n) => n.endsWith(".lang") && n !== "template.lang" && n !== "en.lang").sort()) {
   const path = join(dir, name);
   const file = parseLang(readFileSync(path, "utf8"), name);
   const table = file.entries;
@@ -207,5 +219,21 @@ for (const name of readdirSync(dir).filter((n) => n.endsWith(".lang") && n !== "
 // A blank file to start a new language from: every key, nothing translated.
 if (write) {
   writeFileSync(join(dir, "template.lang"), writeLang("New language", "en-GB", Object.fromEntries(sorted.map((k) => [k, ""]))));
+}
+// English to correct: every key, both sides the same.
+const english = writeLang("English", "en-GB", Object.fromEntries(sorted.map((k) => [k, k])), EN_INTRO);
+if (write) {
+  writeFileSync(join(dir, "en.lang"), english);
+} else {
+  let current = "";
+  try {
+    current = readFileSync(join(dir, "en.lang"), "utf8");
+  } catch {
+    // Missing: reported below.
+  }
+  if (current !== english) {
+    console.log("en.lang   out of step with the code");
+    bad += 1;
+  }
 }
 if (!write && bad) console.log("\nRun `npm run i18n -- --write` to bring the files up to date.");
