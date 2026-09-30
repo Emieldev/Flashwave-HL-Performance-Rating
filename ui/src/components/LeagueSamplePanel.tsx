@@ -94,6 +94,7 @@ export function LeagueSamplePanel() {
                 </tbody>
               </table>
               <p className="hint" style={{ marginTop: 8 }}>
+                {t("Player catalogue: {0} players from {1} of {2} officials' rosters.", { "0": s.players.toLocaleString(), "1": s.rostersRead.toLocaleString(), "2": s.officials.toLocaleString() })}{" "}
                 {t("{0} ETF2L logs listed; {1} MB held so far.", { "0": s.logsListed.toLocaleString(), "1": (s.bytes / 1e6).toFixed(0) })}{" "}
                 {s.tiers.some((x) => x.matches < s.targetPerTier) && t("Where a division is short of 300, ETF2L did not play that many officials in the seasons read.")}
               </p>

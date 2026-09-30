@@ -217,6 +217,10 @@ export interface LeagueTier {
 /** Where the league sample stands. */
 export interface LeagueSample {
   enabled: boolean;
+  /** The player catalogue: officials in the window, rosters read, players named. */
+  officials: number;
+  rostersRead: number;
+  players: number;
   discoveredAt: number | null;
   logsListed: number;
   tiers: LeagueTier[];

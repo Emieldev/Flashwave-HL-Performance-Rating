@@ -76,10 +76,13 @@ impl Db {
         Ok(())
     }
 
-    /// How many logs trends.tf has listed so far, and the newest one's time.
-    pub async fn league_logs_known(&self) -> Result<(i64, Option<i64>)> {
-        let row = sqlx::query("SELECT COUNT(*) AS n, MAX(played_at) AS newest FROM league_log").fetch_one(self.pool()).await?;
-        Ok((row.get("n"), row.get("newest")))
+    /// How many logs trends.tf has listed so far, and the oldest and newest
+    /// one's time.
+    pub async fn league_logs_known(&self) -> Result<(i64, Option<i64>, Option<i64>)> {
+        let row = sqlx::query("SELECT COUNT(*) AS n, MIN(played_at) AS oldest, MAX(played_at) AS newest FROM league_log")
+            .fetch_one(self.pool())
+            .await?;
+        Ok((row.get("n"), row.get("oldest"), row.get("newest")))
     }
 
     /// Every listed log whose match ETF2L has placed in a division.
@@ -182,15 +185,38 @@ impl Db {
         Ok(())
     }
 
-    /// Picked matches whose ETF2L page (who played) is still unread.
-    pub async fn league_matches_without_roster(&self, limit: i64) -> Result<Vec<i64>> {
+    /// Played officials since `since` whose ETF2L page (who played) is still
+    /// unread: the sample's own first, then every other, newest first. Every
+    /// roster is read, not only the sample's, so every player who played an
+    /// official gets their divisions (the player catalogue).
+    pub async fn league_matches_without_roster(&self, limit: i64, since: i64) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar(
-            "SELECT DISTINCT m.match_id FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
-             WHERE l.picked = 1 AND m.detail_fetched = 0 ORDER BY m.time DESC LIMIT ?1",
+            "SELECT m.match_id FROM etf2l_season_match m
+             WHERE m.detail_fetched = 0 AND m.default_win = 0 AND m.time >= ?2
+               AND COALESCE(m.r1, 0) + COALESCE(m.r2, 0) > 0
+             ORDER BY EXISTS (SELECT 1 FROM league_log l WHERE l.etf2l_match_id = m.match_id AND l.picked = 1) DESC,
+                      m.time DESC
+             LIMIT ?1",
         )
         .bind(limit)
+        .bind(since)
         .fetch_all(self.pool())
         .await?)
+    }
+
+    /// The player catalogue so far: officials in the window, those whose
+    /// roster has been read, and the players they name.
+    pub async fn league_catalogue(&self, since: i64) -> Result<(i64, i64, i64)> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS played, SUM(detail_fetched) AS read,
+                    (SELECT COUNT(DISTINCT p.account_id) FROM etf2l_season_player p) AS players
+             FROM etf2l_season_match
+             WHERE default_win = 0 AND time >= ?1 AND COALESCE(r1, 0) + COALESCE(r2, 0) > 0",
+        )
+        .bind(since)
+        .fetch_one(self.pool())
+        .await?;
+        Ok((row.get("played"), row.get::<Option<i64>, _>("read").unwrap_or(0), row.get("players")))
     }
 
     /// Per division, what is picked and what has arrived.

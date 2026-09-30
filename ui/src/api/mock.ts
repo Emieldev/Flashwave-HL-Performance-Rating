@@ -272,6 +272,9 @@ const tier = (tier: number, division: string, matches: number, logs: number, jso
 });
 let leagueSample: LeagueSample = {
   enabled: true,
+  officials: 2950,
+  rostersRead: 1210,
+  players: 3480,
   discoveredAt: 1_790_700_000,
   logsListed: 5695,
   tiers: [tier(0, "Premiership", 78, 177, 140, 8), tier(1, "High", 83, 186, 90, 9), tier(2, "Mid", 124, 277, 60, 12), tier(3, "Low", 145, 322, 20, 9), tier(4, "Open", 154, 327, 0, 11)],

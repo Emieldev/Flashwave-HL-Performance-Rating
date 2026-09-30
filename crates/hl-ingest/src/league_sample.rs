@@ -32,10 +32,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 pub const MATCHES_PER_TIER: usize = 300;
 /// Taken from the last three years first...
 pub const PREFER_YEARS: i64 = 3;
-/// ...and from as far back as five when that does not fill a division.
-pub const MAX_YEARS: i64 = 5;
-/// ETF2L seasons read for their results: two a year, five years.
-pub const SEASONS_BACK: i64 = 10;
+/// ...and from as far back as six when that does not fill a division. The
+/// player catalogue (every official's roster) covers the same six years.
+pub const MAX_YEARS: i64 = 6;
+/// ETF2L seasons read for their results: two a year, six years.
+pub const SEASONS_BACK: i64 = 12;
 /// Shorter logs are restarts and forfeits, not played maps.
 const MIN_DURATION_S: i64 = 300;
 /// How often the lists are read again for new officials.
@@ -46,6 +47,12 @@ const MAX_JSON_ATTEMPTS: i64 = 3;
 const YEAR_S: i64 = 365 * 24 * 3600;
 const KEY_ON: &str = "league_sample_on";
 const KEY_DISCOVERED: &str = "league_sample_discovered_at";
+/// The window the last discovery used: a wider one lists again from scratch.
+const KEY_WINDOW: &str = "league_sample_window";
+
+fn window() -> String {
+    format!("{SEASONS_BACK}/{MAX_YEARS}")
+}
 
 pub async fn enabled(db: &Db) -> Result<bool> {
     Ok(db.get_setting(KEY_ON).await?.as_deref() == Some("1"))
@@ -83,11 +90,12 @@ pub async fn discover(db: &Db, sources: &Sources, mut progress: impl FnMut(&str)
     out.competitions = etf2l.competitions;
     out.results = etf2l.results;
 
-    // trends.tf, newest first, down to five years back -- or, once the
-    // back catalogue is held, to a week before the newest log held.
-    let (known, newest_known) = db.league_logs_known().await?;
+    // trends.tf, newest first, down to the window's start -- or, once the
+    // back catalogue is held that far, to a week before the newest log held.
+    let (known, oldest_known, newest_known) = db.league_logs_known().await?;
     let floor = now() - MAX_YEARS * YEAR_S;
-    let stop_at = if known > 0 { newest_known.map_or(floor, |n| (n - 7 * 24 * 3600).max(floor)) } else { floor };
+    let back_catalogue_held = known > 0 && oldest_known.is_some_and(|o| o <= floor + 60 * 24 * 3600);
+    let stop_at = if back_catalogue_held { newest_known.map_or(floor, |n| (n - 7 * 24 * 3600).max(floor)) } else { floor };
     let mut path: Option<String> = None;
     for page in 0..2000 {
         progress(&format!("Listing ETF2L logs on trends.tf ({} so far)", out.logs_listed));
@@ -126,6 +134,7 @@ pub async fn discover(db: &Db, sources: &Sources, mut progress: impl FnMut(&str)
     out.picked_matches = matches;
     out.picked_logs = logs;
     db.set_setting(KEY_DISCOVERED, &now().to_string()).await?;
+    db.set_setting(KEY_WINDOW, &window()).await?;
     Ok(out)
 }
 
@@ -218,13 +227,14 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
         .get_setting(KEY_DISCOVERED)
         .await?
         .and_then(|s| s.parse::<i64>().ok())
-        .is_none_or(|at| now() - at > REDISCOVER_S);
+        .is_none_or(|at| now() - at > REDISCOVER_S)
+        || db.get_setting(KEY_WINDOW).await?.as_deref() != Some(window().as_str());
     if due {
         return Ok(Step::Discovered(discover(db, sources, |_| {}).await?));
     }
 
     // ETF2L is another host: one match page each step, beside the logs.
-    let roster = db.league_matches_without_roster(1).await?.first().copied();
+    let roster = db.league_matches_without_roster(1, now() - MAX_YEARS * YEAR_S).await?.first().copied();
     if let Some(match_id) = roster {
         // A page ETF2L will not give is marked read by nothing: tried again
         // next discovery. Its failure does not stop the log work.
@@ -293,6 +303,11 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub enabled: bool,
+    /// The player catalogue: officials in the window, rosters read, and
+    /// players named in them.
+    pub officials: i64,
+    pub rosters_read: i64,
+    pub players: i64,
     pub discovered_at: Option<i64>,
     pub logs_listed: i64,
     pub tiers: Vec<hl_db::TierProgress>,
@@ -302,7 +317,11 @@ pub struct Status {
 }
 
 pub async fn status(db: &Db, sources: &Sources) -> Result<Status> {
+    let (officials, rosters_read, players) = db.league_catalogue(now() - MAX_YEARS * YEAR_S).await?;
     Ok(Status {
+        officials,
+        rosters_read,
+        players,
         enabled: enabled(db).await?,
         discovered_at: db.get_setting(KEY_DISCOVERED).await?.and_then(|s| s.parse().ok()),
         logs_listed: db.league_logs_known().await?.0,
