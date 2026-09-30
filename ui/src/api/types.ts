@@ -827,6 +827,16 @@ export interface Profile {
   filter: ContextKind | null;
   /** How the player does against weaker, even and stronger opposition. */
   opposition: OppositionBand[];
+  /** ...and against opposite numbers of each ETF2L division, top first. */
+  byDivision: DivisionBand[];
+}
+
+export interface DivisionBand {
+  tier: number;
+  division: string;
+  games: number;
+  avg: number;
+  winRate: number | null;
 }
 
 export interface OppositionBand {

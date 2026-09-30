@@ -54,6 +54,9 @@ pub struct Profile {
     pub filter: Option<String>,
     /// How the player does against weaker, even and stronger opposition (Q9).
     pub opposition: Vec<OppositionBand>,
+    /// How the player does against opposite numbers of each ETF2L division
+    /// (Q38's leftover): Premiership first.
+    pub by_division: Vec<DivisionBand>,
 }
 
 /// An opponent's average this far from 1.00 either way is an even match.
@@ -88,6 +91,18 @@ pub struct OppositionBand {
     pub avg: f64,
     /// What the opponents average over their other games.
     pub opponent_avg: f64,
+    pub win_rate: Option<f64>,
+}
+
+/// The player's games against opposite numbers of one ETF2L division.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DivisionBand {
+    /// 0 Premiership, 1 High, 2 Mid, 3 Low, 4 Open, 5 Fresh Meat.
+    pub tier: i64,
+    pub division: String,
+    pub games: usize,
+    pub avg: f64,
     pub win_rate: Option<f64>,
 }
 
@@ -200,6 +215,7 @@ pub fn build(class: TfClass, mut rows: Vec<HistoryRow>) -> Option<Profile> {
         extras: Vec::new(),
         contexts: Vec::new(),
         opposition: Vec::new(),
+        by_division: Vec::new(),
         filter: None,
     })
 }
@@ -261,6 +277,27 @@ pub fn opposition_splits(rows: &[HistoryRow], strength: &HashMap<i64, f64>) -> V
                     win_rate: win_rate(&games),
                 }
             })
+        })
+        .collect()
+}
+
+/// Games, average and win rate against opposite numbers of each division.
+/// `tiers` is the opposite number's division per log, `(tier, name)`; a game
+/// whose opposite number has no division is left out.
+pub fn division_splits(rows: &[HistoryRow], tiers: &HashMap<i64, (i64, String)>) -> Vec<DivisionBand> {
+    let mut by: std::collections::BTreeMap<i64, (String, Vec<HistoryRow>)> = std::collections::BTreeMap::new();
+    for r in rows {
+        if let Some((tier, name)) = tiers.get(&r.log_id) {
+            by.entry(*tier).or_insert_with(|| (name.clone(), Vec::new())).1.push(r.clone());
+        }
+    }
+    by.into_iter()
+        .map(|(tier, (division, games))| DivisionBand {
+            tier,
+            division,
+            games: games.len(),
+            avg: round2(mean(&games.iter().map(|r| r.rating.score).collect::<Vec<_>>())),
+            win_rate: win_rate(&games),
         })
         .collect()
 }
@@ -347,6 +384,18 @@ fn round2(x: f64) -> f64 {
 mod tests {
     use super::*;
     use crate::model::Part;
+
+    #[test]
+    fn division_bands_group_by_the_opposite_numbers_tier_top_first() {
+        let rows = vec![row(1, 0.8, "L"), row(2, 1.2, "W"), row(3, 1.0, "W"), row(4, 0.9, "L")];
+        let tiers: HashMap<i64, (i64, String)> =
+            [(1, (1, "High".to_string())), (2, (3, "Low".to_string())), (3, (3, "Low".to_string()))].into_iter().collect();
+        let b = division_splits(&rows, &tiers);
+        assert_eq!(b.iter().map(|x| x.tier).collect::<Vec<_>>(), vec![1, 3], "top tier first; log 4 has no division");
+        assert_eq!((b[0].games, b[0].avg), (1, 0.8));
+        assert_eq!((b[1].games, b[1].avg), (2, 1.1));
+        assert_eq!(b[1].win_rate, Some(100.0));
+    }
 
     #[test]
     fn opposition_bands_split_on_a_fixed_line_either_side_of_one() {

@@ -6343,6 +6343,50 @@
         "opponentAvg": 1.16,
         "winRate": 48.4
       }
+    ],
+    "byDivision": [
+      {
+        "tier": 0,
+        "division": "Premiership",
+        "games": 10,
+        "avg": 1.05,
+        "winRate": 89.0
+      },
+      {
+        "tier": 1,
+        "division": "High",
+        "games": 51,
+        "avg": 0.91,
+        "winRate": 34.0
+      },
+      {
+        "tier": 2,
+        "division": "Mid",
+        "games": 168,
+        "avg": 0.99,
+        "winRate": 47.0
+      },
+      {
+        "tier": 3,
+        "division": "Low",
+        "games": 184,
+        "avg": 1.09,
+        "winRate": 58.0
+      },
+      {
+        "tier": 4,
+        "division": "Open",
+        "games": 81,
+        "avg": 1.18,
+        "winRate": 71.0
+      },
+      {
+        "tier": 5,
+        "division": "Fresh Meat",
+        "games": 4,
+        "avg": 0.94,
+        "winRate": 50.0
+      }
     ]
   }
 }

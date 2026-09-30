@@ -298,14 +298,19 @@ pub async fn load_profile(
     // Q9: who each of those games was against. Computed over the whole
     // history like the context split, so it stays comparable while the rest
     // of the profile is filtered.
-    let strength: std::collections::HashMap<i64, f64> = db
-        .class_opponents(me.account_id(), class.as_str(), MODEL_VERSION)
-        .await?
-        .into_iter()
+    let opponents = db.class_opponents(me.account_id(), class.as_str(), MODEL_VERSION).await?;
+    let strength: std::collections::HashMap<i64, f64> = opponents
+        .iter()
         .filter(|(_, _, _, games)| *games >= profile::MIN_OPPONENT_GAMES)
-        .map(|(log_id, _, strength, _)| (log_id, strength))
+        .map(|(log_id, _, strength, _)| (*log_id, *strength))
         .collect();
     let opposition = profile::opposition_splits(&history, &strength);
+    // ...and their ETF2L division at the time: any opposite number with a
+    // division, however few games of theirs are rated.
+    let when: std::collections::HashMap<i64, i64> = history.iter().filter_map(|r| Some((r.log_id, r.played_at?))).collect();
+    let pairs: Vec<(i64, u32, i64)> = opponents.iter().filter_map(|(log_id, opp, _, _)| Some((*log_id, *opp, *when.get(log_id)?))).collect();
+    let tiers = crate::catalogue::opponent_divisions(db, &pairs).await?;
+    let by_division = profile::division_splits(&history, &tiers);
     let history: Vec<HistoryRow> = match kind {
         Some(k) => history.into_iter().filter(|r| r.kind.as_deref() == Some(k)).collect(),
         None => history,
@@ -315,6 +320,7 @@ pub async fn load_profile(
     };
     p.contexts = contexts;
     p.opposition = opposition;
+    p.by_division = by_division;
     p.filter = kind.map(str::to_string);
     // Career records count every game, so a period shows none.
     if period.is_some() {

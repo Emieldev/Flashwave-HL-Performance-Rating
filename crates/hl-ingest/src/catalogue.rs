@@ -987,6 +987,45 @@ pub struct MatchDivisions {
 
 /// Every player's ETF2L division at the time of a match (Q38): the season
 /// the match was in, else the nearest season they played within a year.
+/// A player's division at a time: the season it fell in, else their nearest
+/// season within [`NEAREST_SEASON_S`]. `(tier, division, season, exact)`.
+fn division_at(
+    windows: &[(i64, String, i64, i64)],
+    divisions: &HashMap<(u32, i64), (i64, String, i64)>,
+    account: u32,
+    at: i64,
+) -> Option<(i64, String, i64, bool)> {
+    windows
+        .iter()
+        .filter_map(|(s, _, from, to)| {
+            let (tier, division, _) = divisions.get(&(account, *s))?;
+            let gap = if at < *from { from - at } else if at > *to { at - to } else { 0 };
+            (gap <= NEAREST_SEASON_S).then(|| (gap, *s, *tier, division.clone()))
+        })
+        .min_by_key(|(gap, s, ..)| (*gap, -s))
+        .map(|(gap, s, tier, division)| (tier, division, s, gap == 0))
+}
+
+/// Each game's opposite number's division, for the profile's "Who you
+/// played" by division: `(log_id, their account, when)` in, `log_id ->
+/// (tier, today's name for it)` out.
+pub async fn opponent_divisions(db: &Db, games: &[(i64, u32, i64)]) -> Result<HashMap<i64, (i64, String)>> {
+    if games.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let cat = Catalogue::load(db).await?;
+    let windows = cat.season_windows();
+    let divisions = cat.divisions();
+    Ok(games
+        .iter()
+        .filter_map(|(log_id, account, at)| {
+            let (tier, ..) = division_at(&windows, &divisions, *account, *at)?;
+            let name = crate::leagues::TIER_NAMES.get(tier as usize)?.to_string();
+            Some((*log_id, (tier, name)))
+        })
+        .collect())
+}
+
 pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
     let Some((played_at, accounts)) = db.match_accounts(log_id).await? else {
         return Ok(MatchDivisions { players: HashMap::new(), tier_names: BTreeMap::new() });
@@ -996,16 +1035,8 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
     let divisions = cat.divisions();
     let mut players = HashMap::new();
     for a in accounts {
-        let best = windows
-            .iter()
-            .filter_map(|(s, _, from, to)| {
-                let (tier, division, _) = divisions.get(&(a, *s))?;
-                let gap = if played_at < *from { from - played_at } else if played_at > *to { played_at - to } else { 0 };
-                (gap <= NEAREST_SEASON_S).then(|| (gap, *s, *tier, division.clone()))
-            })
-            .min_by_key(|(gap, s, ..)| (*gap, -s));
-        if let Some((gap, season, tier, division)) = best {
-            players.insert(a, PlayerDivision { tier, division, season, exact: gap == 0 });
+        if let Some((tier, division, season, exact)) = division_at(&windows, &divisions, a, played_at) {
+            players.insert(a, PlayerDivision { tier, division, season, exact });
         }
     }
     // Every tier by today's name: "High", not the older "Division 1".

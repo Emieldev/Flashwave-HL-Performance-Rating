@@ -559,3 +559,6 @@
   align-items: center;
   gap: 6px;
 }
+
+/* Who you played, by division: a line between the two views. */
+.kind-split .ks-sub { margin: 12px 0 6px; }

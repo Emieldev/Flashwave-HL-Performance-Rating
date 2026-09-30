@@ -456,6 +456,13 @@ async fn main() -> Result<()> {
                     );
                 }
             }
+            if !p.by_division.is_empty() {
+                println!();
+                println!("their division        you   games");
+                for d in &p.by_division {
+                    println!("{:<18} {:>6.2} {:>7}{}", d.division, d.avg, d.games, d.win_rate.map(|w| format!("   {w:.0}% won")).unwrap_or_default());
+                }
+            }
             println!("\ncomponent         weight    form    career  recent avg");
             for c in &p.components {
                 println!(

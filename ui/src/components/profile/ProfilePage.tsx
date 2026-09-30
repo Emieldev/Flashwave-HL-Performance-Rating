@@ -7,7 +7,7 @@ import {
   type ContextKind,
   type ContextSplit,
   type GameRef,
-  type OppositionBand,
+  type OppositionBand, type DivisionBand,
   type Profile,
 } from "../../api/types";
 import { formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
@@ -195,8 +195,8 @@ function KindSplit(props: { split: ContextSplit[]; active: ContextKind | null; o
  * own games and the next than it does between players, so there is no
  * standing difficulty to subtract — only something worth knowing.
  */
-function Opposition({ bands }: { bands: OppositionBand[] }) {
-  if (bands.length < 2) return null;
+function Opposition({ bands, byDivision }: { bands: OppositionBand[]; byDivision: DivisionBand[] }) {
+  if (bands.length < 2 && byDivision.length === 0) return null;
   const label: Record<OppositionBand["band"], string> = {
     weaker: t("Weaker opponents"),
     even: t("An even match"),
@@ -222,6 +222,28 @@ function Opposition({ bands }: { bands: OppositionBand[] }) {
           </div>
         ))}
       </div>
+      {byDivision.length > 0 && (
+        <>
+          <p className="hint ks-sub">{t("By their ETF2L division at the time: the opposite number's, from the officials read.")}</p>
+          <div className="ks-rows">
+            {byDivision.map((b) => (
+              <div key={b.tier} className="ks-row">
+                <span className="ks-label">
+                  <span className={`div-badge div-t${Math.min(b.tier, 4)}`}>{b.division}</span>
+                </span>
+                <span className="ks-track" aria-hidden>
+                  <span className="comp-mid" />
+                  <span className="ks-fill ks-even" style={{ width: `${ratingPercent(b.avg)}%` }} />
+                </span>
+                <span className="ks-value">{rating(b.avg)}</span>
+                <span className="ks-meta muted">
+                  {tx("{games} game{1}{2}", { games: b.games, "1": b.games === 1 ? "" : "s", "2": b.winRate !== null && t(" · {0}% won", { "0": b.winRate.toFixed(0) }) })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -277,7 +299,7 @@ function ProfileBody(props: {
 
       <KindSplit split={p.contexts} active={p.filter} onKind={onKind} />
 
-      <Opposition bands={p.opposition} />
+      <Opposition bands={p.opposition} byDivision={p.byDivision ?? []} />
 
       <Fold id="profile-components">
         <Components items={p.components} formWindow={Math.min(p.formWindow, p.games)} />
