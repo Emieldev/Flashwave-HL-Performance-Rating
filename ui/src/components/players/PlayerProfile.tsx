@@ -254,6 +254,73 @@ function Overview({ p }: { p: Profile }) {
         <h3>{t("Rating")}</h3>
         <PlayerStatsCard accountId={p.accountId} />
       </section>
+      <section className="pp-career-section">
+        <h3>{t("Career on trends.tf")}</h3>
+        <TrendsCareer accountId={p.accountId} />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * What only trends.tf knows (Q37): every Highlander game they played, not
+ * only the ones held here. Read when the profile opens, kept a day.
+ */
+function TrendsCareer({ accountId }: { accountId: number }) {
+  const q = useQuery({ queryKey: ["trends_career", accountId], queryFn: () => api.getTrendsCareer(accountId), staleTime: 60 * 60_000 });
+  if (q.isPending) return <p className="hint">{t("Reading trends.tf…")}</p>;
+  if (q.isError) return <p className="hint">{errorMessage(q.error)}</p>;
+  const v = q.data;
+  const c = v.career;
+  const hours = (s: number) => Math.round(s / 3600);
+  if (!c || (c.wins + c.losses + c.ties === 0 && c.classes.length === 0)) {
+    return <p className="hint">{v.error ?? t("trends.tf has no Highlander games for them.")}</p>;
+  }
+  return (
+    <div className="pp-career">
+      <p className="pp-career-head">
+        <strong>
+          {c.wins}–{c.losses}–{c.ties}
+        </strong>{" "}
+        {c.winrate !== null && <span>· {tx("{0}% won", { "0": c.winrate.toFixed(1) })}</span>}{" "}
+        <span className="muted">· {tx("{0} h of Highlander", { "0": hours(c.timeS) })}</span>
+      </p>
+      <table className="pp-career-classes">
+        <thead>
+          <tr>
+            <th>{t("Class")}</th>
+            <th className="num">{t("W–L–T")}</th>
+            <th className="num">{t("Won")}</th>
+            <th className="num" title={t("Damage per minute")}>{t("DPM")}</th>
+            <th className="num" title={t("Accuracy")}>{t("Acc")}</th>
+            <th className="num">{t("Hours")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {c.classes
+            .filter((x) => x.timeS >= 1800)
+            .slice(0, 6)
+            .map((x) => (
+              <tr key={x.class}>
+                <td>
+                  <ClassIcon cls={x.class} size={16} /> {classLabel(x.class)}
+                </td>
+                <td className="num">{x.wins + x.losses + x.ties > 0 ? `${x.wins}–${x.losses}–${x.ties}` : "–"}</td>
+                <td className="num">{x.winrate !== null ? `${Math.round(x.winrate)}%` : "–"}</td>
+                <td className="num">{x.dpm ?? "–"}</td>
+                <td className="num">{x.accuracy !== null ? `${x.accuracy}%` : "–"}</td>
+                <td className="num">{hours(x.timeS)}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <p className="hint pp-career-foot">
+        {v.error && <>{v.error} · </>}
+        {v.fetchedAt !== null && <>{tx("Read {0}", { "0": formatDate(v.fetchedAt, true) })} · </>}
+        <a href={v.url} target="_blank" rel="noreferrer">
+          {t("From trends.tf ↗")}
+        </a>
+      </p>
     </div>
   );
 }

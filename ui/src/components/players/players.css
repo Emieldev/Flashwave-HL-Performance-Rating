@@ -338,3 +338,11 @@
 .pc-together { margin: 0; font-size: 0.8rem; }
 .pc-links { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .pc-links a { font-size: 0.8rem; }
+
+/* Q37: a player's career on trends.tf. */
+.pp-career-section { grid-column: 1 / -1; }
+.pp-career-head { margin: 0 0 8px; font-size: 1rem; }
+.pp-career-classes { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.pp-career-classes th, .pp-career-classes td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.pp-career-classes .num { text-align: right; font-variant-numeric: tabular-nums; }
+.pp-career-foot { margin-top: 6px; }

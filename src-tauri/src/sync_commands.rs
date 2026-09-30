@@ -1280,6 +1280,12 @@ pub async fn get_player_profile(state: State<'_, AppState>, account_id: u32) -> 
     Ok(hl_ingest::catalogue::profile(&state.db, &state.sources, account_id).await?)
 }
 
+/// A player's career on trends.tf, read once a day (Q37).
+#[tauri::command]
+pub async fn get_trends_career(state: State<'_, AppState>, account_id: u32) -> CmdResult<hl_ingest::trends_career::CareerView> {
+    Ok(hl_ingest::trends_career::career(&state.db, &state.sources, account_id).await?)
+}
+
 /// A player's ratings per class, stat bars and ranks (Q36).
 #[tauri::command]
 pub async fn get_player_stats(state: State<'_, AppState>, account_id: u32) -> CmdResult<hl_ingest::catalogue::PlayerStats> {

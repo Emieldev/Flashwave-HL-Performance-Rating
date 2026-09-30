@@ -371,6 +371,7 @@ mod frozen_migrations {
         ("0033_league_sample.sql", 0x60586fab4de9abc6),
         ("0034_player_catalogue.sql", 0xd034c4bcfbebec48),
         ("0035_league_rating.sql", 0xd109c7e71d4b431f),
+        ("0036_trends_career.sql", 0xc71d916bad5afbbd),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {

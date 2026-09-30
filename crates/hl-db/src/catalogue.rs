@@ -310,6 +310,21 @@ impl Db {
             .collect())
     }
 
+    /// A player's trends.tf career as last read (Q37): `(json, fetched_at)`.
+    pub async fn trends_career(&self, account: u32) -> Result<Option<(String, i64)>> {
+        Ok(sqlx::query_as("SELECT career, fetched_at FROM trends_career WHERE account_id = ?1").bind(i64::from(account)).fetch_optional(self.pool()).await?)
+    }
+
+    pub async fn put_trends_career(&self, account: u32, career: &str, at: i64) -> Result<()> {
+        sqlx::query("INSERT OR REPLACE INTO trends_career (account_id, career, fetched_at) VALUES (?1, ?2, ?3)")
+            .bind(i64::from(account))
+            .bind(career)
+            .bind(at)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
+
     pub async fn etf2l_player(&self, account: u32) -> Result<Option<Etf2lPlayer>> {
         let Some(r) = sqlx::query("SELECT * FROM etf2l_player WHERE account_id = ?1").bind(i64::from(account)).fetch_optional(self.pool()).await? else {
             return Ok(None);

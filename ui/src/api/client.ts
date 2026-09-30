@@ -65,6 +65,7 @@ import type {
   CatalogueHit,
   PlayerProfile,
   PlayerStats,
+  CareerView,
   Rankings,
   MatchDivisions,
 } from "./types";
@@ -106,6 +107,7 @@ const realApi = {
   searchCatalogue: (query: string) => invoke<CatalogueHit[]>("search_catalogue", { query }),
   getPlayerProfile: (accountId: number) => invoke<PlayerProfile>("get_player_profile", { accountId }),
   getPlayerStats: (accountId: number) => invoke<PlayerStats>("get_player_stats", { accountId }),
+  getTrendsCareer: (accountId: number) => invoke<CareerView>("get_trends_career", { accountId }),
   getMatchDivisions: (logId: number) => invoke<MatchDivisions>("get_match_divisions", { logId }),
   getRankings: (season: number | null, tier: number | null, cls: string) => invoke<Rankings>("get_rankings", { season, tier, class: cls }),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),

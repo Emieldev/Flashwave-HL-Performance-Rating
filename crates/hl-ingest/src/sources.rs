@@ -246,6 +246,12 @@ impl Sources {
 impl Sources {
     /// GET a path on the ETF2L v2 API; `None` when it does not exist.
     /// A page as text; `None` when it does not exist.
+    /// A player's trends.tf page, Highlander only (Q37): HTML, as it has no
+    /// JSON API. `None` when trends.tf has no such player.
+    pub async fn trends_player_page(&self, steamid64: &str) -> Result<Option<String>> {
+        self.trends.get_text_opt(&format!("https://trends.tf/player/{steamid64}/?format=highlander")).await
+    }
+
     pub async fn fetch_text(&self, url: &str) -> Result<Option<String>> {
         self.web.get_text_opt(url).await
     }

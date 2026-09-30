@@ -297,6 +297,25 @@ export interface PlayerProfile {
   etf2lId: number | null;
 }
 
+/** A player's career on trends.tf (Q37): Highlander only. */
+export interface Career {
+  wins: number;
+  losses: number;
+  ties: number;
+  winrate: number | null;
+  timeS: number;
+  classes: { class: string; wins: number; losses: number; ties: number; winrate: number | null; dpm: number | null; accuracy: number | null; timeS: number }[];
+  aliases: [string, number][];
+  teams: { league: string; team: string; competitions: string; division: string }[];
+}
+
+export interface CareerView {
+  career: Career | null;
+  fetchedAt: number | null;
+  error: string | null;
+  url: string;
+}
+
 /** One class of a player's ratings (Q36). */
 export interface ClassStats {
   class: string;
