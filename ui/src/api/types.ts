@@ -214,6 +214,17 @@ export interface LeagueTier {
   newest: number | null;
 }
 
+/** What the league sample's job is doing right now. */
+export interface LeagueActivity {
+  state: "starting" | "working" | "waiting" | "resting" | "sync" | "paused" | "done";
+  doing: string | null;
+  nextAt: number | null;
+  lastHour: number;
+  logstfRestLeft: number | null;
+  /** Newest first. */
+  recent: { at: number; text: string; ok: boolean }[];
+}
+
 /** Where the league sample stands. */
 export interface LeagueSample {
   enabled: boolean;

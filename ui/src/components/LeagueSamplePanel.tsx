@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { errorMessage } from "../api/types";
@@ -53,6 +54,7 @@ export function LeagueSamplePanel() {
             </button>
             <span className="hint">{phase}</span>
           </div>
+          <ActivityBar />
           {s.tiers.length > 0 && (
             <>
               <table className="league-table">
@@ -118,4 +120,96 @@ function Bar({ done, of }: { done: number; of: number }) {
       </span>
     </span>
   );
+}
+
+function stateLabel(state: string): string {
+  switch (state) {
+    case "starting":
+      return t("Starting");
+    case "working":
+      return t("Working");
+    case "waiting":
+      return t("Waiting");
+    case "resting":
+      return t("Throttled");
+    case "sync":
+      return t("Your sync first");
+    case "paused":
+      return t("Paused");
+    case "done":
+      return t("Up to date");
+    default:
+      return state;
+  }
+}
+
+/**
+ * What the job is doing this second (Flashy): a job that spends most of its
+ * time waiting between requests looks stuck without it. Polled every two
+ * seconds; the countdown ticks every second in between.
+ */
+function ActivityBar() {
+  const q = useQuery({ queryKey: ["league_activity"], queryFn: api.getLeagueActivity, refetchInterval: 2000 });
+  const [nowS, setNowS] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = window.setInterval(() => setNowS(Math.floor(Date.now() / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const a = q.data;
+  if (!a) return null;
+  const left = a.nextAt !== null ? Math.max(0, a.nextAt - nowS) : null;
+  const line =
+    a.doing ??
+    (a.state === "resting"
+      ? t("logs.tf asked us to slow down. Back to it in {0}.", { "0": clock(a.logstfRestLeft ?? left ?? 0) })
+      : a.state === "sync"
+        ? t("Waiting for your own sync to finish.")
+        : a.state === "paused"
+          ? t("Paused.")
+          : a.state === "done"
+            ? t("Nothing left to fetch. Looking for new officials again in {0}.", { "0": clock(left ?? 0) })
+            : left !== null
+              ? t("Next request in {0}.", { "0": clock(left) })
+              : t("Starting…"));
+  const ago = (at: number) => clock(Math.max(0, nowS - at));
+  const fill = a.state === "working" || left === null ? undefined : { width: `${Math.max(0, 100 - (left / Math.max(1, gapOf(a.state))) * 100)}%` };
+  return (
+    <div className={`league-activity league-${a.state}`} role="status" aria-live="polite">
+      <div className="league-activity-top">
+        <span className="league-state">
+          {a.state === "working" && <span className="spin" aria-hidden style={{ display: "inline-block" }} />}
+          {stateLabel(a.state)}
+        </span>
+        <span className="league-doing">{line}</span>
+        <span className="league-rate" title={t("Requests to logs.tf, more.tf, trends.tf and ETF2L in the last hour")}>
+          {t("{0} requests in the last hour", { "0": a.lastHour.toLocaleString() })}
+        </span>
+      </div>
+      <div className="league-activity-track" aria-hidden>
+        {/* Between requests: how much of the wait has passed. */}
+        <span className={a.state === "working" ? "league-activity-fill indeterminate" : "league-activity-fill"} style={fill} />
+      </div>
+      {a.recent.length > 0 && (
+        <ol className="league-recent">
+          {a.recent.map((e, i) => (
+            <li key={`${e.at}-${i}`} className={e.ok ? undefined : "bad"}>
+              <span className="league-recent-ago">{t("{0} ago", { "0": ago(e.at) })}</span>
+              <span>{e.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** The wait the job takes after a step in this state, in seconds. */
+function gapOf(state: string): number {
+  return state === "resting" ? 60 : state === "done" ? 1800 : state === "paused" || state === "sync" ? 20 : 4;
+}
+
+function clock(s: number): string {
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }

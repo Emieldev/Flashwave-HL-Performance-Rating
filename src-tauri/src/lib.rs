@@ -1,7 +1,7 @@
 mod commands;
 mod error;
 mod sync_commands;
-mod league;
+pub mod league;
 mod watch;
 
 use hl_db::Db;
@@ -29,6 +29,8 @@ pub struct AppState {
     pub sources: Arc<Sources>,
     /// Set while a sync or reprocess is running; a second one is refused.
     pub busy: Arc<AtomicBool>,
+    /// What the league sample's background job is doing, for Settings.
+    pub league_activity: league::SharedActivity,
     /// Demo downloads waiting their turn, and the one permit they take in
     /// turns to hold. One at a time, in the order they were asked for.
     pub demo_queue: Arc<sync_commands::DemoQueue>,
@@ -172,7 +174,8 @@ pub fn run() {
 
             // The league sample, when it is switched on (Settings).
             let busy = Arc::new(AtomicBool::new(false));
-            league::spawn(db.clone(), sources.clone(), busy.clone());
+            let league_activity = league::SharedActivity::default();
+            league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone());
 
             app.manage(AppState {
                 db,
@@ -180,6 +183,7 @@ pub fn run() {
                 _lock: lock,
                 sources,
                 busy,
+                league_activity,
                 demo_queue: Arc::new(sync_commands::DemoQueue::default()),
                 demo_turn: Arc::new(tokio::sync::Semaphore::new(1)),
             });
@@ -205,6 +209,7 @@ pub fn run() {
             sync_commands::get_rating_guide,
             sync_commands::get_league_sample,
             sync_commands::set_league_sample,
+            sync_commands::get_league_activity,
             sync_commands::index_stats,
             sync_commands::list_matches,
             sync_commands::get_match,

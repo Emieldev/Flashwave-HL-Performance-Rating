@@ -222,7 +222,9 @@ pub enum Step {
 }
 
 /// Do one unit of work. The caller waits between calls: this is the pace.
-pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
+/// `doing` is told what each request is before it is made, so a window can
+/// say what the job is doing rather than only what it has done.
+pub async fn step(db: &Db, sources: &Sources, mut doing: impl FnMut(&str) + Send) -> Result<Step> {
     let due = db
         .get_setting(KEY_DISCOVERED)
         .await?
@@ -230,7 +232,7 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
         .is_none_or(|at| now() - at > REDISCOVER_S)
         || db.get_setting(KEY_WINDOW).await?.as_deref() != Some(window().as_str());
     if due {
-        return Ok(Step::Discovered(discover(db, sources, |_| {}).await?));
+        return Ok(Step::Discovered(discover(db, sources, &mut doing).await?));
     }
 
     // ETF2L is another host: one match page each step, beside the logs.
@@ -238,6 +240,7 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
     if let Some(match_id) = roster {
         // A page ETF2L will not give is marked read by nothing: tried again
         // next discovery. Its failure does not stop the log work.
+        doing(&format!("Reading who played ETF2L match {match_id}"));
         let _ = crate::leagues::fetch_match_detail(db, sources, match_id).await;
     }
 
@@ -245,6 +248,7 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
         // logs.tf: JSON first, then more.tf's stand-ins again, then raw logs.
         let json = db.league_json_todo(1, true, MAX_JSON_ATTEMPTS).await?.first().copied();
         if let Some(log_id) = json {
+            doing(&format!("Downloading log {log_id} from logs.tf"));
             return Ok(match sources.logstf_log(log_id).await {
                 Ok(body) => {
                     db.put_league_json(log_id, &body, "logs.tf").await?;
@@ -258,6 +262,7 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
             });
         }
         if let Some(log_id) = db.league_raw_todo(1).await?.first().copied() {
+            doing(&format!("Downloading the server log of {log_id} from logs.tf"));
             return Ok(match sources.logstf_rawlog(log_id).await {
                 Ok(zip) => {
                     let found = zip.is_some();
@@ -269,6 +274,7 @@ pub async fn step(db: &Db, sources: &Sources) -> Result<Step> {
         }
     } else if let Some(log_id) = db.league_json_todo(1, false, MAX_JSON_ATTEMPTS).await?.first().copied() {
         // Resting from logs.tf: more.tf's copy of the JSON meanwhile.
+        doing(&format!("logs.tf is resting: downloading log {log_id} from more.tf"));
         return Ok(match sources.moretf_log(log_id).await {
             Ok(Some(body)) => {
                 let v: serde_json::Value = serde_json::from_str(&body)?;

@@ -61,6 +61,7 @@ import type {
   NewestLog,
   RatingGuide,
   LeagueSample,
+  LeagueActivity,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -96,6 +97,7 @@ const realApi = {
   getRatingGuide: () => invoke<RatingGuide>("get_rating_guide"),
   getLeagueSample: () => invoke<LeagueSample>("get_league_sample"),
   setLeagueSample: (on: boolean) => invoke<void>("set_league_sample", { on }),
+  getLeagueActivity: () => invoke<LeagueActivity>("get_league_activity"),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

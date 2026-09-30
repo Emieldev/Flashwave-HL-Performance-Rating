@@ -197,6 +197,12 @@ impl Sources {
         Ok(first(&body, "logid")?.map(|id| (id, "trends.tf")))
     }
 
+    /// Seconds left of logs.tf's rest, if it is resting.
+    pub fn logstf_rest_left(&self) -> Option<u64> {
+        let at = (*self.logstf_refused_at.lock().unwrap())?;
+        LOGSTF_REST.checked_sub(at.elapsed()).map(|d| d.as_secs())
+    }
+
     /// Whether logs.tf turned us away within the last [`LOGSTF_REST`]: the
     /// sync then goes to more.tf for new logs without asking logs.tf first.
     pub fn logstf_resting(&self) -> bool {

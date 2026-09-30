@@ -1135,7 +1135,7 @@ async fn main() -> Result<()> {
                 ["run", n] => {
                     let n: usize = n.parse()?;
                     for i in 0..n {
-                        let s = hl_ingest::league_sample::step(&db, &sources).await?;
+                        let s = hl_ingest::league_sample::step(&db, &sources, |what| eprintln!("  {what}")).await?;
                         println!("{i:>4} {}", serde_json::to_string(&s)?);
                         if matches!(s, hl_ingest::league_sample::Step::Done) {
                             break;

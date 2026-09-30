@@ -6,12 +6,17 @@
 //! logs.tf is resting, more.tf gives the JSON instead; and while the owner's
 //! own sync runs the sample waits, so their games come first. Everything it
 //! has done is in the database: closing the app loses nothing but the wait.
+//!
+//! What it is doing right now is kept in [`Activity`], for the live bar in
+//! Settings: without it a job that waits most of the time looks stuck.
 
 use hl_db::Db;
 use hl_ingest::league_sample::{self, Step};
 use hl_ingest::sources::Sources;
+use serde::Serialize;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Between two requests to logs.tf: with its own 2 s throttle, one about
@@ -25,37 +30,139 @@ const FAILED_GAP: Duration = Duration::from_secs(30);
 const DONE_GAP: Duration = Duration::from_secs(30 * 60);
 /// Switched off, or the owner's sync is running.
 const IDLE_GAP: Duration = Duration::from_secs(20);
+/// Actions kept for the list under the bar.
+const RECENT: usize = 12;
 
-pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>) {
+/// One thing the job did.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub at: i64,
+    pub text: String,
+    pub ok: bool,
+}
+
+/// What the job is doing, for the live bar.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Activity {
+    /// `starting`, `working`, `waiting` (between requests), `resting`
+    /// (logs.tf asked us to slow down), `sync` (the owner's sync has the
+    /// line), `paused`, or `done`.
+    pub state: &'static str,
+    /// The request in flight, while there is one.
+    pub doing: Option<String>,
+    /// When the next step starts, unix seconds.
+    pub next_at: Option<i64>,
+    /// Requests made in the last hour.
+    pub last_hour: usize,
+    /// Seconds left of logs.tf's rest.
+    pub logstf_rest_left: Option<u64>,
+    /// Newest first.
+    pub recent: VecDeque<Event>,
+    #[serde(skip)]
+    stamps: VecDeque<i64>,
+}
+
+pub type SharedActivity = Arc<Mutex<Activity>>;
+
+fn now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+}
+
+impl Activity {
+    fn log(&mut self, text: String, ok: bool) {
+        self.recent.push_front(Event { at: now(), text, ok });
+        self.recent.truncate(RECENT);
+    }
+
+    fn request(&mut self) {
+        let t = now();
+        self.stamps.push_back(t);
+        while self.stamps.front().is_some_and(|s| *s < t - 3600) {
+            self.stamps.pop_front();
+        }
+        self.last_hour = self.stamps.len();
+    }
+}
+
+/// The activity as the window should see it, with logs.tf's rest filled in.
+pub fn snapshot(activity: &SharedActivity, sources: &Sources) -> Activity {
+    let mut a = activity.lock().unwrap().clone();
+    a.logstf_rest_left = sources.logstf_rest_left();
+    let t = now();
+    a.last_hour = a.stamps.iter().filter(|s| **s >= t - 3600).count();
+    a
+}
+
+pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: SharedActivity) {
+    activity.lock().unwrap().state = "starting";
     tauri::async_runtime::spawn(async move {
         // Let the startup passes have the database first.
+        activity.lock().unwrap().next_at = Some(now() + 30);
         tokio::time::sleep(Duration::from_secs(30)).await;
         loop {
-            let gap = if !league_sample::enabled(&db).await.unwrap_or(false) || busy.load(Ordering::Acquire) {
-                IDLE_GAP
+            let (state, gap) = if !league_sample::enabled(&db).await.unwrap_or(false) {
+                ("paused", IDLE_GAP)
+            } else if busy.load(Ordering::Acquire) {
+                ("sync", IDLE_GAP)
             } else {
-                match league_sample::step(&db, &sources).await {
+                {
+                    let mut a = activity.lock().unwrap();
+                    a.state = "working";
+                    a.doing = Some("Deciding what to fetch next".into());
+                    a.next_at = None;
+                }
+                let act = activity.clone();
+                let result = league_sample::step(&db, &sources, move |what: &str| {
+                    let mut a = act.lock().unwrap();
+                    a.doing = Some(what.to_string());
+                    a.request();
+                })
+                .await;
+                let mut a = activity.lock().unwrap();
+                a.doing = None;
+                match result {
                     Ok(Step::Discovered(d)) => {
                         tracing::info!(matches = d.picked_matches, logs = d.picked_logs, listed = d.logs_listed, "league sample chosen");
-                        STEP_GAP
+                        a.log(format!("Listed {} ETF2L logs and chose {} matches ({} logs)", d.logs_listed, d.picked_matches, d.picked_logs), true);
+                        ("waiting", STEP_GAP)
                     }
                     Ok(Step::Json { log_id, source }) => {
-                        tracing::debug!(log_id, source, "league sample log");
-                        STEP_GAP
+                        a.log(format!("Log {log_id} from {source}"), true);
+                        ("waiting", STEP_GAP)
                     }
-                    Ok(Step::Raw { .. } | Step::Roster { .. }) => STEP_GAP,
-                    Ok(Step::Waiting) => WAITING_GAP,
-                    Ok(Step::Done) => DONE_GAP,
+                    Ok(Step::Raw { log_id, found }) => {
+                        a.log(if found { format!("Server log of {log_id}") } else { format!("logs.tf has no server log for {log_id}") }, found);
+                        ("waiting", STEP_GAP)
+                    }
+                    Ok(Step::Roster { match_id }) => {
+                        a.log(format!("Who played ETF2L match {match_id}"), true);
+                        ("waiting", STEP_GAP)
+                    }
+                    Ok(Step::Waiting) => {
+                        a.log("logs.tf is resting and there is nothing more.tf can give meanwhile".into(), true);
+                        ("resting", WAITING_GAP)
+                    }
+                    Ok(Step::Done) => ("done", DONE_GAP),
                     Ok(Step::Failed { what }) => {
                         tracing::warn!(%what, "league sample step failed");
-                        FAILED_GAP
+                        a.log(what, false);
+                        (if sources.logstf_resting() { "resting" } else { "waiting" }, FAILED_GAP)
                     }
                     Err(e) => {
                         tracing::warn!(error = %format!("{e:#}"), "league sample step failed");
-                        FAILED_GAP * 4
+                        a.log(format!("{e:#}"), false);
+                        ("waiting", FAILED_GAP * 4)
                     }
                 }
             };
+            {
+                let mut a = activity.lock().unwrap();
+                // A step that ran into logs.tf's rest says so, whatever it did.
+                a.state = if state == "waiting" && sources.logstf_resting() { "resting" } else { state };
+                a.next_at = Some(now() + gap.as_secs() as i64);
+            }
             tokio::time::sleep(gap).await;
         }
     });

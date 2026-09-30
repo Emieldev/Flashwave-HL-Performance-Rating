@@ -259,6 +259,12 @@ pub async fn get_league_sample(state: State<'_, AppState>) -> CmdResult<hl_inges
     Ok(hl_ingest::league_sample::status(&state.db, &state.sources).await?)
 }
 
+/// What the league sample's job is doing right now: the live bar.
+#[tauri::command]
+pub async fn get_league_activity(state: State<'_, AppState>) -> CmdResult<crate::league::Activity> {
+    Ok(crate::league::snapshot(&state.league_activity, &state.sources))
+}
+
 /// Switch the league sample's background download on or off.
 #[tauri::command]
 pub async fn set_league_sample(state: State<'_, AppState>, on: bool) -> CmdResult<()> {

@@ -53,7 +53,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -1139,6 +1139,24 @@ export const mockApi: Api = {
   getRatingGuide: () => delay(ratingGuide as unknown as RatingGuide),
   // The browser build: the numbers from the first discovery run.
   getLeagueSample: () => delay(leagueSample),
+  // The browser build: a job partway through, alternating working and waiting.
+  getLeagueActivity: () => {
+    const t = Math.floor(Date.now() / 1000);
+    const working = t % 6 < 2;
+    return delay({
+      state: working ? "working" : "waiting",
+      doing: working ? `Downloading log ${4127300 - (t % 97)} from logs.tf` : null,
+      nextAt: working ? null : t + (6 - (t % 6)),
+      lastHour: 583,
+      logstfRestLeft: null,
+      recent: [
+        { at: t - 5, text: "Log 4127318 from logs.tf", ok: true },
+        { at: t - 11, text: "Who played ETF2L match 93005", ok: true },
+        { at: t - 17, text: "Server log of 4127319", ok: true },
+        { at: t - 60, text: "logs.tf: HTTP 403 Forbidden", ok: false },
+      ],
+    } as LeagueActivity);
+  },
   setLeagueSample: async (on: boolean) => {
     leagueSample = { ...leagueSample, enabled: on };
   },
