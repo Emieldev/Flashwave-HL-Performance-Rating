@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod sync_commands;
+mod league;
 mod watch;
 
 use hl_db::Db;
@@ -169,12 +170,16 @@ pub fn run() {
                 }
             }
 
+            // The league sample, when it is switched on (Settings).
+            let busy = Arc::new(AtomicBool::new(false));
+            league::spawn(db.clone(), sources.clone(), busy.clone());
+
             app.manage(AppState {
                 db,
                 db_path,
                 _lock: lock,
                 sources,
-                busy: Arc::new(AtomicBool::new(false)),
+                busy,
                 demo_queue: Arc::new(sync_commands::DemoQueue::default()),
                 demo_turn: Arc::new(tokio::sync::Semaphore::new(1)),
             });
@@ -198,6 +203,8 @@ pub fn run() {
             sync_commands::sync_busy,
             sync_commands::newest_log,
             sync_commands::get_rating_guide,
+            sync_commands::get_league_sample,
+            sync_commands::set_league_sample,
             sync_commands::index_stats,
             sync_commands::list_matches,
             sync_commands::get_match,

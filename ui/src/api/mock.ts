@@ -53,7 +53,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -266,6 +266,19 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
 });
 
 let newestLooks = 0;
+
+const tier = (tier: number, division: string, matches: number, logs: number, json: number, maps: number) => ({
+  tier, division, matches, logs, jsonLogstf: json, jsonMoretf: Math.round(json / 10), raw: Math.round(json / 3), rawMissing: 2, maps, rosters: Math.round(matches / 2), oldest: 1_724_000_000, newest: 1_790_538_131,
+});
+let leagueSample: LeagueSample = {
+  enabled: true,
+  discoveredAt: 1_790_700_000,
+  logsListed: 5695,
+  tiers: [tier(0, "Premiership", 78, 177, 140, 8), tier(1, "High", 83, 186, 90, 9), tier(2, "Mid", 124, 277, 60, 12), tier(3, "Low", 145, 322, 20, 9), tier(4, "Open", 154, 327, 0, 11)],
+  bytes: 21_000_000,
+  logstfResting: false,
+  targetPerTier: 300,
+};
 
 const FAKE_MATCHES: MatchSummary[] = (() => {
   const r = rng(42);
@@ -1121,6 +1134,11 @@ export const mockApi: Api = {
   indexStats: () => delay(fakeStats(pending)),
   syncBusy: () => delay(busy),
   getRatingGuide: () => delay(ratingGuide as unknown as RatingGuide),
+  // The browser build: the numbers from the first discovery run.
+  getLeagueSample: () => delay(leagueSample),
+  setLeagueSample: async (on: boolean) => {
+    leagueSample = { ...leagueSample, enabled: on };
+  },
   // The browser build: a new log turns up on the third look.
   newestLog: () => delay({ logId: 4200000, source: "logs.tf", known: ++newestLooks < 3 }),
 

@@ -1,0 +1,250 @@
+//! The league sample (0033): ETF2L officials from every division, kept apart
+//! from the owner's own matches. Which log belongs to which match comes from
+//! trends.tf; the division from `etf2l_season_match`; the logs themselves
+//! from logs.tf or more.tf. The choosing is `hl_ingest::league_sample`.
+
+use crate::Db;
+use anyhow::Result;
+use serde::Serialize;
+use sqlx::Row;
+
+/// One ETF2L Highlander log as trends.tf lists it.
+pub struct LeagueLogRow<'a> {
+    pub log_id: i64,
+    pub etf2l_match_id: i64,
+    pub map: &'a str,
+    pub played_at: i64,
+    pub duration_s: Option<i64>,
+    pub title: Option<&'a str>,
+}
+
+/// A log that could go in the sample, with its match's division.
+#[derive(Debug, Clone)]
+pub struct Candidate {
+    pub log_id: i64,
+    pub match_id: i64,
+    pub map: String,
+    pub played_at: i64,
+    pub duration_s: i64,
+    pub tier: i64,
+    pub division: String,
+}
+
+/// One division's progress, for Settings and `hl league-sample`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TierProgress {
+    pub tier: i64,
+    /// The newest name ETF2L gave this tier ("Premiership", "High", ...).
+    pub division: String,
+    pub matches: i64,
+    pub logs: i64,
+    /// Logs with their JSON, from logs.tf and from more.tf.
+    pub json_logstf: i64,
+    pub json_moretf: i64,
+    /// Logs with their raw server log, and those logs.tf has none for.
+    pub raw: i64,
+    pub raw_missing: i64,
+    pub maps: i64,
+    /// Matches whose ETF2L page (who played) has been read.
+    pub rosters: i64,
+    pub oldest: Option<i64>,
+    pub newest: Option<i64>,
+}
+
+impl Db {
+    /// Store what trends.tf lists. A log already held keeps its state.
+    pub async fn upsert_league_logs(&self, rows: &[LeagueLogRow<'_>]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        for r in rows {
+            sqlx::query(
+                "INSERT INTO league_log (log_id, etf2l_match_id, map, played_at, duration_s, title)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (log_id) DO UPDATE SET etf2l_match_id = excluded.etf2l_match_id,
+                    map = excluded.map, duration_s = excluded.duration_s, title = excluded.title",
+            )
+            .bind(r.log_id)
+            .bind(r.etf2l_match_id)
+            .bind(r.map)
+            .bind(r.played_at)
+            .bind(r.duration_s)
+            .bind(r.title)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// How many logs trends.tf has listed so far, and the newest one's time.
+    pub async fn league_logs_known(&self) -> Result<(i64, Option<i64>)> {
+        let row = sqlx::query("SELECT COUNT(*) AS n, MAX(played_at) AS newest FROM league_log").fetch_one(self.pool()).await?;
+        Ok((row.get("n"), row.get("newest")))
+    }
+
+    /// Every listed log whose match ETF2L has placed in a division.
+    pub async fn league_candidates(&self) -> Result<Vec<Candidate>> {
+        let rows = sqlx::query(
+            "SELECT l.log_id, l.etf2l_match_id, l.map, l.played_at, COALESCE(l.duration_s, 0) AS duration_s,
+                    m.tier, m.division
+             FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
+             WHERE m.tier IS NOT NULL AND m.division IS NOT NULL AND m.default_win = 0",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| Candidate {
+                log_id: r.get("log_id"),
+                match_id: r.get("etf2l_match_id"),
+                map: r.get("map"),
+                played_at: r.get("played_at"),
+                duration_s: r.get("duration_s"),
+                tier: r.get("tier"),
+                division: r.get("division"),
+            })
+            .collect())
+    }
+
+    /// The sample is exactly these logs. What was fetched for a log that
+    /// drops out is kept: it costs nothing to hold, and a request to get back.
+    pub async fn set_league_picked(&self, log_ids: &[i64]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        sqlx::query("UPDATE league_log SET picked = 0").execute(&mut *tx).await?;
+        for id in log_ids {
+            sqlx::query("UPDATE league_log SET picked = 1 WHERE log_id = ?1").bind(id).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Picked logs with no JSON yet, newest first; `include_stand_ins` also
+    /// offers those only more.tf has given, to ask logs.tf again.
+    pub async fn league_json_todo(&self, limit: i64, include_stand_ins: bool, max_attempts: i64) -> Result<Vec<i64>> {
+        let sql = if include_stand_ins {
+            "SELECT log_id FROM league_log WHERE picked = 1 AND (json_source IS NULL OR json_source = 'more.tf')
+               AND json_attempts < ?2 ORDER BY json_source IS NOT NULL, played_at DESC LIMIT ?1"
+        } else {
+            "SELECT log_id FROM league_log WHERE picked = 1 AND json_source IS NULL
+               AND json_attempts < ?2 ORDER BY played_at DESC LIMIT ?1"
+        };
+        Ok(sqlx::query_scalar(sql).bind(limit).bind(max_attempts).fetch_all(self.pool()).await?)
+    }
+
+    pub async fn put_league_json(&self, log_id: i64, json: &str, source: &str) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        sqlx::query("INSERT INTO league_log_json (log_id, json) VALUES (?1, ?2) ON CONFLICT (log_id) DO UPDATE SET json = excluded.json")
+            .bind(log_id)
+            .bind(json)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE league_log SET json_source = ?2, json_attempts = 0 WHERE log_id = ?1")
+            .bind(log_id)
+            .bind(source)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// A log neither source could give: counted, so it is not asked forever.
+    pub async fn league_json_failed(&self, log_id: i64) -> Result<()> {
+        sqlx::query("UPDATE league_log SET json_attempts = json_attempts + 1 WHERE log_id = ?1").bind(log_id).execute(self.pool()).await?;
+        Ok(())
+    }
+
+    /// Picked logs with JSON but no raw server log tried yet, newest first.
+    pub async fn league_raw_todo(&self, limit: i64) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT log_id FROM league_log WHERE picked = 1 AND json_source IS NOT NULL AND raw_state IS NULL
+             ORDER BY played_at DESC LIMIT ?1",
+        )
+        .bind(limit)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
+    pub async fn put_league_raw(&self, log_id: i64, zip: Option<&[u8]>) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        if let Some(zip) = zip {
+            sqlx::query("INSERT INTO league_rawlog (log_id, zip) VALUES (?1, ?2) ON CONFLICT (log_id) DO UPDATE SET zip = excluded.zip")
+                .bind(log_id)
+                .bind(zip)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query("UPDATE league_log SET raw_state = ?2 WHERE log_id = ?1")
+            .bind(log_id)
+            .bind(if zip.is_some() { "ok" } else { "missing" })
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Picked matches whose ETF2L page (who played) is still unread.
+    pub async fn league_matches_without_roster(&self, limit: i64) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT DISTINCT m.match_id FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
+             WHERE l.picked = 1 AND m.detail_fetched = 0 ORDER BY m.time DESC LIMIT ?1",
+        )
+        .bind(limit)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
+    /// Per division, what is picked and what has arrived.
+    pub async fn league_progress(&self) -> Result<Vec<TierProgress>> {
+        let rows = sqlx::query(
+            "SELECT m.tier,
+                    (SELECT m2.division FROM etf2l_season_match m2 WHERE m2.tier = m.tier AND m2.division IS NOT NULL
+                       ORDER BY m2.time DESC LIMIT 1) AS division,
+                    COUNT(DISTINCT l.etf2l_match_id) AS matches,
+                    COUNT(*) AS logs,
+                    SUM(l.json_source = 'logs.tf') AS json_logstf,
+                    SUM(l.json_source = 'more.tf') AS json_moretf,
+                    SUM(l.raw_state = 'ok') AS raw,
+                    SUM(l.raw_state = 'missing') AS raw_missing,
+                    COUNT(DISTINCT l.map) AS maps,
+                    COUNT(DISTINCT CASE WHEN m.detail_fetched = 1 THEN m.match_id END) AS rosters,
+                    MIN(l.played_at) AS oldest, MAX(l.played_at) AS newest
+             FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
+             WHERE l.picked = 1 AND m.tier IS NOT NULL
+             GROUP BY m.tier ORDER BY m.tier",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| TierProgress {
+                tier: r.get("tier"),
+                division: r.get::<Option<String>, _>("division").unwrap_or_default(),
+                matches: r.get("matches"),
+                logs: r.get("logs"),
+                json_logstf: r.get::<Option<i64>, _>("json_logstf").unwrap_or(0),
+                json_moretf: r.get::<Option<i64>, _>("json_moretf").unwrap_or(0),
+                raw: r.get::<Option<i64>, _>("raw").unwrap_or(0),
+                raw_missing: r.get::<Option<i64>, _>("raw_missing").unwrap_or(0),
+                maps: r.get("maps"),
+                rosters: r.get("rosters"),
+                oldest: r.get("oldest"),
+                newest: r.get("newest"),
+            })
+            .collect())
+    }
+
+    /// Bytes the sample takes on disk, roughly: its JSON and raw logs.
+    pub async fn league_bytes(&self) -> Result<i64> {
+        Ok(sqlx::query_scalar(
+            "SELECT COALESCE((SELECT SUM(LENGTH(json)) FROM league_log_json), 0)
+                  + COALESCE((SELECT SUM(LENGTH(zip)) FROM league_rawlog), 0)",
+        )
+        .fetch_one(self.pool())
+        .await?)
+    }
+
+    /// The newest Highlander season ETF2L has listed.
+    pub async fn newest_etf2l_season(&self) -> Result<Option<i64>> {
+        Ok(sqlx::query_scalar("SELECT MAX(season) FROM etf2l_competition").fetch_one(self.pool()).await?)
+    }
+}

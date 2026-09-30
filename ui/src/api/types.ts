@@ -198,6 +198,33 @@ export interface RatingGuide {
   glossary: ComponentGuide[];
 }
 
+/** One ETF2L division's part of the league sample. */
+export interface LeagueTier {
+  tier: number;
+  division: string;
+  matches: number;
+  logs: number;
+  jsonLogstf: number;
+  jsonMoretf: number;
+  raw: number;
+  rawMissing: number;
+  maps: number;
+  rosters: number;
+  oldest: number | null;
+  newest: number | null;
+}
+
+/** Where the league sample stands. */
+export interface LeagueSample {
+  enabled: boolean;
+  discoveredAt: number | null;
+  logsListed: number;
+  tiers: LeagueTier[];
+  bytes: number;
+  logstfResting: boolean;
+  targetPerTier: number;
+}
+
 /** The newest log the owner is in, and whether a sync has seen it. */
 export interface NewestLog {
   logId: number;

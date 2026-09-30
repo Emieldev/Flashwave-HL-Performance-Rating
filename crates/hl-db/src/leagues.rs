@@ -170,13 +170,17 @@ impl Db {
         Ok(())
     }
 
-    /// Played matches whose own page has not been read yet, newest first.
-    pub async fn season_matches_without_detail(&self, limit: i64) -> Result<Vec<i64>> {
+    /// Played matches whose own page has not been read yet, newest first,
+    /// from `min_season` on: the league sample (0033) holds years of older
+    /// seasons whose pages it reads itself, and a sync should not.
+    pub async fn season_matches_without_detail(&self, limit: i64, min_season: i64) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar(
-            "SELECT match_id FROM etf2l_season_match WHERE detail_fetched = 0 AND default_win = 0
-             ORDER BY time DESC LIMIT ?1",
+            "SELECT m.match_id FROM etf2l_season_match m JOIN etf2l_competition c ON c.competition_id = m.competition_id
+             WHERE m.detail_fetched = 0 AND m.default_win = 0 AND c.season >= ?2
+             ORDER BY m.time DESC LIMIT ?1",
         )
         .bind(limit)
+        .bind(min_season)
         .fetch_all(self.pool())
         .await?)
     }

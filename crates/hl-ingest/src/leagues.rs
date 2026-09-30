@@ -8,7 +8,7 @@
 //! the owner's matches); a whole team's rated history is Q14b.
 
 use crate::sources::Sources;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use hl_core::SteamId;
 use hl_db::{CompetitionRow, Db, SeasonMatchRow};
 use serde::Serialize;
@@ -25,20 +25,28 @@ pub const DETAILS_PER_SYNC: i64 = 60;
 const MAX_LIST_PAGES: i64 = 25;
 
 /// `"Highlander Season 36 (Autumn 2026): Open Playoffs"` ->
-/// `(36, "Autumn 2026", "Open", "Playoffs")`.
+/// `(36, "Autumn 2026", "Open", "Playoffs")`. Seasons before 32 are named
+/// without the brackets -- `"Highlander Season 22: Premiership Qualifiers"`,
+/// or just `"Highlander Season 22"` -- and read as season `"Season 22"`.
 pub fn parse_name(name: &str) -> Option<(i64, String, String, String)> {
     let rest = name.strip_prefix("Highlander Season ")?;
-    let (num, rest) = rest.split_once(' ')?;
-    let season = num.parse().ok()?;
-    let rest = rest.strip_prefix('(')?;
-    let (season_name, rest) = rest.split_once(')')?;
+    let digits = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    let season: i64 = rest[..digits].parse().ok()?;
+    let rest = rest[digits..].trim_start();
+    let (season_name, rest) = match rest.strip_prefix('(') {
+        Some(r) => {
+            let (n, r) = r.split_once(')')?;
+            (n.to_string(), r)
+        }
+        None => (format!("Season {season}"), rest),
+    };
     let label = rest.trim_start_matches(':').trim();
-    const STAGES: [&str; 5] = ["Grand Final", "3rd Place", "Playoffs", "Final", "Relegation"];
+    const STAGES: [&str; 6] = ["Grand Final", "3rd Place", "Playoffs", "Final", "Relegation", "Qualifiers"];
     let (division, stage) = STAGES
         .iter()
         .find_map(|s| label.strip_suffix(s).map(|d| (d.trim().to_string(), (*s).to_string())))
         .unwrap_or_else(|| (label.to_string(), "regular".to_string()));
-    Some((season, season_name.to_string(), if division.is_empty() { label.to_string() } else { division }, stage))
+    Some((season, season_name, if division.is_empty() { label.to_string() } else { division }, stage))
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -61,7 +69,20 @@ fn team_of(v: &Value) -> Option<(i64, String, Option<String>, Option<String>)> {
 
 /// Refresh the last year's Highlander seasons. Best effort: ETF2L being
 /// down costs this sync's refresh, nothing else.
-pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, usize)) -> Result<FetchSummary> {
+pub async fn fetch(db: &Db, sources: &Sources, progress: impl FnMut(usize, usize)) -> Result<FetchSummary> {
+    fetch_seasons(db, sources, SEASONS_BACK, DETAILS_PER_SYNC, progress).await
+}
+
+/// [`fetch`] over `seasons_back` seasons before the newest, reading up to
+/// `details` match pages from the last [`SEASONS_BACK`]. The league sample
+/// asks for years of results and reads its own matches' pages.
+pub async fn fetch_seasons(
+    db: &Db,
+    sources: &Sources,
+    seasons_back: i64,
+    details: i64,
+    mut progress: impl FnMut(usize, usize),
+) -> Result<FetchSummary> {
     let mut out = FetchSummary::default();
 
     // 1. Which competitions: newest first, until the seasons run out.
@@ -69,7 +90,12 @@ pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, u
     let mut newest: Option<i64> = None;
     for page in 1..=MAX_LIST_PAGES {
         let Some(body) = sources.etf2l_get(&format!("/competition/list?page={page}")).await? else { break };
-        let v: Value = serde_json::from_str(&body).context("ETF2L competition list")?;
+        // ETF2L answers a busy moment with an HTML page: the walk ends
+        // there, and what it found so far is still read.
+        let Ok(v) = serde_json::from_str::<Value>(&body) else {
+            tracing::warn!(page, "ETF2L competition list page was not JSON; stopping there");
+            break;
+        };
         let data = v.pointer("/competitions/data").and_then(Value::as_array).cloned().unwrap_or_default();
         if data.is_empty() {
             break;
@@ -84,7 +110,7 @@ pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, u
             }
             let Some((season, ..)) = parse_name(name) else { continue };
             let top = *newest.get_or_insert(season);
-            if season >= top - SEASONS_BACK {
+            if season >= top - seasons_back {
                 wanted = true;
                 found.push((id, name.to_string(), c.get("archived").and_then(Value::as_bool).unwrap_or(false)));
             } else {
@@ -121,7 +147,10 @@ pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, u
         out.competitions += 1;
         for page in 1..=20 {
             let Some(body) = sources.etf2l_get(&format!("/competition/{id}/results?page={page}")).await? else { break };
-            let v: Value = serde_json::from_str(&body).context("ETF2L results")?;
+            let Ok(v) = serde_json::from_str::<Value>(&body) else {
+                tracing::warn!(competition = id, page, "ETF2L results page was not JSON; next refresh reads it");
+                break;
+            };
             let data = v.pointer("/results/data").and_then(Value::as_array).cloned().unwrap_or_default();
             for m in &data {
                 let (Some(c1), Some(c2)) = (m.get("clan1").and_then(team_of), m.get("clan2").and_then(team_of)) else { continue };
@@ -156,17 +185,27 @@ pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, u
     }
 
     // 3. Match pages: who played, and each map's score.
-    for match_id in db.season_matches_without_detail(DETAILS_PER_SYNC).await? {
-        let body = match sources.etf2l_get(&format!("/matches/{match_id}")).await {
-            Ok(Some(b)) => b,
-            _ => {
-                out.failed += 1;
-                continue;
-            }
-        };
-        let Ok(v) = serde_json::from_str::<Value>(&body) else {
+    let recent = newest.unwrap_or(0) - SEASONS_BACK;
+    for match_id in db.season_matches_without_detail(details, recent).await? {
+        if !fetch_match_detail(db, sources, match_id).await? {
             out.failed += 1;
             continue;
+        }
+        out.details += 1;
+    }
+    Ok(out)
+}
+
+/// Read one match's page: each map's score and who played. False when
+/// ETF2L would not give it.
+pub async fn fetch_match_detail(db: &Db, sources: &Sources, match_id: i64) -> Result<bool> {
+    {
+        let body = match sources.etf2l_get(&format!("/matches/{match_id}")).await {
+            Ok(Some(b)) => b,
+            _ => return Ok(false),
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&body) else {
+            return Ok(false);
         };
         let m = v.get("match").unwrap_or(&Value::Null);
         let maps: Vec<(i64, String, i64, i64, bool)> = m
@@ -198,9 +237,8 @@ pub async fn fetch(db: &Db, sources: &Sources, mut progress: impl FnMut(usize, u
         let maps_ref: Vec<(i64, &str, i64, i64, bool)> = maps.iter().map(|(o, m, a, b, g)| (*o, m.as_str(), *a, *b, *g)).collect();
         let players_ref: Vec<(u32, Option<i64>, &str)> = players.iter().map(|(a, t, n)| (*a, *t, n.as_str())).collect();
         db.put_season_match_detail(match_id, &maps_ref, &players_ref).await?;
-        out.details += 1;
     }
-    Ok(out)
+    Ok(true)
 }
 
 // ---- views ------------------------------------------------------------
@@ -315,7 +353,8 @@ pub async fn season(db: &Db, season: Option<i64>) -> Result<SeasonView> {
         teams.sort_by_key(|t| std::cmp::Reverse((t.record.won, t.score_for - t.score_against)));
         divisions.push(DivisionTable { division: div.clone(), teams });
     }
-    let pending_details = db.season_matches_without_detail(10_000).await?.len();
+    let recent = db.newest_etf2l_season().await?.unwrap_or(0) - SEASONS_BACK;
+    let pending_details = db.season_matches_without_detail(10_000, recent).await?.len();
     Ok(SeasonView { seasons, season: Some(chosen), divisions, pending_details })
 }
 
@@ -481,5 +520,8 @@ mod tests {
         assert_eq!(parse_name("Highlander Season 36 (Autumn 2026): Open Playoffs"), Some((36, "Autumn 2026".into(), "Open".into(), "Playoffs".into())));
         assert_eq!(parse_name("Highlander Season 36 (Autumn 2026): Low 3rd Place"), Some((36, "Autumn 2026".into(), "Low".into(), "3rd Place".into())));
         assert_eq!(parse_name("6v6 Season 50: Premiership"), None);
+        // Before season 32: no season name in brackets.
+        assert_eq!(parse_name("Highlander Season 22"), Some((22, "Season 22".into(), "".into(), "regular".into())));
+        assert_eq!(parse_name("Highlander Season 22: Premiership Qualifiers"), Some((22, "Season 22".into(), "Premiership".into(), "Qualifiers".into())));
     }
 }

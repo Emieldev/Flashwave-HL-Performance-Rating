@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { LeagueSamplePanel } from "./LeagueSamplePanel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, inTauri } from "../api/client";
 import { errorMessage, type AppStatus, type Cleaned, type DemoIndexSummary } from "../api/types";
@@ -39,6 +40,7 @@ export function Settings({
       <HistoryPanel />
       <ImportPanel />
       <Etf2lPanel />
+      <LeagueSamplePanel />
       <RawlogPanel />
       <DemosPanel />
       <DownloadedDemosPanel />

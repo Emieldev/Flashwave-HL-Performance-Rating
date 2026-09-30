@@ -8,6 +8,7 @@ mod aim;
 mod context;
 mod demos;
 mod fights;
+mod league_sample;
 mod leagues;
 mod matches;
 mod players;
@@ -30,6 +31,7 @@ pub use roundmap::{
 pub use ratings::{HistoryDbRow, RatingRow, VsTotals};
 pub use timeline::{TimelineRow, TimelineTotals};
 pub use leagues::{Competition, CompetitionRow, SeasonMap, SeasonMatch, SeasonMatchRow};
+pub use league_sample::{Candidate, LeagueLogRow, TierProgress};
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
 pub use matches::{
     FailedLog, IndexInfo, IndexStats, LogsTfIndexRow, MatchFilter, MatchPage, MatchSummary, PartSummary, MyLine,
@@ -364,6 +366,7 @@ mod frozen_migrations {
         ("0030_etf2l_seasons.sql", 0x96e012b7662cc3a6),
         ("0031_log_stand_in.sql", 0xc1cb597e502e6f16),
         ("0032_map_hints.sql", 0xf42b55ff5516d7dd),
+        ("0033_league_sample.sql", 0x60586fab4de9abc6),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {

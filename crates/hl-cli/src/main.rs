@@ -48,6 +48,10 @@ COMMANDS:
     guide [--json]         Every class's model: its components, their share of
                            the rating and what each one means (the app's 'How
                            ratings work' page)
+    league-sample [status|discover|run N]
+                           The ETF2L sample from every division: where it
+                           stands, list and choose the matches, or run N
+                           download steps (one request each, 5 s apart)
     who NAME|STEAMID       Look up another player in your matches
     failed                 Logs that would not import, and why
     import ID|URL          Fetch one log now, whatever the index thinks of it
@@ -1107,6 +1111,41 @@ async fn main() -> Result<()> {
                 let rating = r.rating.map_or("-".to_string(), |x| format!("{x:.2} {} ({} games)", r.class.as_deref().unwrap_or(""), r.games));
                 println!("  {:<22} {:>3} matches  {rating}", r.name.chars().take(22).collect::<String>(), r.matches);
             }
+            Ok(())
+        }
+
+        ["league-sample", rest @ ..] => {
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let print_status = |st: &hl_ingest::league_sample::Status| {
+                println!("{} logs listed, {:.0} MB held", st.logs_listed, st.bytes as f64 / 1e6);
+                println!("  tier division         matches  logs  json(logs.tf/more.tf)  raw(ok/missing)  maps  rosters");
+                for t in &st.tiers {
+                    println!(
+                        "  {:>4} {:<16} {:>4}/{}  {:>5}  {:>6} / {:<6}          {:>5} / {:<5}     {:>3}   {:>4}",
+                        t.tier, t.division, t.matches, st.target_per_tier, t.logs, t.json_logstf, t.json_moretf, t.raw, t.raw_missing, t.maps, t.rosters
+                    );
+                }
+            };
+            match rest {
+                ["discover"] => {
+                    let d = hl_ingest::league_sample::discover(&db, &sources, |what| eprintln!("{what}")).await?;
+                    println!("{} competitions, {} results, {} logs listed; picked {} matches ({} logs)", d.competitions, d.results, d.logs_listed, d.picked_matches, d.picked_logs);
+                }
+                ["run", n] => {
+                    let n: usize = n.parse()?;
+                    for i in 0..n {
+                        let s = hl_ingest::league_sample::step(&db, &sources).await?;
+                        println!("{i:>4} {}", serde_json::to_string(&s)?);
+                        if matches!(s, hl_ingest::league_sample::Step::Done) {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    }
+                }
+                _ => {}
+            }
+            print_status(&hl_ingest::league_sample::status(&db, &sources).await?);
             Ok(())
         }
 

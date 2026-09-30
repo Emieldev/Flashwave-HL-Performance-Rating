@@ -1557,3 +1557,12 @@ button.mini {
   overflow-x: auto;
   color: var(--text);
 }
+
+/* League sample (Settings) */
+.league-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 0.86rem; }
+.league-table th, .league-table td { padding: 6px 8px; border-top: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.league-table thead th { color: var(--muted); font-weight: 500; border-top: 0; }
+.league-table tbody th { font-weight: 600; }
+.league-bar { display: inline-flex; align-items: center; gap: 8px; min-width: 150px; }
+.league-bar .progress-track { width: 80px; }
+.league-bar-n { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.8rem; }

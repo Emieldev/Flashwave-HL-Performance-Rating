@@ -122,6 +122,24 @@ impl Sources {
         anyhow::bail!("trends.tf pagination did not terminate")
     }
 
+    /// One page of trends.tf's ETF2L Highlander logs, newest first: rows and
+    /// the path of the next page. For the league sample, which needs every
+    /// official's logs, not only the owner's.
+    pub async fn trends_league_page(&self, path: Option<&str>) -> Result<(Vec<TrendsRow>, Option<String>)> {
+        let path = path.unwrap_or("/api/v1/logs?league=etf2l&format=highlander&limit=100");
+        let body = self.trends.get_text(&format!("https://trends.tf{path}")).await?;
+        let page: Value = serde_json::from_str(&body).context("parsing trends.tf league page")?;
+        let rows = page
+            .get("logs")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|raw| serde_json::from_value::<TrendsRow>(raw.clone()).context("parsing trends.tf row"))
+            .collect::<Result<Vec<_>>>()?;
+        let next = page.get("next_page").and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_string);
+        Ok((rows, next))
+    }
+
     /// Every log logs.tf knows for this player, in one request. Covers the logs
     /// trends.tf never indexed — mostly 2014-2019 on this account.
     pub async fn logstf_search(&self, steamid64: &str) -> Result<Vec<(LogsTfRow, String)>> {

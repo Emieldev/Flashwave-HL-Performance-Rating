@@ -60,6 +60,7 @@ import type {
   NewDemo,
   NewestLog,
   RatingGuide,
+  LeagueSample,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -93,6 +94,8 @@ const realApi = {
   syncBusy: () => invoke<boolean>("sync_busy"),
   newestLog: () => invoke<NewestLog | null>("newest_log"),
   getRatingGuide: () => invoke<RatingGuide>("get_rating_guide"),
+  getLeagueSample: () => invoke<LeagueSample>("get_league_sample"),
+  setLeagueSample: (on: boolean) => invoke<void>("set_league_sample", { on }),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

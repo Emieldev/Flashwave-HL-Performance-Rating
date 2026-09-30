@@ -253,6 +253,18 @@ pub async fn get_rating_guide(state: State<'_, AppState>) -> CmdResult<hl_rating
     Ok(hl_rating::guide::guide(&weights))
 }
 
+/// Where the league sample stands (Settings).
+#[tauri::command]
+pub async fn get_league_sample(state: State<'_, AppState>) -> CmdResult<hl_ingest::league_sample::Status> {
+    Ok(hl_ingest::league_sample::status(&state.db, &state.sources).await?)
+}
+
+/// Switch the league sample's background download on or off.
+#[tauri::command]
+pub async fn set_league_sample(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
+    Ok(hl_ingest::league_sample::set_enabled(&state.db, on).await?)
+}
+
 /// The newest log the owner is in, and whether a sync has seen it yet.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
