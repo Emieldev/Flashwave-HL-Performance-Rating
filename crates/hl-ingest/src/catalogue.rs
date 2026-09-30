@@ -505,6 +505,276 @@ pub async fn index_league_players(db: &Db, limit: i64) -> Result<usize> {
     Ok(n)
 }
 
+// ---- Ratings, stat bars and ranks (Q36) ----------------------------------
+
+/// Games in a season, class and division before a player is ranked.
+pub const MIN_RANK_GAMES: usize = 8;
+/// "Recent form": the games in this long before a player's newest.
+const RECENT_S: i64 = 90 * 24 * 3600;
+/// Recent games needed before the bars show recent form, not the career.
+const MIN_RECENT_GAMES: usize = 5;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassStats {
+    pub class: String,
+    pub games: usize,
+    pub career: f64,
+    pub recent: Option<f64>,
+    pub recent_games: usize,
+    pub best: f64,
+    /// Each component group, 0-100 (recent form where there is enough of
+    /// it, else the career): the stat bars.
+    pub groups: Vec<(String, f64)>,
+    pub groups_recent: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rank {
+    pub season: i64,
+    pub season_name: String,
+    pub division: String,
+    pub tier: i64,
+    pub class: String,
+    pub rank: usize,
+    pub of: usize,
+    pub avg: f64,
+    pub games: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerStats {
+    /// Most played first.
+    pub classes: Vec<ClassStats>,
+    /// Newest season first, best rank first within it.
+    pub ranks: Vec<Rank>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RankRow {
+    pub rank: usize,
+    pub account_id: u32,
+    pub name: String,
+    pub team: Option<Team>,
+    pub games: usize,
+    pub avg: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rankings {
+    pub season: i64,
+    pub season_name: String,
+    pub division: String,
+    pub tier: i64,
+    pub class: String,
+    pub rows: Vec<RankRow>,
+    /// Seasons that can be ranked, newest first: `(season, name)`.
+    pub seasons: Vec<(i64, String)>,
+    /// Tiers seen in the chosen season: `(tier, name)`.
+    pub divisions: Vec<(i64, String)>,
+}
+
+impl Catalogue {
+    /// Each season's dates, from its officials: `(season, name, from, to)`,
+    /// a few days either side for the matches played around them. Newest
+    /// first.
+    fn season_windows(&self) -> Vec<(i64, String, i64, i64)> {
+        let mut w: BTreeMap<i64, (String, i64, i64)> = BTreeMap::new();
+        for m in self.matches.values() {
+            let Some(t) = m.time else { continue };
+            let e = w.entry(m.season).or_insert((m.season_name.clone(), t, t));
+            e.1 = e.1.min(t);
+            e.2 = e.2.max(t);
+        }
+        const SLACK: i64 = 3 * 24 * 3600;
+        w.into_iter().rev().map(|(s, (n, a, b))| (s, n, a - SLACK, b + SLACK)).collect()
+    }
+
+    /// Every player's division each season: the tier they played most
+    /// officials in, and the team they played them for.
+    fn divisions(&self) -> HashMap<(u32, i64), (i64, String, i64)> {
+        let mut count: HashMap<(u32, i64), HashMap<(i64, String, i64), u32>> = HashMap::new();
+        for (match_id, roster) in &self.rosters {
+            let Some(m) = self.matches.get(match_id) else { continue };
+            let (division, Some(tier)) = self.division_of(m) else { continue };
+            for (a, team, _) in roster {
+                let Some(team) = team else { continue };
+                *count.entry((*a, m.season)).or_default().entry((tier, division.clone(), *team)).or_default() += 1;
+            }
+        }
+        count.into_iter().filter_map(|(k, v)| Some((k, v.into_iter().max_by_key(|(_, n)| *n)?.0))).collect()
+    }
+
+    fn name_of(&self, account: u32) -> String {
+        let mut newest: Option<(i64, &str)> = None;
+        for (match_id, roster) in &self.rosters {
+            let t = self.matches.get(match_id).and_then(|m| m.time).unwrap_or(0);
+            for (a, _, n) in roster {
+                if *a == account && !n.is_empty() && newest.is_none_or(|(nt, _)| t > nt) {
+                    newest = Some((t, n));
+                }
+            }
+        }
+        newest.map_or_else(|| SteamId::from_account_id(account).to_steamid64(), |(_, n)| n.to_string())
+    }
+}
+
+fn season_of(windows: &[(i64, String, i64, i64)], at: i64) -> Option<i64> {
+    windows.iter().find(|(_, _, a, b)| at >= *a && at <= *b).map(|(s, _, _, _)| *s)
+}
+
+fn groups_of(g: &hl_db::RatedGame) -> Vec<(String, f64)> {
+    if let Some(groups) = &g.groups {
+        return serde_json::from_str::<serde_json::Map<String, Value>>(groups)
+            .map(|m| m.into_iter().filter_map(|(k, v)| Some((k, v.as_f64()?))).collect())
+            .unwrap_or_default();
+    }
+    let Some(parts) = g.parts.as_deref().and_then(|p| serde_json::from_str::<Vec<hl_rating::model::Part>>(p).ok()) else { return Vec::new() };
+    hl_rating::guide::group_scores(&parts).into_iter().map(|(g, v)| (g.key().to_string(), v)).collect()
+}
+
+fn mean(xs: impl Iterator<Item = f64>) -> Option<f64> {
+    let (s, n) = xs.fold((0.0, 0usize), |(s, n), x| (s + x, n + 1));
+    (n > 0).then(|| s / n as f64)
+}
+
+/// One season, division and class, everyone with enough games, best first:
+/// `(account, games, average, team)`.
+fn rank_table(
+    games: &[hl_db::RatedGame],
+    windows: &[(i64, String, i64, i64)],
+    divisions: &HashMap<(u32, i64), (i64, String, i64)>,
+    season: i64,
+    tier: i64,
+    class: &str,
+) -> Vec<(u32, usize, f64, i64)> {
+    let mut by: HashMap<u32, Vec<f64>> = HashMap::new();
+    for g in games.iter().filter(|g| g.class == class) {
+        if season_of(windows, g.played_at) != Some(season) {
+            continue;
+        }
+        if divisions.get(&(g.account_id, season)).is_some_and(|(t, _, _)| *t == tier) {
+            by.entry(g.account_id).or_default().push(g.score);
+        }
+    }
+    let mut rows: Vec<(u32, usize, f64, i64)> = by
+        .into_iter()
+        .filter(|(_, v)| v.len() >= MIN_RANK_GAMES)
+        .map(|(a, v)| (a, v.len(), v.iter().sum::<f64>() / v.len() as f64, divisions[&(a, season)].2))
+        .collect();
+    rows.sort_by(|a, b| b.2.total_cmp(&a.2));
+    rows
+}
+
+/// One player's ratings per class, stat bars and ranks.
+pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
+    let version = hl_rating::MODEL_VERSION;
+    let mine = db.rated_games(version, Some(account)).await?;
+    let mut by_class: HashMap<&str, Vec<&hl_db::RatedGame>> = HashMap::new();
+    for g in &mine {
+        by_class.entry(g.class.as_str()).or_default().push(g);
+    }
+    let order = |k: &str| hl_rating::guide::Group::ALL.iter().position(|g| g.key() == k).unwrap_or(9);
+    let mut classes: Vec<ClassStats> = Vec::new();
+    for (class, games) in by_class {
+        let newest = games.iter().map(|g| g.played_at).max().unwrap_or(0);
+        let recent: Vec<&hl_db::RatedGame> = games.iter().copied().filter(|g| g.played_at >= newest - RECENT_S).collect();
+        let use_recent = recent.len() >= MIN_RECENT_GAMES;
+        let pool: &[&hl_db::RatedGame] = if use_recent { &recent } else { &games };
+        let mut sums: BTreeMap<String, (f64, usize)> = BTreeMap::new();
+        for g in pool {
+            for (k, v) in groups_of(g) {
+                let e = sums.entry(k).or_default();
+                e.0 += v;
+                e.1 += 1;
+            }
+        }
+        let mut groups: Vec<(String, f64)> = sums.into_iter().map(|(k, (s, n))| (k, s / n as f64)).collect();
+        groups.sort_by_key(|(k, _)| order(k));
+        classes.push(ClassStats {
+            class: class.to_string(),
+            games: games.len(),
+            career: mean(games.iter().map(|g| g.score)).unwrap_or(0.0),
+            recent: mean(recent.iter().map(|g| g.score)).filter(|_| use_recent),
+            recent_games: recent.len(),
+            best: games.iter().map(|g| g.score).fold(f64::MIN, f64::max),
+            groups,
+            groups_recent: use_recent,
+        });
+    }
+    classes.sort_by(|a, b| b.games.cmp(&a.games));
+
+    // Ranks: every season they have a division in, on every class they
+    // played enough that season.
+    let cat = Catalogue::load(db).await?;
+    let windows = cat.season_windows();
+    let divisions = cat.divisions();
+    let mut theirs: BTreeMap<(i64, String), usize> = BTreeMap::new();
+    for g in &mine {
+        if let Some(s) = season_of(&windows, g.played_at) {
+            *theirs.entry((s, g.class.clone())).or_default() += 1;
+        }
+    }
+    let mut ranks = Vec::new();
+    if theirs.values().any(|n| *n >= MIN_RANK_GAMES) {
+        let everyone = db.rated_games(version, None).await?;
+        for ((season, class), n) in theirs {
+            if n < MIN_RANK_GAMES {
+                continue;
+            }
+            let Some((tier, division, _)) = divisions.get(&(account, season)).cloned() else { continue };
+            let table = rank_table(&everyone, &windows, &divisions, season, tier, &class);
+            if let Some(i) = table.iter().position(|r| r.0 == account) {
+                let name = windows.iter().find(|w| w.0 == season).map(|w| w.1.clone()).unwrap_or_default();
+                ranks.push(Rank { season, season_name: name, division, tier, class, rank: i + 1, of: table.len(), avg: table[i].2, games: table[i].1 });
+            }
+        }
+    }
+    ranks.sort_by(|a, b| b.season.cmp(&a.season).then(a.rank.cmp(&b.rank)));
+    Ok(PlayerStats { classes, ranks })
+}
+
+/// A season's ranking for one division and class; the newest season with
+/// rated games, and the top tier, when not given.
+pub async fn rankings(db: &Db, season: Option<i64>, tier: Option<i64>, class: &str) -> Result<Rankings> {
+    let cat = Catalogue::load(db).await?;
+    let windows = cat.season_windows();
+    let divisions = cat.divisions();
+    let everyone = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
+    let seasons: Vec<(i64, String)> = windows
+        .iter()
+        .filter(|(_, _, a, b)| everyone.iter().any(|g| g.played_at >= *a && g.played_at <= *b))
+        .map(|(s, n, _, _)| (*s, n.clone()))
+        .collect();
+    let season = season.or_else(|| seasons.first().map(|s| s.0)).unwrap_or(0);
+    let mut tiers: BTreeMap<i64, String> = BTreeMap::new();
+    for ((_, s), (t, d, _)) in &divisions {
+        if *s == season {
+            tiers.entry(*t).or_insert_with(|| d.clone());
+        }
+    }
+    let tier = tier.or_else(|| tiers.keys().next().copied()).unwrap_or(0);
+    let rows = rank_table(&everyone, &windows, &divisions, season, tier, class)
+        .into_iter()
+        .enumerate()
+        .map(|(i, (a, n, avg, team))| RankRow { rank: i + 1, account_id: a, name: cat.name_of(a), team: Some(cat.team(team)), games: n, avg })
+        .collect();
+    Ok(Rankings {
+        season,
+        season_name: seasons.iter().find(|s| s.0 == season).map(|s| s.1.clone()).unwrap_or_default(),
+        division: tiers.get(&tier).cloned().unwrap_or_default(),
+        tier,
+        class: class.to_string(),
+        rows,
+        seasons,
+        divisions: tiers.into_iter().collect(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

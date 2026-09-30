@@ -6,6 +6,7 @@ import { formatDate } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
 import { t, tx } from "../../lib/i18n";
+import { PlayerStatsCard, RankChip } from "./PlayerStats";
 
 /**
  * A player's profile, HLTV-style (Q35, Flashy; PLAN §26): who they are,
@@ -112,6 +113,7 @@ function Header({ p }: { p: Profile }) {
             <dt>{t("Officials")}</dt>
             <dd>{tx("{0} in {1} season{2}", { "0": p.officials.length, "1": new Set(p.seasons.map((s) => s.season)).size, "2": new Set(p.seasons.map((s) => s.season)).size === 1 ? "" : "s" })}</dd>
           </dl>
+          <HeaderRanks accountId={p.accountId} />
           {titles.length > 0 && (
             <div className="pp-titles">
               {titles.map(([label, n, place]) => (
@@ -140,6 +142,24 @@ function Header({ p }: { p: Profile }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The newest season's ranks, best first, beside the name like HLTV's Top 20. */
+function HeaderRanks({ accountId }: { accountId: number }) {
+  const q = useQuery({ queryKey: ["player_stats", accountId], queryFn: () => api.getPlayerStats(accountId) });
+  const ranks = q.data?.ranks ?? [];
+  if (ranks.length === 0) return null;
+  const newest = ranks[0].season;
+  return (
+    <div className="pp-ranks">
+      {ranks
+        .filter((r) => r.season === newest)
+        .slice(0, 3)
+        .map((r) => (
+          <RankChip key={r.class} r={r} />
+        ))}
     </div>
   );
 }
@@ -212,24 +232,8 @@ function Overview({ p }: { p: Profile }) {
         </ul>
       </section>
       <section>
-        <h3>{t("Classes played")}</h3>
-        {p.playedClasses.length === 0 ? (
-          <p className="hint">{t("None of their games are in the logs held.")}</p>
-        ) : (
-          <ul className="pp-class-list">
-            {p.playedClasses.slice(0, 5).map(([c, n]) => (
-              <li key={c}>
-                <ClassIcon cls={c} size={18} />
-                <span>{classLabel(c)}</span>
-                <span className="pp-class-bar" aria-hidden>
-                  <i style={{ width: `${(n / p.playedClasses[0][1]) * 100}%` }} />
-                </span>
-                <span className="muted">{tx("{0} games", { "0": n })}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="hint" style={{ marginTop: 8 }}>{t("Games where it was their main class, in your matches and the league sample.")}</p>
+        <h3>{t("Rating")}</h3>
+        <PlayerStatsCard accountId={p.accountId} />
       </section>
     </div>
   );

@@ -32,6 +32,20 @@ pub struct CatMatch {
 /// One player in one official: `(match, account, team, name)`.
 pub type RosterRow = (i64, u32, Option<i64>, String);
 
+/// One rated game of anyone's, for profiles and ranks (Q36): the owner's
+/// matches carry the full breakdown (`parts`, a JSON list); the league
+/// sample's carry the component groups already worked out (`groups`).
+#[derive(Debug, Clone)]
+pub struct RatedGame {
+    pub account_id: u32,
+    pub log_id: i64,
+    pub played_at: i64,
+    pub class: String,
+    pub score: f64,
+    pub parts: Option<String>,
+    pub groups: Option<String>,
+}
+
 /// ETF2L's page for a player, as kept.
 #[derive(Debug, Clone, Default)]
 pub struct Etf2lPlayer {
@@ -161,6 +175,63 @@ impl Db {
         }
         tx.commit().await?;
         Ok(())
+    }
+
+    /// The league sample's ratings for a model: `(log, account, class,
+    /// score, minutes, groups JSON)`, replacing the model's old ones.
+    pub async fn replace_league_ratings(&self, version: &str, rows: &[(i64, u32, &str, f64, f64, String)]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        sqlx::query("DELETE FROM league_rating WHERE model_version = ?1").bind(version).execute(&mut *tx).await?;
+        for (log_id, account, class, score, minutes, groups) in rows {
+            sqlx::query(
+                "INSERT OR REPLACE INTO league_rating (model_version, log_id, account_id, class, score, minutes, groups)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )
+            .bind(version)
+            .bind(log_id)
+            .bind(i64::from(*account))
+            .bind(class)
+            .bind(score)
+            .bind(minutes)
+            .bind(groups)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Every rated game -- the owner's matches and the league sample -- for
+    /// one account, or everyone's. A game in both is counted once, from the
+    /// owner's matches.
+    pub async fn rated_games(&self, version: &str, account: Option<u32>) -> Result<Vec<RatedGame>> {
+        let rows = sqlx::query(
+            "SELECT r.account_id, r.log_id, COALESCE(m.played_at, 0) AS played_at, r.class, r.score,
+                    r.parts AS parts, NULL AS groups
+             FROM rating r JOIN match m ON m.log_id = r.log_id
+             WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
+             UNION ALL
+             SELECT r.account_id, r.log_id, l.played_at, r.class, r.score, NULL, r.groups
+             FROM league_rating r JOIN league_log l ON l.log_id = r.log_id
+             WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
+               AND r.log_id NOT IN (SELECT log_id FROM log_index)",
+        )
+        .bind(version)
+        .bind(account.map(i64::from))
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| RatedGame {
+                account_id: r.get::<i64, _>("account_id") as u32,
+                log_id: r.get("log_id"),
+                played_at: r.get("played_at"),
+                class: r.get("class"),
+                score: r.get("score"),
+                parts: r.get("parts"),
+                groups: r.get("groups"),
+            })
+            .collect())
     }
 
     pub async fn etf2l_player(&self, account: u32) -> Result<Option<Etf2lPlayer>> {

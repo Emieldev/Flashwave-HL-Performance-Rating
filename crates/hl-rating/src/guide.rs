@@ -30,6 +30,44 @@ pub enum Group {
     Speciality,
 }
 
+impl Group {
+    pub const ALL: [Group; 6] = [Group::Fragging, Group::Survival, Group::Teamplay, Group::Objective, Group::Medic, Group::Speciality];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Group::Fragging => "fragging",
+            Group::Survival => "survival",
+            Group::Teamplay => "teamplay",
+            Group::Objective => "objective",
+            Group::Medic => "medic",
+            Group::Speciality => "speciality",
+        }
+    }
+}
+
+/// One game's standing in each component group, 0-100: the group's
+/// components' percentiles weighted by their share of the rating. A group
+/// the class's model has nothing in is left out. The stat bars of a player
+/// profile (Q36), HLTV's "Firepower, Entrying, ..." for Highlander.
+pub fn group_scores(parts: &[crate::model::Part]) -> Vec<(Group, f64)> {
+    Group::ALL
+        .into_iter()
+        .filter_map(|g| {
+            let (sum, weight) = parts
+                .iter()
+                .filter(|p| p.component.group() == g && p.weight > 0.0)
+                .fold((0.0, 0.0), |(s, w), p| (s + p.percentile * p.weight, w + p.weight));
+            (weight > 0.0).then(|| (g, sum / weight))
+        })
+        .collect()
+}
+
+/// The same as a JSON object keyed by group: `{"fragging": 71.2, ...}`.
+pub fn group_scores_json(parts: &[crate::model::Part]) -> String {
+    let fields: Vec<String> = group_scores(parts).into_iter().map(|(g, v)| format!("\"{}\":{:.1}", g.key(), v)).collect();
+    format!("{{{}}}", fields.join(","))
+}
+
 /// Where a component's numbers come from, which decides which games have it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -211,5 +249,17 @@ mod tests {
         }
         assert_eq!(g.glossary.len(), Component::ALL.len());
         assert!(g.glossary.iter().all(|c| c.description.len() > 20), "every component explained");
+    }
+
+    #[test]
+    fn a_group_is_its_components_percentiles_weighted_by_share() {
+        use crate::model::Part;
+        let part = |c: Component, pct: f64, weight: f64| Part { component: c, label: String::new(), unit: String::new(), raw: 0.0, percentile: pct, weight };
+        let parts = [part(Component::Deaths, 80.0, 0.3), part(Component::UntradedDeaths, 40.0, 0.1), part(Component::MedicPicks, 90.0, 0.2)];
+        let g: std::collections::HashMap<&str, f64> = group_scores(&parts).into_iter().map(|(g, v)| (g.key(), v)).collect();
+        assert!((g["survival"] - 70.0).abs() < 1e-9, "(80 x .3 + 40 x .1) / .4");
+        assert!((g["teamplay"] - 90.0).abs() < 1e-9);
+        assert!(!g.contains_key("medic"), "a group with nothing in it is left out");
+        assert_eq!(group_scores_json(&parts), r#"{"survival":70.0,"teamplay":90.0}"#);
     }
 }

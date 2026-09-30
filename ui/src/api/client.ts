@@ -64,6 +64,8 @@ import type {
   LeagueActivity,
   CatalogueHit,
   PlayerProfile,
+  PlayerStats,
+  Rankings,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -102,6 +104,8 @@ const realApi = {
   getLeagueActivity: () => invoke<LeagueActivity>("get_league_activity"),
   searchCatalogue: (query: string) => invoke<CatalogueHit[]>("search_catalogue", { query }),
   getPlayerProfile: (accountId: number) => invoke<PlayerProfile>("get_player_profile", { accountId }),
+  getPlayerStats: (accountId: number) => invoke<PlayerStats>("get_player_stats", { accountId }),
+  getRankings: (season: number | null, tier: number | null, cls: string) => invoke<Rankings>("get_rankings", { season, tier, class: cls }),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

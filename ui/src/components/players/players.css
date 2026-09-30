@@ -255,3 +255,29 @@
 .ph-medal { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: inline-grid; place-items: center; font-size: 0.72rem; font-weight: 800; color: #1b1714; background: var(--medal); }
 .pp-links a { color: var(--accent-text); text-decoration: none; }
 .pp-links a:hover { text-decoration: underline; }
+
+/* ---- Ratings, stat bars and ranks (Q36) ---- */
+.pp-ranks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ps-rank { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 6px; background: var(--sunken); border: 1px solid var(--border); font-size: 0.84rem; }
+.ps-rank strong { color: var(--accent-text); }
+.ps-classes { display: flex; flex-wrap: wrap; gap: 4px; }
+.ps-class { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--sunken); color: var(--muted); font: inherit; font-size: 0.78rem; cursor: pointer; }
+.ps-class.on { border-color: var(--accent-2); color: var(--text); }
+.ps-rating { display: flex; align-items: baseline; justify-content: space-between; margin-top: 12px; }
+.ps-rating-label { color: var(--muted); font-size: 0.85rem; }
+.ps-rating-value { font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ps-sub { margin: 2px 0 10px; }
+.ps-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ps-bars li { display: grid; grid-template-columns: 1fr auto; row-gap: 4px; font-size: 0.86rem; }
+.ps-bar-label { font-weight: 600; }
+.ps-bar-value { font-variant-numeric: tabular-nums; font-weight: 700; }
+.ps-bar-track { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.ps-bar-track i { display: block; height: 100%; border-radius: 0 3px 3px 0; }
+.ps-foot { margin-top: 10px; font-size: 0.78rem; }
+.ps-ranks { margin-top: 14px; }
+.ps-ranks h4 { margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.ps-ranks ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ps-ranks li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.84rem; }
+.tp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+.tp-row { cursor: pointer; }
+.tp-row:hover td { background: var(--raised); }

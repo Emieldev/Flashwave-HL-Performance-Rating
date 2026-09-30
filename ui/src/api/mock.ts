@@ -53,7 +53,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -1198,6 +1198,30 @@ export const mockApi: Api = {
   searchCatalogue: (query: string) =>
     delay(MOCK_HITS.filter((h) => h.name.toLowerCase().includes(query.trim().toLowerCase()))),
   getPlayerProfile: (accountId: number) => delay(mockProfile(accountId)),
+  // The numbers the owner's real profile gave on a copy of the database.
+  getPlayerStats: () =>
+    delay({
+      classes: [
+        { class: "sniper", games: 664, career: 1.02, recent: 1.0, recentGames: 41, best: 1.65, groups: [["fragging", 46], ["survival", 51], ["teamplay", 59], ["objective", 50]], groupsRecent: true },
+        { class: "engineer", games: 29, career: 0.98, recent: 0.94, recentGames: 9, best: 1.39, groups: [["fragging", 67], ["survival", 39], ["teamplay", 45], ["objective", 30]], groupsRecent: true },
+        { class: "scout", games: 15, career: 1.05, recent: null, recentGames: 2, best: 1.47, groups: [["fragging", 61], ["survival", 46], ["teamplay", 55], ["objective", 44]], groupsRecent: false },
+      ],
+      ranks: [
+        { season: 34, seasonName: "Summer 2025", division: "Mid", tier: 2, class: "sniper", rank: 6, of: 7, avg: 0.97, games: 66 },
+        { season: 33, seasonName: "Spring 2025", division: "Low", tier: 3, class: "sniper", rank: 3, of: 7, avg: 1.1, games: 102 },
+      ],
+    } as PlayerStats),
+  getRankings: (season: number | null, tier: number | null, cls: string) =>
+    delay({
+      season: season ?? 36,
+      seasonName: "Autumn 2026",
+      division: ["Premiership", "High", "Mid", "Low", "Open"][tier ?? 0],
+      tier: tier ?? 0,
+      class: cls,
+      rows: MOCK_HITS.map((h, i) => ({ rank: i + 1, accountId: h.accountId, name: h.name, team: { id: i, name: ["DD14", "Froyotech", "SBQRRA"][i], avatar: null }, games: 14 - i * 3, avg: 1.24 - i * 0.11 })),
+      seasons: [[36, "Autumn 2026"], [35, "Spring 2026"], [34, "Summer 2025"]],
+      divisions: [[0, "Premiership"], [1, "High"], [2, "Mid"], [3, "Low"], [4, "Open"]],
+    } as Rankings),
   setLeagueSample: async (on: boolean) => {
     leagueSample = { ...leagueSample, enabled: on };
   },

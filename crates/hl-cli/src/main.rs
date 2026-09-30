@@ -1179,7 +1179,32 @@ async fn main() -> Result<()> {
                 for s in &p.seasons {
                     println!("  S{:<3} {:<12} {:<24} {:>2}-{:<2} of {:>2}{}", s.season, s.division, s.team.name.chars().take(24).collect::<String>(), s.won, s.lost, s.played, s.place.map_or(String::new(), |p| format!("  #{p}")));
                 }
+                let st = hl_ingest::catalogue::player_stats(&db, h.account_id).await?;
+                for c in &st.classes {
+                    println!(
+                        "  {:<9} {:>4} games  career {:.2}  recent {}  best {:.2}  bars{}: {}",
+                        c.class, c.games, c.career, c.recent.map_or("-".into(), |r| format!("{r:.2}")), c.best,
+                        if c.groups_recent { " (recent)" } else { "" },
+                        c.groups.iter().map(|(g, v)| format!("{g} {v:.0}")).collect::<Vec<_>>().join(", ")
+                    );
+                }
+                for r in &st.ranks {
+                    println!("  #{} of {} {} in {} S{} ({:.2} over {} games)", r.rank, r.of, r.class, r.division, r.season, r.avg, r.games);
+                }
                 println!("  {} officials; latest: {}", p.officials.len(), p.officials.iter().take(3).map(|o| format!("{} vs {} {}-{}", o.team.name, o.opponent.name, o.score_for.unwrap_or(0), o.score_against.unwrap_or(0))).collect::<Vec<_>>().join("; "));
+            }
+            Ok(())
+        }
+
+        ["rankings", class, rest @ ..] => {
+            // Q36: one season's ranking of a class in a division.
+            let db = Db::connect(&db_path).await?;
+            let tier = rest.first().and_then(|t| t.parse().ok());
+            let season = rest.get(1).and_then(|s| s.parse().ok());
+            let r = hl_ingest::catalogue::rankings(&db, season, tier, class).await?;
+            println!("{} in {} (tier {}), S{} {}: {} ranked", r.class, r.division, r.tier, r.season, r.season_name, r.rows.len());
+            for x in r.rows.iter().take(20) {
+                println!("  #{:<3} {:<22} {:<24} {:.2} over {}", x.rank, x.name.chars().take(22).collect::<String>(), x.team.as_ref().map_or(String::new(), |t| t.name.chars().take(24).collect()), x.avg, x.games);
             }
             Ok(())
         }

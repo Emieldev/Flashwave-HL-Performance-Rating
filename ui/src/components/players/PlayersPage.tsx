@@ -7,6 +7,7 @@ import { ClassIcon } from "../ClassIcon";
 import "./players.css";
 import { t, tx } from "../../lib/i18n";
 import { DivisionBadge, PlayerProfile } from "./PlayerProfile";
+import { TopPlayers } from "./PlayerStats";
 
 /**
  * Look other people up (Q14).
@@ -56,6 +57,7 @@ export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
       </div>
 
       {picked !== null && <PlayerProfile key={picked} accountId={picked} yours={<PlayerCard accountId={picked} onOpenMatch={onOpenMatch} />} />}
+      {picked === null && <TopPlayers onPick={setPicked} />}
     </div>
   );
 }

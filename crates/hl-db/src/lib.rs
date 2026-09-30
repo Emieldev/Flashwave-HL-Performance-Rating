@@ -32,7 +32,7 @@ pub use roundmap::{
 pub use ratings::{HistoryDbRow, RatingRow, VsTotals};
 pub use timeline::{TimelineRow, TimelineTotals};
 pub use leagues::{Competition, CompetitionRow, SeasonMap, SeasonMatch, SeasonMatchRow};
-pub use catalogue::{CatMatch, Etf2lPlayer, RosterRow};
+pub use catalogue::{CatMatch, Etf2lPlayer, RatedGame, RosterRow};
 pub use league_sample::{Candidate, LeagueLogRow, TierProgress};
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
 pub use matches::{
@@ -370,6 +370,7 @@ mod frozen_migrations {
         ("0032_map_hints.sql", 0xf42b55ff5516d7dd),
         ("0033_league_sample.sql", 0x60586fab4de9abc6),
         ("0034_player_catalogue.sql", 0xd034c4bcfbebec48),
+        ("0035_league_rating.sql", 0xd109c7e71d4b431f),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {

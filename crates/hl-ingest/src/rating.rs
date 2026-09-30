@@ -75,11 +75,9 @@ pub async fn rate_all(
     // arrives lands on the same scale as the games it is listed beside.
     // Measured over the league too: 1.00 is a typical league game. Only the
     // owner's own logs' ratings are stored; the sample's are not theirs.
-    let raw: Vec<f64> = scored
-        .iter()
-        .map(|(_, _, r)| r.score)
-        .chain(league.iter().filter_map(|(_, p)| rate(p, &baseline, w)).map(|r| r.score))
-        .collect();
+    let league_rated: Vec<(i64, u32, hl_rating::Rating)> =
+        league.iter().filter_map(|(log_id, p)| Some((*log_id, p.account_id, rate(p, &baseline, w)?))).collect();
+    let raw: Vec<f64> = scored.iter().chain(league_rated.iter()).map(|(_, _, r)| r.score).collect();
     let Some(scale) = Scale::of(&raw) else {
         // Nothing to measure: leave the last scale and the last ratings alone
         // rather than writing numbers that mean nothing.
@@ -100,6 +98,17 @@ pub async fn rate_all(
         });
     }
     db.replace_ratings(MODEL_VERSION, &rows).await?;
+
+    // The league sample's ratings, apart from the owner's (Q36): every
+    // player's rating, stat bars and rank, not only the players the owner met.
+    let league_rows: Vec<(i64, u32, &str, f64, f64, String)> = league_rated
+        .into_iter()
+        .map(|(log_id, account, r)| {
+            let r = r.scaled(&scale);
+            (log_id, account, r.class.as_str(), r.score, r.minutes, hl_rating::guide::group_scores_json(&r.parts))
+        })
+        .collect();
+    db.replace_league_ratings(MODEL_VERSION, &league_rows).await?;
     progress(Progress::Rating { done: total, total });
 
     Ok(RateSummary { logs: total, performances: perfs.len(), rated: rows.len(), mine })

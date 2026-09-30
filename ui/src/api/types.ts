@@ -295,6 +295,47 @@ export interface PlayerProfile {
   etf2lId: number | null;
 }
 
+/** One class of a player's ratings (Q36). */
+export interface ClassStats {
+  class: string;
+  games: number;
+  career: number;
+  recent: number | null;
+  recentGames: number;
+  best: number;
+  /** Component group -> 0-100: the stat bars. */
+  groups: [string, number][];
+  groupsRecent: boolean;
+}
+
+export interface Rank {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number;
+  class: string;
+  rank: number;
+  of: number;
+  avg: number;
+  games: number;
+}
+
+export interface PlayerStats {
+  classes: ClassStats[];
+  ranks: Rank[];
+}
+
+export interface Rankings {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number;
+  class: string;
+  rows: { rank: number; accountId: number; name: string; team: CatTeam | null; games: number; avg: number }[];
+  seasons: [number, string][];
+  divisions: [number, string][];
+}
+
 /** What the league sample's job is doing right now. */
 export interface LeagueActivity {
   state: "starting" | "working" | "waiting" | "resting" | "sync" | "paused" | "done";

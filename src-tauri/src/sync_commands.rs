@@ -1280,6 +1280,18 @@ pub async fn get_player_profile(state: State<'_, AppState>, account_id: u32) -> 
     Ok(hl_ingest::catalogue::profile(&state.db, &state.sources, account_id).await?)
 }
 
+/// A player's ratings per class, stat bars and ranks (Q36).
+#[tauri::command]
+pub async fn get_player_stats(state: State<'_, AppState>, account_id: u32) -> CmdResult<hl_ingest::catalogue::PlayerStats> {
+    Ok(hl_ingest::catalogue::player_stats(&state.db, account_id).await?)
+}
+
+/// One season's ranking of a class in a division (Q36).
+#[tauri::command]
+pub async fn get_rankings(state: State<'_, AppState>, season: Option<i64>, tier: Option<i64>, class: String) -> CmdResult<hl_ingest::catalogue::Rankings> {
+    Ok(hl_ingest::catalogue::rankings(&state.db, season, tier, &class).await?)
+}
+
 /// Find a player by name or by any form of Steam ID.
 #[tauri::command]
 pub async fn search_players(state: State<'_, AppState>, query: String) -> CmdResult<Vec<hl_db::PlayerHit>> {
