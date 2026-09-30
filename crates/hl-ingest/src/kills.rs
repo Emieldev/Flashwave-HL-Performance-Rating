@@ -217,6 +217,27 @@ fn kill_row(k: &Kill) -> KillRow<'_> {
     }
 }
 
+/// A parsed raw log's kills as the kill table would give them back, in
+/// order -- each kill's index is its `seq`. For logs whose kills are not
+/// stored: the league sample's, valued in memory.
+pub fn stored_kills(log: &RawLog) -> Vec<hl_db::StoredKill> {
+    log.kills
+        .iter()
+        .map(|k| hl_db::StoredKill {
+            at_raw: k.at,
+            live: k.live,
+            killer: k.killer.account,
+            killer_class: k.killer.class.map(|c| c.as_str().to_string()),
+            victim: k.victim.account,
+            victim_team: k.victim.team.map(|t| t.as_str().to_string()),
+            victim_class: k.victim.class.map(|c| c.as_str().to_string()),
+            weapon: k.weapon.clone(),
+            custom: k.custom.clone(),
+            assister: k.assister,
+        })
+        .collect()
+}
+
 /// A stored kill, reduced to what valuing it needs.
 pub fn ctx(k: &StoredKill, situation: Option<(i8, i8)>) -> KillCtx {
     KillCtx {

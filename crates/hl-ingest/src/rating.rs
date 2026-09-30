@@ -39,9 +39,17 @@ pub async fn rate_all(
 ) -> Result<RateSummary> {
     // Pass 1: every rateable performance in every kept Highlander log.
     let (total, perfs) = collect_performances(db, w, &mut progress).await?;
+    // ...and in the league sample: officials from every ETF2L division,
+    // so the pool is the league and not only the owner's matches.
+    progress(Progress::Stage { what: "Rating the league sample" });
+    let league = crate::league_rating::performances(db, w).await?;
+    tracing::info!(own = perfs.len(), league = league.len(), "rating pool");
 
-    // Pass 2: the pools, without the owner in them.
-    let baseline = Baseline::build(perfs.iter().map(|(_, p)| p), me.map(|m| m.account_id()));
+    // Pass 2: the pools. The owner is in them now (Flashy): with the league
+    // in the pool they are one player among thousands, where in their own
+    // matches alone they were half of their class's pool and were left out
+    // so as not to be measured against themselves.
+    let baseline = Baseline::build(perfs.iter().chain(league.iter()).map(|(_, p)| p), None);
     let stored: Vec<(String, String, Option<String>, Vec<f64>)> = baseline
         .parts()
         .map(|(class, c, map, vals)| {
@@ -65,7 +73,13 @@ pub async fn rate_all(
     // from an ordinary game this was, so it needs the pool's middle and
     // spread — measured here and stored, so a game rated on its own as it
     // arrives lands on the same scale as the games it is listed beside.
-    let raw: Vec<f64> = scored.iter().map(|(_, _, r)| r.score).collect();
+    // Measured over the league too: 1.00 is a typical league game. Only the
+    // owner's own logs' ratings are stored; the sample's are not theirs.
+    let raw: Vec<f64> = scored
+        .iter()
+        .map(|(_, _, r)| r.score)
+        .chain(league.iter().filter_map(|(_, p)| rate(p, &baseline, w)).map(|r| r.score))
+        .collect();
     let Some(scale) = Scale::of(&raw) else {
         // Nothing to measure: leave the last scale and the last ratings alone
         // rather than writing numbers that mean nothing.

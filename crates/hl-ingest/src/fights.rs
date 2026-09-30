@@ -512,6 +512,27 @@ pub async fn derive_all(
     Ok(DeriveSummary { derived, total: ids.len() })
 }
 
+/// One player's counts as `Db::fight_counts` gives them back, for logs whose
+/// fights are not stored (the league sample's).
+pub fn counts(s: &FightStats) -> [u32; 14] {
+    [
+        s.opening_kills,
+        s.opening_deaths,
+        s.kills,
+        s.traded_kills,
+        s.deaths,
+        s.traded_deaths,
+        s.deaths_to_flank,
+        s.stationary_deaths,
+        s.fights_present,
+        s.fights_kast,
+        s.fights_kast_engaged,
+        s.caps_contested,
+        s.caps_mates_dead,
+        s.caps_spawn_delay,
+    ]
+}
+
 /// One player's counts in `hl_db::FIGHT_COLUMNS` order.
 fn row(s: &FightStats) -> hl_db::FightRow {
     let v = [

@@ -39,7 +39,7 @@ COMMANDS:
     state --check [--max N]
                            Rebuild the game state (alive, charges, caps) from every
                            raw log and check it against logs.tf
-    validate CLASS [--weights PATH]... [--split YYYY-MM-DD] [--json]
+    validate CLASS [--weights PATH]... [--split YYYY-MM-DD] [--league] [--json]
                            How often each component, and each weighting, picks
                            the team that won (PLAN §12 step 0, Q8). Any of the
                            nine classes. Ends with a model proposed from the
@@ -565,7 +565,7 @@ async fn main() -> Result<()> {
                 None => None,
             };
             let started = std::time::Instant::now();
-            let report = hl_ingest::validate::run(&db, class, &live, candidates, split).await?;
+            let report = hl_ingest::validate::run(&db, class, &live, candidates, split, rest.contains(&"--league")).await?;
             if rest.contains(&"--json") {
                 println!("{}", serde_json::to_string(&report)?);
             } else {

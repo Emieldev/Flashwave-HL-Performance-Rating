@@ -269,6 +269,27 @@ impl Db {
         .await?)
     }
 
+    /// Sample logs that can join the rating pool: picked, with their JSON,
+    /// and not one of the owner's own logs (their officials are in the
+    /// sample too, and a game must not be in the pool twice).
+    pub async fn league_rateable(&self) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT l.log_id FROM league_log l
+             WHERE l.picked = 1 AND l.json_source IS NOT NULL
+               AND l.log_id NOT IN (SELECT log_id FROM log_index)
+             ORDER BY l.log_id",
+        )
+        .fetch_all(self.pool())
+        .await?)
+    }
+
+    /// One sample log's JSON and, if it was downloaded, its raw server log.
+    pub async fn league_log_files(&self, log_id: i64) -> Result<(Option<String>, Option<Vec<u8>>)> {
+        let json = sqlx::query_scalar("SELECT json FROM league_log_json WHERE log_id = ?1").bind(log_id).fetch_optional(self.pool()).await?;
+        let zip = sqlx::query_scalar("SELECT zip FROM league_rawlog WHERE log_id = ?1").bind(log_id).fetch_optional(self.pool()).await?;
+        Ok((json, zip))
+    }
+
     /// The newest Highlander season ETF2L has listed.
     pub async fn newest_etf2l_season(&self) -> Result<Option<i64>> {
         Ok(sqlx::query_scalar("SELECT MAX(season) FROM etf2l_competition").fetch_one(self.pool()).await?)

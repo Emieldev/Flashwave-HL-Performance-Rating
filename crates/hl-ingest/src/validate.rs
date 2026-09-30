@@ -370,14 +370,22 @@ type Side = (bool, i64, Vec<Option<f64>>);
 pub type Candidate = (String, Vec<(Component, f64)>);
 
 /// Build the pairs and score the live weights, v1 and any candidates.
-pub async fn run(db: &Db, class: TfClass, live: &Weights, candidates: Vec<Candidate>, split: Option<i64>) -> Result<Report> {
+/// `league`: measure against the pool the live rating uses since the league
+/// sample joined it (your matches and the sample), instead of your matches
+/// alone. The pairs scored are your matches either way.
+pub async fn run(db: &Db, class: TfClass, live: &Weights, candidates: Vec<Candidate>, split: Option<i64>, league: bool) -> Result<Report> {
     let comps: Vec<Component> = components_for(class);
 
     // Every component, whatever the live model uses.
     let every = live.with_model(class, comps.iter().map(|c| (*c, 1.0)).collect());
     let (_, perfs) = collect_performances(db, &every, |_| {}).await?;
     let perfs: Vec<(i64, hl_rating::Performance)> = perfs.into_iter().filter(|(_, p)| p.class == class).collect();
-    let baseline = Baseline::build(perfs.iter().map(|(_, p)| p), None);
+    let sample: Vec<(i64, hl_rating::Performance)> = if league {
+        crate::league_rating::performances(db, &every).await?.into_iter().filter(|(_, p)| p.class == class).collect()
+    } else {
+        Vec::new()
+    };
+    let baseline = Baseline::build(perfs.iter().chain(sample.iter()).map(|(_, p)| p), None);
 
     let results = db.decided_results().await?;
     let mut by_log: HashMap<i64, Vec<Side>> = HashMap::new();
