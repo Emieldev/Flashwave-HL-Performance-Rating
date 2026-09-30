@@ -2588,9 +2588,13 @@ rosters and competitions), so it works before any rating change.
   for, the division and tier, officials played, won and lost. A player can
   play for two teams or two divisions in one season (a merc, a mid-season
   move): list both, and count their division as the one they played most.
-- *Highest division*: the lowest tier with at least three officials played,
-  so a single merc game in Premiership does not make someone a Premiership
-  player.
+- *Which division a player is* (Flashy, ETF2L's rule): in a season, a
+  division counts for them if they played at least three officials in it,
+  or played in the Grand Final of the division one below (the finalists
+  move up); where both apply, the higher. Their highest division is the
+  best that counted in any season, and every per-season division -- match
+  tags, ranks -- follows the same rule. A single merc game makes nobody a
+  Premiership player.
 - *Medals*: per competition with playoffs, the Grand Final winner gold, its
   loser silver, the 3rd Place match winner bronze. A season with no playoff
   stage for a division: the regular-season table's top three. A player

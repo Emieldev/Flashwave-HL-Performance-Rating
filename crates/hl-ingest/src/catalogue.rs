@@ -16,9 +16,13 @@
 //! over. A player earns their team's medal by playing at least one official
 //! for it that season.
 //!
-//! **Highest division.** The top tier they played at least
-//! [`MIN_FOR_DIVISION`] officials in, so one merc game in Premiership does
-//! not make someone a Premiership player.
+//! **Which division a player is** (Flashy, ETF2L's own rule): in a season,
+//! a division counts for them if they played at least [`MIN_FOR_DIVISION`]
+//! officials in it, or played in the Grand Final of the division one below
+//! (the finalists move up). Where both apply, the higher one. One merc game
+//! in Premiership makes nobody a Premiership player. Their highest division
+//! is the best one that counted in any season; every per-season division
+//! -- the tags on a match, the ranks -- follows the same rule.
 
 use crate::sources::Sources;
 use anyhow::{Context, Result};
@@ -28,7 +32,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
-/// Officials in a tier before it counts as a player's division.
+/// Officials in a division in one season before it counts as theirs.
 pub const MIN_FOR_DIVISION: usize = 3;
 /// ETF2L's page for a player is fetched again after this long.
 const ETF2L_PLAYER_KEEP_S: i64 = 7 * 24 * 3600;
@@ -313,21 +317,6 @@ impl Catalogue {
         won_medals.sort_by(|a, b| b.season.cmp(&a.season).then(a.place.cmp(&b.place)));
         (out, won_medals, officials)
     }
-
-    fn highest(seasons: &[PlayerSeason]) -> Option<Division> {
-        let mut per_tier: BTreeMap<i64, (usize, String)> = BTreeMap::new();
-        for s in seasons {
-            if let Some(t) = s.tier {
-                let e = per_tier.entry(t).or_insert((0, s.division.clone()));
-                e.0 += s.played as usize;
-            }
-        }
-        per_tier
-            .iter()
-            .find(|(_, (n, _))| *n >= MIN_FOR_DIVISION)
-            .or_else(|| per_tier.iter().next())
-            .map(|(t, (_, name))| Division { name: name.clone(), tier: *t })
-    }
 }
 
 fn main_of(classes: Option<&HashMap<String, i64>>) -> (Vec<(String, i64)>, Option<String>) {
@@ -379,11 +368,12 @@ pub async fn search(db: &Db, query: &str, limit: usize) -> Result<Vec<Hit>> {
     found.truncate(limit);
 
     let medals = cat.medals();
+    let divisions = cat.divisions();
     let classes = db.main_class_games().await?;
     Ok(found
         .into_iter()
         .map(|a| {
-            let (seasons, won, _) = cat.player(a, &medals);
+            let (_, won, _) = cat.player(a, &medals);
             let mut m = [0u32; 3];
             for x in &won {
                 m[usize::from(x.place - 1)] += 1;
@@ -391,7 +381,7 @@ pub async fn search(db: &Db, query: &str, limit: usize) -> Result<Vec<Hit>> {
             Hit {
                 account_id: a,
                 name: names[&a].first().cloned().unwrap_or_default(),
-                highest: Catalogue::highest(&seasons),
+                highest: Catalogue::highest_of(&divisions, a),
                 main_class: main_of(classes.get(&a)).1,
                 medals: m,
                 officials: officials.get(&a).map_or(0, |o| o.0),
@@ -450,7 +440,7 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
         played_classes,
         main_class,
         current: seasons.first().cloned(),
-        highest: Catalogue::highest(&seasons),
+        highest: Catalogue::highest_of(&cat.divisions(), account),
         medals: won,
         seasons,
         officials,
@@ -594,19 +584,64 @@ impl Catalogue {
         w.into_iter().rev().map(|(s, (n, a, b))| (s, n, a - SLACK, b + SLACK)).collect()
     }
 
-    /// Every player's division each season: the tier they played most
-    /// officials in, and the team they played them for.
+    /// Every player's division each season, by the rule in the module doc:
+    /// `(tier, division, team)`. A season with no division that counts is
+    /// left out.
     fn divisions(&self) -> HashMap<(u32, i64), (i64, String, i64)> {
-        let mut count: HashMap<(u32, i64), HashMap<(i64, String, i64), u32>> = HashMap::new();
+        // (account, season) -> tier -> (officials, team -> officials)
+        let mut count: HashMap<(u32, i64), BTreeMap<i64, (u32, HashMap<i64, u32>)>> = HashMap::new();
+        // (account, season) -> tiers whose Grand Final they played, and for whom
+        let mut finals: HashMap<(u32, i64), Vec<(i64, i64)>> = HashMap::new();
+        // (season, tier) -> the division's name that season
+        let mut names: HashMap<(i64, i64), String> = HashMap::new();
         for (match_id, roster) in &self.rosters {
             let Some(m) = self.matches.get(match_id) else { continue };
+            if !Self::played(m) {
+                continue;
+            }
             let (division, Some(tier)) = self.division_of(m) else { continue };
+            names.entry((m.season, tier)).or_insert_with(|| division.clone());
+            let grand_final = (m.stage == "Playoffs" && m.round.as_deref().is_some_and(|r| r.eq_ignore_ascii_case("Grand Final") || r.eq_ignore_ascii_case("Final"))) || m.stage == "Grand Final";
             for (a, team, _) in roster {
                 let Some(team) = team else { continue };
-                *count.entry((*a, m.season)).or_default().entry((tier, division.clone(), *team)).or_default() += 1;
+                let e = count.entry((*a, m.season)).or_default().entry(tier).or_default();
+                e.0 += 1;
+                *e.1.entry(*team).or_default() += 1;
+                if grand_final {
+                    finals.entry((*a, m.season)).or_default().push((tier, *team));
+                }
             }
         }
-        count.into_iter().filter_map(|(k, v)| Some((k, v.into_iter().max_by_key(|(_, n)| *n)?.0))).collect()
+        let name = |season: i64, tier: i64| {
+            names
+                .get(&(season, tier))
+                .cloned()
+                .or_else(|| self.tier_by_name.iter().find(|(_, t)| **t == tier).map(|(n, _)| n.clone()))
+                .unwrap_or_default()
+        };
+        let mut out = HashMap::new();
+        for (key, tiers) in count {
+            // Three officials in a division...
+            let by_officials = tiers
+                .iter()
+                .filter(|(_, (n, _))| *n as usize >= MIN_FOR_DIVISION)
+                .map(|(t, (_, teams))| (*t, *teams.iter().max_by_key(|(_, n)| **n).map(|(team, _)| team).unwrap_or(&0)));
+            // ...or its Grand Final, one division below.
+            let by_final = finals.get(&key).into_iter().flatten().filter(|(t, _)| *t > 0).map(|(t, team)| (t - 1, *team));
+            if let Some((tier, team)) = by_officials.chain(by_final).min_by_key(|(t, _)| *t) {
+                out.insert(key, (tier, name(key.1, tier), team));
+            }
+        }
+        out
+    }
+
+    /// The best division that counted for them in any season.
+    fn highest_of(divisions: &HashMap<(u32, i64), (i64, String, i64)>, account: u32) -> Option<Division> {
+        divisions
+            .iter()
+            .filter(|((a, _), _)| *a == account)
+            .min_by_key(|((_, season), (tier, _, _))| (*tier, -season))
+            .map(|(_, (tier, name, _))| Division { name: name.clone(), tier: *tier })
     }
 
     fn name_of(&self, account: u32) -> String {
@@ -910,20 +945,61 @@ mod tests {
         assert!(!medals.contains_key(&(35, "High".to_string())), "the newest season is not over");
     }
 
+    /// Matches with their own tier, and one roster: player 1 for team 10.
+    fn tiered(ms: Vec<(i64, i64, &str, Option<&str>, i64)>) -> Catalogue {
+        let matches: Vec<CatMatch> = ms
+            .into_iter()
+            .map(|(id, season, stage, round, tier)| CatMatch {
+                match_id: id,
+                competition_id: 1,
+                season,
+                season_name: format!("S{season}"),
+                comp_division: format!("t{tier}"),
+                stage: stage.into(),
+                division: (stage == "regular").then(|| format!("t{tier}")),
+                tier: (stage == "regular").then_some(tier),
+                round: round.map(str::to_string),
+                time: Some(id),
+                clan1: 10,
+                clan2: 11,
+                r1: Some(6),
+                r2: Some(0),
+                default_win: false,
+            })
+            .collect();
+        let mut c = cat(matches);
+        for r in c.rosters.values_mut() {
+            r.retain(|(_, t, _)| *t == Some(10));
+            r[0].0 = 1;
+        }
+        for m in c.matches.values() {
+            if let Some(d) = &m.division {
+                c.tier_by_name.insert(d.clone(), m.tier.unwrap());
+            }
+        }
+        c
+    }
+
     #[test]
-    fn one_merc_game_does_not_make_a_division() {
-        let s = |tier: i64, played: u32| PlayerSeason {
-            season: 30,
-            season_name: String::new(),
-            division: format!("t{tier}"),
-            tier: Some(tier),
-            team: Team { id: 1, name: String::new(), avatar: None },
-            played,
-            won: 0,
-            lost: 0,
-            place: None,
-        };
-        assert_eq!(Catalogue::highest(&[s(0, 1), s(2, 9)]).map(|d| d.tier), Some(2));
-        assert_eq!(Catalogue::highest(&[s(0, 1)]).map(|d| d.tier), Some(0), "nothing else to go on");
+    fn a_division_counts_from_three_officials() {
+        // Two Premiership mercs and nine High games: High, not Premiership.
+        let mut ms: Vec<(i64, i64, &str, Option<&str>, i64)> = vec![(1, 30, "regular", None, 0), (2, 30, "regular", None, 0)];
+        ms.extend((3..12).map(|id| (id, 30, "regular", None, 1)));
+        let c = tiered(ms);
+        let d = c.divisions();
+        assert_eq!(d[&(1, 30)].0, 1);
+        assert_eq!(Catalogue::highest_of(&d, 1).map(|x| x.tier), Some(1));
+        // Two officials anywhere: no division at all.
+        let c = tiered(vec![(1, 31, "regular", None, 2), (2, 31, "regular", None, 2)]);
+        assert!(c.divisions().is_empty());
+    }
+
+    #[test]
+    fn a_grand_final_counts_for_the_division_above() {
+        // Four Mid games and the Mid Grand Final: High that season.
+        let mut ms: Vec<(i64, i64, &str, Option<&str>, i64)> = (1..5).map(|id| (id, 32, "regular", None, 2)).collect();
+        ms.push((5, 32, "Playoffs", Some("Grand Final"), 2));
+        let c = tiered(ms);
+        assert_eq!(c.divisions()[&(1, 32)].0, 1, "a Mid finalist counts as High");
     }
 }
