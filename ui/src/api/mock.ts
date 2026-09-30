@@ -28,6 +28,7 @@ import type {
   DemoLinked,
   CalloutFile,
   PositionsView,
+  MapTendencies,
   LeagueView,
   TeamView,
   DemoImported,
@@ -958,6 +959,24 @@ export const mockApi: Api = {
     }
     return delay(mockCallouts(map));
   },
+  // The owner's Sniper on a copy of the database, 1 October 2026.
+  getTendencies: () =>
+    delay([
+      {
+        map: "product", draft: true, matches: 133, unzoned: 900, stvs: 1, aliveS: 900,
+        fights: [
+          { zone: "Own Left", kills: 734, deaths: 406 }, { zone: "Own China", kills: 375, deaths: 232 }, { zone: "Own Rock", kills: 394, deaths: 204 },
+          { zone: "Own Hill", kills: 310, deaths: 111 }, { zone: "Own Valley", kills: 209, deaths: 205 }, { zone: "Own Grass", kills: 153, deaths: 77 },
+        ],
+        time: [{ zone: "Own Left", share: 0.15 }, { zone: "Point", share: 0.1 }, { zone: "Own Valley", share: 0.09 }, { zone: "Own Concrete", share: 0.09 }, { zone: "Own Rock", share: 0.06 }],
+        paths: [{ from: "Own Valley", to: "Own Left", times: 11 }, { from: "Own Valley", to: "Point", times: 7 }, { from: "Own Rock", to: "Own Valley", times: 7 }],
+      },
+      {
+        map: "ashville", draft: true, matches: 70, unzoned: 300, stvs: 0, aliveS: 0,
+        fights: [{ zone: "Mid", kills: 268, deaths: 214 }, { zone: "Own Toxic", kills: 203, deaths: 127 }, { zone: "Own Battlements", kills: 163, deaths: 111 }],
+        time: [], paths: [],
+      },
+    ] as MapTendencies[]),
   getPositions: (logId: number, map: string) => {
     const f = mockCallouts(map);
     if (f.zones.length === 0) return delay<PositionsView | null>(null);

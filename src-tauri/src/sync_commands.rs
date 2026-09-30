@@ -1142,6 +1142,13 @@ pub async fn get_positions(state: State<'_, AppState>, log_id: i64, map: String)
     Ok(hl_ingest::callouts::positions(&state.db, &data_folder(&state), log_id, &map).await?)
 }
 
+/// Q28: the owner's habits on a class, per map, over every match held.
+#[tauri::command]
+pub async fn get_tendencies(state: State<'_, AppState>, class: String) -> CmdResult<Vec<hl_ingest::callouts::MapTendencies>> {
+    let me = state.db.get_me().await?.ok_or_else(|| anyhow::anyhow!("no owner set"))?;
+    Ok(hl_ingest::callouts::tendencies(&state.db, &data_folder(&state), me.account_id(), &class).await?)
+}
+
 /// Q29: one ETF2L Highlander season's division tables; the newest when
 /// `season` is not given.
 #[tauri::command]

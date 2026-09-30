@@ -42,6 +42,7 @@ import type {
   SpyReport,
   CalloutFile,
   PositionsView,
+  MapTendencies,
   LeagueView,
   TeamView,
   DemoImported,
@@ -192,6 +193,7 @@ const realApi = {
   knownMaps: () => invoke<string[]>("known_maps"),
   setRoundMap: (logId: number, rounds: number[], map: string | null) => invoke<void>("set_round_map", { logId, rounds, map }),
   getPositions: (logId: number, map: string) => invoke<PositionsView | null>("get_positions", { logId, map }),
+  getTendencies: (cls: string) => invoke<MapTendencies[]>("get_tendencies", { class: cls }),
   /** Null when too few kills are stored on the map to draw it. */
   getMapView: (map: string) => invoke<MapView | null>("get_map_view", { map }),
   /** Null when no image for the map is saved in the app's overviews folder. */

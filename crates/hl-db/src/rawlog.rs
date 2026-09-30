@@ -253,6 +253,63 @@ impl Db {
             .collect())
     }
 
+    /// One player's kills and deaths on these maps, with where they were:
+    /// `(log_id, got_the_kill, their team, their class, x, y)` (Q28).
+    #[allow(clippy::type_complexity)]
+    pub async fn player_kill_positions(&self, account: u32, maps: &[String]) -> Result<Vec<(i64, bool, String, String, i32, i32)>> {
+        if maps.is_empty() {
+            return Ok(Vec::new());
+        }
+        let marks = vec!["?"; maps.len()].join(", ");
+        let sql = format!(
+            "SELECT k.log_id, k.killer = ?1 AS got,
+                    CASE WHEN k.killer = ?1 THEN k.killer_team ELSE k.victim_team END AS team,
+                    CASE WHEN k.killer = ?1 THEN k.killer_class ELSE k.victim_class END AS class,
+                    CASE WHEN k.killer = ?1 THEN k.kx ELSE k.vx END AS x,
+                    CASE WHEN k.killer = ?1 THEN k.ky ELSE k.vy END AS y
+             FROM kill_event k
+             JOIN match_round r ON r.log_id = k.log_id
+                AND k.at_raw BETWEEN r.start_time AND r.start_time + r.length_s
+             JOIN round_map rm ON rm.log_id = r.log_id AND rm.round_num = r.round_num
+             WHERE rm.map IN ({marks}) AND k.live = 1 AND COALESCE(k.custom, '') != 'feign_death'
+               AND (k.killer = ?1 OR k.victim = ?1) AND k.killer != k.victim
+               AND k.kx IS NOT NULL AND k.vx IS NOT NULL
+               AND k.log_id IN ({WANTED})"
+        );
+        let mut q = sqlx::query(&sql).bind(i64::from(account));
+        for m in maps {
+            q = q.bind(m);
+        }
+        Ok(q.fetch_all(self.pool())
+            .await?
+            .into_iter()
+            .map(|r| {
+                (
+                    r.get("log_id"),
+                    r.get::<i64, _>("got") != 0,
+                    r.get::<Option<String>, _>("team").unwrap_or_default(),
+                    r.get::<Option<String>, _>("class").unwrap_or_default(),
+                    r.get::<i64, _>("x") as i32,
+                    r.get::<i64, _>("y") as i32,
+                )
+            })
+            .collect())
+    }
+
+    /// Logs with a parsed STV timeline that this player is in (Q28).
+    pub async fn player_stv_logs(&self, account: u32) -> Result<Vec<(i64, String)>> {
+        Ok(sqlx::query_as(
+            "SELECT DISTINCT l.log_id, COALESCE(m.map, '') FROM demo_link l
+             JOIN demo d ON d.demo_id = l.demo_id AND d.kind = 'stv'
+             JOIN demo_timeline t ON t.demo_id = d.demo_id
+             JOIN match m ON m.log_id = l.log_id
+             JOIN match_player p ON p.log_id = l.log_id AND p.account_id = ?1",
+        )
+        .bind(i64::from(account))
+        .fetch_all(self.pool())
+        .await?)
+    }
+
     pub async fn rawlog_stats(&self) -> Result<RawlogStats> {
         let r = sqlx::query(&format!(
             "SELECT

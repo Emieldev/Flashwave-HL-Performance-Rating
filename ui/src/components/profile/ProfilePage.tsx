@@ -10,7 +10,7 @@ import {
   type OppositionBand, type DivisionBand,
   type Profile,
 } from "../../api/types";
-import { formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
+import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
 import { KIND_LABEL, KIND_PLURAL } from "../ContextBadge";
 import { bounds, usePeriod } from "../../lib/period";
 import { PeriodPicker } from "../PeriodPicker";
@@ -248,6 +248,80 @@ function Opposition({ bands, byDivision }: { bands: OppositionBand[]; byDivision
   );
 }
 
+/**
+ * Where you play (Q28): per map with drawn callouts, where your fights on
+ * this class ended -- every match with a server log -- and, where STVs
+ * exist, where you stood and how you moved. Zones read by your own side:
+ * "Own Left" is your team's Left whichever colour you were.
+ */
+function Tendencies({ cls }: { cls: string }) {
+  const q = useQuery({ queryKey: ["tendencies", cls], queryFn: () => api.getTendencies(cls), staleTime: 5 * 60_000 });
+  const maps = q.data ?? [];
+  if (maps.length === 0) return null;
+  return (
+    <section className="panel tendencies">
+      <header>
+        <h2>{t("Where you play")}</h2>
+        <p className="hint">{t("By callout, on your own side of the map. Fights: where your kills and deaths happened, every match. Standing: where you spent your time alive, from STV demos.")}</p>
+      </header>
+      <div className="tend-maps">
+        {maps.map((m) => {
+          const fights = m.fights.reduce((a, f) => a + f.kills + f.deaths, 0) + m.unzoned;
+          const top = m.fights.slice(0, 6);
+          const most = Math.max(1, ...top.map((f) => f.kills + f.deaths));
+          return (
+            <article key={m.map} className="tend-map">
+              <h3>
+                {capitalize(m.map)}
+                {m.draft && <span className="muted tend-draft"> · {t("draft callouts")}</span>}
+              </h3>
+              <p className="hint">
+                {tx("{0} matches", { "0": m.matches })}
+                {m.stvs > 0 && ` · ${t("{0} STV · {1} min alive", { "0": m.stvs, "1": Math.round(m.aliveS / 60) })}`}
+              </p>
+              {top.length > 0 && (
+                <ul className="tend-bars">
+                  {top.map((f) => (
+                    <li key={f.zone} title={tx("{0} kills, {1} deaths", { "0": f.kills, "1": f.deaths })}>
+                      <span className="tend-zone">{f.zone}</span>
+                      <span className="tend-track" aria-hidden>
+                        <i className="tend-k" style={{ width: `${(100 * f.kills) / most}%` }} />
+                        <i className="tend-d" style={{ width: `${(100 * f.deaths) / most}%` }} />
+                      </span>
+                      <span className="tend-n muted">{Math.round((100 * (f.kills + f.deaths)) / Math.max(1, fights))}%</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {m.time.length > 0 && (
+                <p className="tend-stand">
+                  <span className="muted">{t("Standing")}: </span>
+                  {m.time
+                    .slice(0, 4)
+                    .map((z) => `${z.zone} ${Math.round(z.share * 100)}%`)
+                    .join(" · ")}
+                </p>
+              )}
+              {m.paths.length > 0 && (
+                <p className="tend-stand">
+                  <span className="muted">{t("Moves")}: </span>
+                  {m.paths
+                    .slice(0, 3)
+                    .map((p) => `${p.from} → ${p.to} (${p.times}×)`)
+                    .join(" · ")}
+                </p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+      <p className="hint tend-legend">
+        <i className="tend-k" /> {t("kills")} <i className="tend-d" /> {t("deaths")}
+      </p>
+    </section>
+  );
+}
+
 function ProfileBody(props: {
   p: Profile;
   onOpenMatch: (logId: number) => void;
@@ -300,6 +374,8 @@ function ProfileBody(props: {
       <KindSplit split={p.contexts} active={p.filter} onKind={onKind} />
 
       <Opposition bands={p.opposition} byDivision={p.byDivision ?? []} />
+
+      <Tendencies cls={p.class} />
 
       <Fold id="profile-components">
         <Components items={p.components} formWindow={Math.min(p.formWindow, p.games)} />

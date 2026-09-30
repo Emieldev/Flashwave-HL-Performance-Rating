@@ -562,3 +562,18 @@
 
 /* Who you played, by division: a line between the two views. */
 .kind-split .ks-sub { margin: 12px 0 6px; }
+
+/* Q28: where you play, by callout. */
+.tendencies .tend-maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 10px; }
+.tend-map h3 { margin: 0; font-size: 0.95rem; }
+.tend-map .hint { margin: 2px 0 8px; }
+.tend-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tend-bars li { display: grid; grid-template-columns: minmax(0, 7em) 1fr 3em; gap: 8px; align-items: center; font-size: 0.82rem; }
+.tend-zone { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tend-track { display: flex; flex-direction: column; gap: 2px; }
+.tend-track i, .tend-legend i { display: block; height: 5px; border-radius: 3px; }
+.tend-k { background: var(--good, #5cb85c); }
+.tend-d { background: var(--bad, #d9534f); opacity: 0.8; }
+.tend-legend i { display: inline-block; width: 14px; vertical-align: middle; margin: 0 4px 0 10px; }
+.tend-n { text-align: right; font-variant-numeric: tabular-nums; }
+.tend-stand { margin: 8px 0 0; font-size: 0.8rem; }

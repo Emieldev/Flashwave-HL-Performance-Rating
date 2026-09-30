@@ -1665,6 +1665,19 @@ export interface PresetCheck {
   currentZones: number;
 }
 
+/** A player's habits on one map and class, over every match (Q28). */
+export interface MapTendencies {
+  map: string;
+  draft: boolean;
+  matches: number;
+  fights: { zone: string; kills: number; deaths: number }[];
+  unzoned: number;
+  stvs: number;
+  aliveS: number;
+  time: { zone: string; share: number }[];
+  paths: { from: string; to: string; times: number }[];
+}
+
 export interface PositionsView {
   map: string;
   zones: number;

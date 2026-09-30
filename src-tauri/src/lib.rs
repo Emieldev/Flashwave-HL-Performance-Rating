@@ -273,6 +273,7 @@ pub fn run() {
             sync_commands::import_callouts,
             sync_commands::undo_callouts,
             sync_commands::get_positions,
+            sync_commands::get_tendencies,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");

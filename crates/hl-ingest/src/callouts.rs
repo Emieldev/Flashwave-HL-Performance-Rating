@@ -446,9 +446,229 @@ async fn log_sides(db: &Db, log_id: i64) -> Result<HashMap<u32, u8>> {
         .collect())
 }
 
+// ---- tendencies across matches (Q28) ---------------------------------
+
+/// `tf_demo_parser`'s class numbers to the app's names.
+const DEMO_CLASSES: [&str; 10] = ["", "scout", "sniper", "soldier", "demoman", "medic", "heavyweapons", "pyro", "spy", "engineer"];
+
+/// Fewest kills and deaths in drawn zones before a map's tendencies say
+/// anything: below it the shares are a handful of fights.
+const MIN_FIGHTS: usize = 20;
+
+/// A zone by the player's own side: "RED Cliff" is "Own Cliff" to a RED
+/// player and "Enemy Cliff" to a BLU one. A zone with no side keeps its name.
+pub fn by_side(zone: &str, red: bool) -> String {
+    for (prefix, is_red) in [("RED ", true), ("BLU ", false)] {
+        if let Some(rest) = zone.strip_prefix(prefix) {
+            return format!("{} {rest}", if is_red == red { "Own" } else { "Enemy" });
+        }
+    }
+    zone.to_string()
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoneFights {
+    pub zone: String,
+    pub kills: u32,
+    pub deaths: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoneShare {
+    pub zone: String,
+    /// Share of their alive time in a drawn zone, 0-1.
+    pub share: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZonePath {
+    pub from: String,
+    pub to: String,
+    pub times: u32,
+}
+
+/// One player's habits on one map and class, over every match held (Q28).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MapTendencies {
+    pub map: String,
+    pub draft: bool,
+    /// Matches their kills and deaths come from.
+    pub matches: usize,
+    /// Where their fights ended, by their own side; most first.
+    pub fights: Vec<ZoneFights>,
+    /// Kills and deaths outside any drawn zone.
+    pub unzoned: u32,
+    /// STV demos their time in zones comes from.
+    pub stvs: usize,
+    pub alive_s: u32,
+    /// Where they stood while alive; most first.
+    pub time: Vec<ZoneShare>,
+    /// The moves they make most, zone to zone.
+    pub paths: Vec<ZonePath>,
+}
+
+/// A player's tendencies on every map with drawn callouts, for one class:
+/// where their fights end (every match with a raw log) and where they stand
+/// and move (every match with an STV). Maps with too little are left out.
+pub async fn tendencies(db: &Db, data: &Path, account: u32, class: &str) -> Result<Vec<MapTendencies>> {
+    let kept = db.kept_maps().await?;
+    let stv_logs = db.player_stv_logs(account).await?;
+    let mut bases: Vec<String> = kept.iter().map(|m| map_base(m)).collect();
+    bases.sort();
+    bases.dedup();
+    let mut out = Vec::new();
+    for base in bases {
+        let callouts = load(data, &base)?;
+        if callouts.zones.is_empty() {
+            continue;
+        }
+        let maps: Vec<String> = kept.iter().filter(|m| map_base(m) == base).cloned().collect();
+
+        // Where their fights ended.
+        let mut fights: HashMap<String, ZoneFights> = HashMap::new();
+        let mut unzoned = 0;
+        let mut logs = std::collections::HashSet::new();
+        for (log_id, got, team, cls, x, y) in db.player_kill_positions(account, &maps).await? {
+            if cls != class {
+                continue;
+            }
+            logs.insert(log_id);
+            let Some(z) = callouts.zone_at(f64::from(x), f64::from(y)) else {
+                unzoned += 1;
+                continue;
+            };
+            let name = by_side(&callouts.zones[z].name, team.eq_ignore_ascii_case("red"));
+            let e = fights.entry(name.clone()).or_insert_with(|| ZoneFights { zone: name, ..Default::default() });
+            if got {
+                e.kills += 1;
+            } else {
+                e.deaths += 1;
+            }
+        }
+        let mut fights: Vec<ZoneFights> = fights.into_values().collect();
+        fights.sort_by_key(|f| std::cmp::Reverse(f.kills + f.deaths));
+        let in_zones: u32 = fights.iter().map(|f| f.kills + f.deaths).sum();
+
+        // Where they stood, and how they moved, from the STVs.
+        let (stvs, alive_s, time, paths) = stand(db, &callouts, account, class, stv_logs.iter().filter(|(_, m)| map_base(m) == base).map(|(l, _)| *l)).await?;
+        if (in_zones as usize) < MIN_FIGHTS && stvs == 0 {
+            continue;
+        }
+        out.push(MapTendencies { map: callouts.map.clone(), draft: callouts.draft, matches: logs.len(), fights, unzoned, stvs, alive_s, time, paths });
+    }
+    out.sort_by_key(|m| std::cmp::Reverse(m.matches));
+    Ok(out)
+}
+
+/// Time in each zone and the moves between them, summed over the STVs:
+/// `(demos read, seconds alive, shares, paths)`. A move is counted when the
+/// zone they are in changes to another drawn zone within ten seconds of
+/// leaving the last one, so walking through undrawn ground still counts
+/// and a death and respawn does not.
+async fn stand(
+    db: &Db,
+    callouts: &CalloutFile,
+    account: u32,
+    class: &str,
+    logs: impl Iterator<Item = i64>,
+) -> Result<(usize, u32, Vec<ZoneShare>, Vec<ZonePath>)> {
+    let class_no = DEMO_CLASSES.iter().position(|c| *c == class).unwrap_or(0) as u8;
+    let mut demos = 0;
+    let mut alive = 0u32;
+    let mut in_zone: HashMap<String, u32> = HashMap::new();
+    let mut moves: HashMap<(String, String), u32> = HashMap::new();
+    for log_id in logs {
+        let sides = log_sides(db, log_id).await?;
+        let red = sides.get(&account).map(|t| *t == 2);
+        for demo in db.demos_for_log(log_id).await?.into_iter().filter(|d| d.kind == "stv") {
+            let Some(row) = db.timeline(demo.demo_id).await? else { continue };
+            let stored = Stored {
+                version: row.version,
+                tick_rate: row.tick_rate,
+                stride: row.stride as u32,
+                head: row.head,
+                samples: row.samples,
+                changes: row.changes,
+                objects: row.objects,
+                events: row.events,
+                raw_bytes: row.raw_bytes as usize,
+            };
+            let zones = callouts.clone();
+            // Their zone each second they were alive on the class, or None.
+            let seq = tokio::task::spawn_blocking(move || -> Result<Option<Vec<Option<(usize, bool)>>>> {
+                let tl = Timeline::decode(&stored)?;
+                let Some(slot) = tl.people.iter().position(|p| crate::aim::account_of(&p.steamid) == Some(account)) else { return Ok(None) };
+                let step = tl.tick_rate.round().max(1.0) as u32;
+                let stretches = tl.stretches(slot);
+                let mut out = Vec::new();
+                let (mut next, mut j) = (0u32, 0);
+                for s in &tl.tracks[slot].samples {
+                    if s.t < next {
+                        continue;
+                    }
+                    next = s.t + step;
+                    while j + 1 < stretches.len() && stretches[j].1 <= s.t {
+                        j += 1;
+                    }
+                    let Some((from, to, n)) = stretches.get(j) else { continue };
+                    if !(*from <= s.t && s.t < *to && n.live() && n.class == class_no) {
+                        out.push(None);
+                        continue;
+                    }
+                    let z = zones.zone_at(f64::from(s.pos[0]), f64::from(s.pos[1]));
+                    // RED in the demo: a fallback for a player the log lacks.
+                    out.push(Some((z.unwrap_or(usize::MAX), n.team == 2)));
+                }
+                Ok(Some(out))
+            })
+            .await??;
+            let Some(seq) = seq else { continue };
+            demos += 1;
+            let mut last: Option<(String, usize)> = None;
+            for (i, s) in seq.iter().enumerate() {
+                let Some((z, worn_red)) = s else {
+                    last = None;
+                    continue;
+                };
+                alive += 1;
+                if *z == usize::MAX {
+                    continue;
+                }
+                let name = by_side(&callouts.zones[*z].name, red.unwrap_or(*worn_red));
+                *in_zone.entry(name.clone()).or_default() += 1;
+                if let Some((prev, at)) = &last {
+                    if *prev != name && i - at <= 10 {
+                        *moves.entry((prev.clone(), name.clone())).or_default() += 1;
+                    }
+                }
+                last = Some((name, i));
+            }
+        }
+    }
+    let total: u32 = in_zone.values().sum();
+    let mut time: Vec<ZoneShare> = in_zone.into_iter().map(|(zone, s)| ZoneShare { zone, share: f64::from(s) / f64::from(total.max(1)) }).collect();
+    time.sort_by(|a, b| b.share.total_cmp(&a.share));
+    let mut paths: Vec<ZonePath> = moves.into_iter().map(|((from, to), times)| ZonePath { from, to, times }).collect();
+    paths.sort_by_key(|p| std::cmp::Reverse(p.times));
+    paths.truncate(8);
+    Ok((demos, alive, time, paths))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sided_zone_is_named_by_the_players_own_side() {
+        assert_eq!(by_side("RED Cliff", true), "Own Cliff");
+        assert_eq!(by_side("RED Cliff", false), "Enemy Cliff");
+        assert_eq!(by_side("BLU House", false), "Own House");
+        assert_eq!(by_side("Point", true), "Point");
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("hl-callouts-{name}-{}", std::process::id()));

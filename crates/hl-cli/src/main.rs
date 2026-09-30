@@ -1262,6 +1262,28 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["tendencies", class] => {
+            // Q28: the owner's habits per map on a class, over every match.
+            let db = Db::connect(&db_path).await?;
+            let me = db.get_me().await?.context("no owner set")?;
+            let class = TfClass::parse(class)?;
+            let data = db_path.parent().context("no data folder")?.to_path_buf();
+            for m in hl_ingest::callouts::tendencies(&db, &data, me.account_id(), class.as_str()).await? {
+                println!("{}{} -- {} matches, {} STVs ({} min alive)", m.map, if m.draft { " (draft)" } else { "" }, m.matches, m.stvs, m.alive_s / 60);
+                let fights: u32 = m.fights.iter().map(|f| f.kills + f.deaths).sum::<u32>() + m.unzoned;
+                for f in m.fights.iter().take(8) {
+                    println!("  fights  {:<18} {:>4} kills {:>4} deaths  {:>3.0}%", f.zone, f.kills, f.deaths, 100.0 * f64::from(f.kills + f.deaths) / f64::from(fights.max(1)));
+                }
+                for z in m.time.iter().take(6) {
+                    println!("  stands  {:<18} {:>3.0}%", z.zone, 100.0 * z.share);
+                }
+                for p in m.paths.iter().take(5) {
+                    println!("  moves   {} -> {} ({}x)", p.from, p.to, p.times);
+                }
+            }
+            Ok(())
+        }
+
         ["positions", log_id] => {
             // Q28: where each player spent their live time, by callout.
             let db = Db::connect(&db_path).await?;
