@@ -1455,6 +1455,13 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | ~~Q30~~ | ~~**Maps recognised from the STV when logs.tf cannot say** (Flashy)~~ | medium | **Done (29-30 Sept).** A linked demo's header now names the map of every round inside its recording, ahead of the raw log's map line (it agrees with the log's own field on 77 of 77 rounds, and beat the map line both times they differed); linking or downloading a demo re-resolves at once; and the app ships map shapes for 24 maps (`maps/geometry.json`), so a fresh install recognises Vigil from kill positions alone. With every map name logs.tf gives wiped from a copy of the database, 92 of 94 rounds with a demo and 95% of the rest still resolve correctly, against none before. The kill map says when the map is unknown and how to fix it. The missing images were the other half, fixed by shipping more.tf's. **Done (30 Sept):** a "this was on ___" picker under the kill map, and demos.tf now finds the STV of a log whose map is unknown, by time alone. See §24. |
 | ~~Q31~~ | ~~**A Maps section in Settings, with top-down image import** (Flashy)~~ | medium | **Done (30 Sept).** Settings, Maps: every map you played (the rest on ask) with where its image, placement and callouts come from, how many matches were on it, and how many matches have a round on no known map. Import a PNG, JPEG or WebP for any map; it wins over the built-in one, and Remove mine goes back. Line up drags this install's kill positions over the image and scrolls to scale; the placement is saved beside the image. Images need not be square. See §24. |
 | ~~Q32~~ | ~~**Callout presets: import and export per map** (Flashy)~~ | small | **Done (30 Sept).** `<map>.callouts.json`: the stored shape plus `format` and an optional author. Export from the Maps row and the kill-map editor; Import checks the file (format, every zone named with three real corners, under 1 MB), says what it replaces, warns when the file is for another map, and keeps the replaced copy for one Undo. A `.callouts.json` dropped anywhere on the window imports to the map it names. See §24. |
+| ~~Q33~~ | ~~**A league sample: ETF2L officials from every division** (Flashy)~~ | large | **Done (30 Sept).** 812 officials (1,832 logs, 203 MB) from all five tiers, March 2022 to September 2026, every map in each division's pool, downloaded in the background at one request every ~6 s with more.tf filling in while logs.tf rests, and every official's roster for the player catalogue. Every tier is short of 300 because that is every official trends.tf links. Kept in its own tables. See §25. |
+| Q34 | **The league in the rating pool, the owner included** (Flashy) | medium | **Built, not switched on.** Sample logs go through every pass in memory; the pool is the owner's matches plus the sample with nobody left out; the scale is the league's; only the owner's ratings are stored. Waiting on a before/after on a backup: the owner's ratings per class and `hl validate --league` for all nine classes. See §25. |
+| Q35 | **Player profiles: who they are, their teams and medals** (Flashy) | large | HLTV-style pages from the catalogue: avatar, flag, current team and division, main class (played and declared), a trophy strip of medals (Grand Final winner gold, runner-up silver, 3rd Place bronze, earned by playing an official for the team that season), a season-by-season team timeline, recent officials; search and filters across the whole catalogue. See §26. |
+| Q36 | **Ratings for everyone: ranks and stat bars** (Flashy) | medium | On Q34: the sample's ratings stored apart (`league_rating`); a profile's rating (last three months and career), stat bars per component group as 0-100 percentiles, and ranks per class, division and season ("#3 Sniper in Premiership, S36"), each saying how many games it rests on. See §26. |
+| Q37 | **Career numbers from trends.tf, on demand** (Flashy) | small | trends.tf's player page read when a profile is opened (never in search), cached a day: W-L, per-class winrate, damage per minute, hours, aliases, ETF2L and RGL teams; parsed defensively, credited, tested against a saved page. See §26. |
+| Q38 | **The division of the people you play** (Flashy) | medium | Every player in every match tagged with their division that season, on the scoreboard and matchups; each side's average division; the profile's "Who you played" by division. The ask the league sample started with. See §26. |
+| Q39 | **Refit the models on the league** | medium | ~1,800 more matchups a class, Open to Premiership: refit all nine, settle damage per minute (SchmitShot) and the deaths weights with 3.6x the data, and find out whether one model serves every division. See §25. |
 
 ### Reported by testers, and fixed
 
@@ -2455,3 +2462,221 @@ export.
 Q30, then Q31, then Q32: the bug first, then the section, then the files
 that live in it. New features, so they go out as **0.7.0** with the ETF2L
 names option.
+
+---
+
+## 25. The league sample and the rating pool (Q33-Q34, Q39, Flashy)
+
+> "I kind of need like a database of logs from each division, like 300
+> officials from each, so that the ratings can get a bit less skewed and
+> for the app to have more context ... so later on I can make a sort and
+> have it tell you what div player you are playing against."
+>
+> "Since I have a large dataset, you can include me now as well."
+
+### Q33. The league sample (built 30 Sept 2026)
+
+**What it is.** ETF2L Highlander officials from every division, downloaded
+slowly in the background (Settings > League sample), kept in their own
+tables (migration 0033: `league_log`, `league_log_json`, `league_rawlog`)
+so nothing touches the owner's matches until it is decided how it counts.
+
+**How it finds them.** ETF2L's results give every match's division and
+tier (`leagues::fetch_seasons`, twelve seasons back); trends.tf lists every
+ETF2L Highlander log with its ETF2L match id
+(`/api/v1/logs?league=etf2l&format=highlander`). Joined, every log has a
+division without asking logs.tf anything. trends.tf links 92-97% of all
+officials played, per tier. Combined logs and logs under five minutes are
+left out; seasons before 32 are named without brackets ("Highlander Season
+22: Premiership Qualifiers") and the name parser reads both.
+
+**How it chooses.** Per tier (0 Premiership, 1 High, 2 Mid, 3 Low, 4 Open),
+up to 300 matches, the last three years first and six if a tier cannot
+fill, round-robin across maps so every map in the pool is in it.
+
+**How it downloads.** One request a step, ~6 s apart: logs.tf JSON, then
+raw server logs; while logs.tf is resting (a 403 rests it 10 minutes),
+more.tf's copy stands in for the JSON; one ETF2L match page a step
+alongside -- for **every** played official in the window, not only the
+sample's, which is the player catalogue (§26). It waits while the owner's
+sync runs, resumes after a restart, and re-reads the lists daily. A live
+activity bar says what it is doing each second.
+
+**What it holds (30 Sept).** 812 matches, 1,832 logs, all JSON and server
+logs downloaded, 203 MB: Premiership 117 matches, High 107, Mid 187, Low
+165, Open 236, 14-22 maps each, March 2022 to September 2026. Every tier is
+short of 300 because that is every official trends.tf links in the window,
+not because of the limit.
+
+### Q34. The league in the rating pool, the owner included
+
+**Why.** The pool was the owner's matches only, with the owner left out:
+on their main class they were half of it. With the league in it, they are
+one player among thousands and are compared with the league like everyone
+else; "1.00" becomes a typical league game.
+
+**Built, not yet switched on (30 Sept).** `league_rating::performances`
+puts each sample log through exactly what an owner's log goes through --
+kills valued by victim, map and situation, the fights pass (openings,
+trades, Fight KAST, cap costs), the shared swing -- in memory, from the
+downloaded JSON and raw log, writing nothing to the owner's tables.
+`rate_all` builds the baselines from the owner's matches plus the sample
+with nobody excluded, measures the scale over both, and stores only the
+owner's logs' ratings. A sample log that is also one of the owner's is
+skipped, so no game is counted twice. `hl validate --league` measures the
+same matchups against the new pool.
+
+**Before switching.** On a copy with the sample in it (Settings > Backups
+> Back up now, then copied), report: the owner's ratings per class before
+and after, the scale's shift, and `hl validate --league` for all nine
+classes against the old pool. Switch only if picking the winner is not
+worse. Every rating moves once when it does.
+
+**Cost.** Rating the sample reads ~1,800 raw logs (~10 ms each): about a
+minute added to a full rating pass. If that shows at the end of every sync,
+cache each sample log's performances keyed by model and fights version.
+
+### Q39. Refit the models on the league
+
+The nine models were fitted on ~690 matchups a class from the owner's
+matches. The sample adds ~1,800 a class, from Open to Premiership. Refit
+each class with `hl validate` on both, and settle the questions the small
+sample could not: whether damage per minute earns a place (SchmitShot's
+proposal: every version scored 1-4 points worse on the owner's matches),
+whether the Demo and Heavy deaths weights hold, and whether a model fitted
+on Open holds in Premiership. A tier column in the fit tells whether one
+model serves every division or the top needs its own.
+
+---
+
+## 26. Player profiles, HLTV-style (Q35-Q38, Flashy)
+
+> "Is it possible to correlate all these players with their respective
+> main classes and their divs? It would be cool to display this in the
+> players tab. Also show their medals, their tournament wins, kinda like a
+> cool player profile and overview ... something similar for player
+> profiles like HLTV but for TF2."
+
+The Players tab (Q14) finds people in the owner's matches only. The league
+sample and its catalogue hold every ETF2L official of six years and who
+played it; together with trends.tf, that is enough for a page per player
+that reads like an HLTV profile.
+
+### What an HLTV profile becomes
+
+| HLTV | Here | From |
+|---|---|---|
+| Photo, flag, name | Steam avatar, country flag, ETF2L name, aliases | ETF2L player page; the logs' names |
+| Current team | Latest ETF2L team, its avatar and division | The catalogue's newest roster |
+| Top 20 | "#3 Sniper in Premiership, S36" | Q36's ratings |
+| Player achievements | "2x Premiership winner", "1x High runner-up" | Q35's medals |
+| Trophy strip | A row of medals, each with its season and division | Q35 |
+| Rating 3.0 | Rating on the league scale, last three months | Q36 |
+| Firepower, Entrying, ... /100 | Kills and damage, Staying alive, Playing for the team, Objective, Medic, Speciality, each 0-100 | The component groups of How ratings work, as percentiles against the league on their class (Q36) |
+| Recent matches | Their officials: opponent, maps, score | The catalogue |
+| Tabs | Info, Teams, Matches, Achievements, Stats | All of the above |
+
+### Q35. The catalogue profile: who they are, their teams and medals
+
+Everything here comes from data already downloaded (the ETF2L results,
+rosters and competitions), so it works before any rating change.
+
+**Data.**
+- *Player*: every account in `etf2l_season_player`, plus everyone in the
+  owner's matches. Name: the newest ETF2L name, then the log name.
+- *Seasons*: per account and season, the team(s) they played an official
+  for, the division and tier, officials played, won and lost. A player can
+  play for two teams or two divisions in one season (a merc, a mid-season
+  move): list both, and count their division as the one they played most.
+- *Highest division*: the lowest tier with at least three officials played,
+  so a single merc game in Premiership does not make someone a Premiership
+  player.
+- *Medals*: per competition with playoffs, the Grand Final winner gold, its
+  loser silver, the 3rd Place match winner bronze. A season with no playoff
+  stage for a division: the regular-season table's top three. A player
+  earns the team's medal by playing at least one official for it that
+  season, playoffs or not. Cups ("Highlander Experimental Cup") the same
+  way where ETF2L lists them. Stored as derived rows (`player_medal`:
+  account, season, competition, division, place, team), rebuilt from the
+  results, never fetched.
+- *Profile extras from ETF2L's player page* (`/player/<steamid>`, one
+  request, cached a week): country, declared classes, Steam avatar,
+  registration date. Fetched when a profile is first opened, and for the
+  catalogue in the background after the rosters, at ETF2L's pace.
+
+**Main class.** Two readings, shown side by side when they disagree:
+*played* -- class time in every log we hold of theirs (owner's matches and
+the sample), their most played if at least 60% of their time; and
+*declared* -- ETF2L's `classes`. A player with no held logs shows declared
+only, and trends.tf's class hours once Q37 is in.
+
+**The page.**
+- Header: avatar, flag, name and aliases, current team and division badge,
+  main class icons, medal count ("2x Premiership winner").
+- Trophy strip: every medal as an icon with its season and division, newest
+  first; hover says the competition and the final's score.
+- Tabs:
+  - *Info*: the recent officials (opponent, maps, score, win or loss) and,
+    once Q36 is in, the stat bars.
+  - *Teams*: a timeline, season by season: team, division, record, placing.
+  - *Matches*: their officials; their games with and against the owner
+    (what Q14 shows now).
+  - *Achievements*: every medal and title in full.
+- Search: by name (every name used) or Steam ID, across the whole
+  catalogue, with the division badge, main class icon and medal count in
+  each row. Filters: division, class, "has a medal", "played this season".
+
+**Checks.** On the owner's own profile, the seasons must match their ETF2L
+page; medals must match ETF2L's news of each final for three seasons of
+Premiership and High, by hand. Renamed and merged teams (ETF2L keeps a team
+id across renames) must not split a player's season in two.
+
+### Q36. Ratings for everyone: ranks and stat bars
+
+Needs Q34 (the league pool). The sample's ratings are computed in every
+full rating pass already; store them in their own table
+(`league_rating`: log, account, class, score, parts), never mixed with the
+owner's `rating`. Then:
+- **Rating**, last three months and career, per class, on the league scale.
+- **Stat bars**: each component group's weighted percentile over the same
+  games, 0-100, the groups and colours of How ratings work.
+- **Ranks**: per season, class and division, players with at least eight
+  rated games ranked by average rating. "#3 Sniper in Premiership, S36";
+  a Top list per class and division in the Players tab.
+- **Honesty**: every figure says how many games it rests on, and a player
+  with fewer than eight shows none. The sample is at most ~300 matches a
+  division over six years, so a Premiership regular is in dozens of games
+  and an Open one-season player in a handful.
+
+### Q37. Career numbers from trends.tf, on demand
+
+trends.tf's player page (`/player/<steamid64>/?format=highlander`) holds
+what we cannot compute without their every log: W-L and winrate, per-class
+winrate, damage per minute, accuracy and hours, aliases, and their ETF2L
+and RGL teams. It has no JSON API, so the page is read the way a browser
+reads it.
+- One request when a profile is opened, never during search; cached a day
+  per player.
+- Parsed defensively: a table that is not found is left out, not an error,
+  and the section says "trends.tf could not be read" rather than breaking
+  the page. A test holds the parser to a saved copy of a real page.
+- Credited on the page, with a link to the player's trends.tf profile.
+
+### Q38. The division of the people you play
+
+The ask the sample started with: every player in every match gets a
+division tag from the catalogue -- their division the season the match
+was played, or nearest season -- shown on the scoreboard and the matchups
+("Prem", "High", ...). Then:
+- Each match says the average division of each side: a scrim against a
+  High team reads differently from one against a Low team.
+- The profile's "Who you played" (Q9, opponent strength by rating) gains a
+  division view: your rating against Premiership, High, Mid and Low
+  players.
+
+### Order
+
+Q34 first (it is built; the check needs one backup), then Q35 (all from
+data already here), Q36 (on Q34), Q38 (on Q35's player seasons), Q37 (a
+page parser, independent), and Q39 whenever the fits can be run in one
+sitting. Q35-Q38 are new features: a minor release.
