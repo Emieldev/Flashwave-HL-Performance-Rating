@@ -8,6 +8,15 @@ use anyhow::Result;
 use serde::Serialize;
 use sqlx::Row;
 
+/// A match's division and tier, playoff matches included: they carry
+/// neither, so both come from their competition ("Low Playoffs") and that
+/// season's regular matches in the same division. Needs `m` (the match)
+/// and `c` (its competition) in scope.
+const DIVISION_SQL: &str = "COALESCE(m.division, c.division)";
+const TIER_SQL: &str = "COALESCE(m.tier, (SELECT m2.tier FROM etf2l_season_match m2
+      JOIN etf2l_competition c2 ON c2.competition_id = m2.competition_id
+      WHERE c2.season = c.season AND m2.division = c.division AND m2.tier IS NOT NULL LIMIT 1))";
+
 /// One ETF2L Highlander log as trends.tf lists it.
 pub struct LeagueLogRow<'a> {
     pub log_id: i64,
@@ -87,12 +96,16 @@ impl Db {
 
     /// Every listed log whose match ETF2L has placed in a division.
     pub async fn league_candidates(&self) -> Result<Vec<Candidate>> {
-        let rows = sqlx::query(
-            "SELECT l.log_id, l.etf2l_match_id, l.map, l.played_at, COALESCE(l.duration_s, 0) AS duration_s,
-                    m.tier, m.division
-             FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
-             WHERE m.tier IS NOT NULL AND m.division IS NOT NULL AND m.default_win = 0",
-        )
+        let rows = sqlx::query(&format!(
+            "SELECT * FROM (
+               SELECT l.log_id, l.etf2l_match_id, l.map, l.played_at, COALESCE(l.duration_s, 0) AS duration_s,
+                      {TIER_SQL} AS tier, {DIVISION_SQL} AS division
+               FROM league_log l
+               JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
+               JOIN etf2l_competition c ON c.competition_id = m.competition_id
+               WHERE m.default_win = 0)
+             WHERE tier IS NOT NULL AND division IS NOT NULL AND division != ''"
+        ))
         .fetch_all(self.pool())
         .await?;
         Ok(rows
@@ -221,23 +234,28 @@ impl Db {
 
     /// Per division, what is picked and what has arrived.
     pub async fn league_progress(&self) -> Result<Vec<TierProgress>> {
-        let rows = sqlx::query(
-            "SELECT m.tier,
-                    (SELECT m2.division FROM etf2l_season_match m2 WHERE m2.tier = m.tier AND m2.division IS NOT NULL
+        let rows = sqlx::query(&format!(
+            "WITH picked AS (
+               SELECT l.*, {TIER_SQL} AS tier, m.detail_fetched, m.match_id
+               FROM league_log l
+               JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
+               JOIN etf2l_competition c ON c.competition_id = m.competition_id
+               WHERE l.picked = 1)
+             SELECT p.tier,
+                    (SELECT m2.division FROM etf2l_season_match m2 WHERE m2.tier = p.tier AND m2.division IS NOT NULL
                        ORDER BY m2.time DESC LIMIT 1) AS division,
-                    COUNT(DISTINCT l.etf2l_match_id) AS matches,
+                    COUNT(DISTINCT p.etf2l_match_id) AS matches,
                     COUNT(*) AS logs,
-                    SUM(l.json_source = 'logs.tf') AS json_logstf,
-                    SUM(l.json_source = 'more.tf') AS json_moretf,
-                    SUM(l.raw_state = 'ok') AS raw,
-                    SUM(l.raw_state = 'missing') AS raw_missing,
-                    COUNT(DISTINCT l.map) AS maps,
-                    COUNT(DISTINCT CASE WHEN m.detail_fetched = 1 THEN m.match_id END) AS rosters,
-                    MIN(l.played_at) AS oldest, MAX(l.played_at) AS newest
-             FROM league_log l JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
-             WHERE l.picked = 1 AND m.tier IS NOT NULL
-             GROUP BY m.tier ORDER BY m.tier",
-        )
+                    SUM(p.json_source = 'logs.tf') AS json_logstf,
+                    SUM(p.json_source = 'more.tf') AS json_moretf,
+                    SUM(p.raw_state = 'ok') AS raw,
+                    SUM(p.raw_state = 'missing') AS raw_missing,
+                    COUNT(DISTINCT p.map) AS maps,
+                    COUNT(DISTINCT CASE WHEN p.detail_fetched = 1 THEN p.match_id END) AS rosters,
+                    MIN(p.played_at) AS oldest, MAX(p.played_at) AS newest
+             FROM picked p WHERE p.tier IS NOT NULL
+             GROUP BY p.tier ORDER BY p.tier"
+        ))
         .fetch_all(self.pool())
         .await?;
         Ok(rows

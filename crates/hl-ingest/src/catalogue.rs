@@ -195,6 +195,18 @@ impl Catalogue {
         (f, a, won)
     }
 
+    /// A league final: a Playoffs competition's final, a "Grand Final"
+    /// competition, or -- in the seasons without a separate playoff
+    /// competition (Autumn 2023) -- a regular match whose round is the Grand
+    /// Final. A preseason cup's final is not the league's.
+    fn is_final(m: &CatMatch) -> bool {
+        let final_round = m.round.as_deref().is_some_and(|r| {
+            let r = r.to_ascii_lowercase();
+            r.starts_with("grand final") || r == "final" || r.starts_with("final ")
+        });
+        m.stage != "Cup" && (m.stage == "Grand Final" || final_round)
+    }
+
     fn played(m: &CatMatch) -> bool {
         !m.default_win && m.r1.unwrap_or(0) + m.r2.unwrap_or(0) > 0
     }
@@ -215,9 +227,8 @@ impl Catalogue {
             }
         };
         for m in self.matches.values().filter(|m| Self::played(m)) {
-            let key = (m.season, m.comp_division.clone());
-            let final_round = m.round.as_deref().is_some_and(|r| r.eq_ignore_ascii_case("Grand Final") || r.eq_ignore_ascii_case("Final"));
-            if m.stage == "Playoffs" && final_round || m.stage == "Grand Final" {
+            let key = (m.season, self.division_of(m).0);
+            if Self::is_final(m) {
                 if let Some((w, l)) = winner_loser(m) {
                     let e = out.entry(key).or_default();
                     e.push((1, w, format!("Grand Final {}", score(m, w))));
@@ -599,9 +610,13 @@ impl Catalogue {
             if !Self::played(m) {
                 continue;
             }
+            // A preseason cup is an official, not the league.
+            if m.stage == "Cup" {
+                continue;
+            }
             let (division, Some(tier)) = self.division_of(m) else { continue };
             names.entry((m.season, tier)).or_insert_with(|| division.clone());
-            let grand_final = (m.stage == "Playoffs" && m.round.as_deref().is_some_and(|r| r.eq_ignore_ascii_case("Grand Final") || r.eq_ignore_ascii_case("Final"))) || m.stage == "Grand Final";
+            let grand_final = Self::is_final(m);
             for (a, team, _) in roster {
                 let Some(team) = team else { continue };
                 let e = count.entry((*a, m.season)).or_default().entry(tier).or_default();
@@ -943,6 +958,19 @@ mod tests {
         let medals = c.medals();
         assert_eq!(medals[&(34, "High".to_string())].iter().map(|x| (x.0, x.1)).collect::<Vec<_>>(), vec![(1, 20), (2, 21), (3, 22)]);
         assert!(!medals.contains_key(&(35, "High".to_string())), "the newest season is not over");
+    }
+
+    #[test]
+    fn a_grand_final_inside_the_season_counts_but_a_cups_does_not() {
+        // Autumn 2023: the Grand Final is a round of the season itself.
+        let c = cat(vec![
+            m(1, 30, "regular", Some("Open B"), "", Some("Week 1"), 10, 11, 6, 0),
+            m(2, 30, "regular", Some("Open B"), "", Some("Grand Final"), 10, 12, 5, 1),
+            m(3, 31, "Cup", Some("Low A"), "", Some("Grand Final"), 10, 13, 6, 0),
+        ]);
+        let medals = c.medals();
+        assert!(medals[&(30, "Open B".to_string())].contains(&(1, 10, "Grand Final 5-1".into())));
+        assert!(!medals.contains_key(&(31, "Low A".to_string())), "a preseason cup is not the league");
     }
 
     /// Matches with their own tier, and one roster: player 1 for team 10.

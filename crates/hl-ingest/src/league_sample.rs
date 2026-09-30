@@ -28,8 +28,10 @@ use hl_db::{Db, LeagueLogRow};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-/// Matches wanted from each division.
-pub const MATCHES_PER_TIER: usize = 300;
+/// Matches wanted from each division. It began at 300; Flashy wants every
+/// official, and no division has played this many in six years, so it is
+/// "all of them" with a guard.
+pub const MATCHES_PER_TIER: usize = 5_000;
 /// Taken from the last three years first...
 pub const PREFER_YEARS: i64 = 3;
 /// ...and from as far back as six when that does not fill a division. The
@@ -50,8 +52,11 @@ const KEY_DISCOVERED: &str = "league_sample_discovered_at";
 /// The window the last discovery used: a wider one lists again from scratch.
 const KEY_WINDOW: &str = "league_sample_window";
 
+/// Changes when discovery must run again at once: a wider window, or a
+/// name parser that reads competitions it skipped before (2: the unnumbered
+/// seasons 28-31 and the preseason cups).
 fn window() -> String {
-    format!("{SEASONS_BACK}/{MAX_YEARS}")
+    format!("{SEASONS_BACK}/{MAX_YEARS}/2")
 }
 
 pub async fn enabled(db: &Db) -> Result<bool> {

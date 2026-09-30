@@ -43,7 +43,7 @@ export function LeagueSamplePanel() {
     <div className="panel league-panel">
       <h2>{t("League sample")}</h2>
       <p className="hint" style={{ marginTop: 6 }}>
-        {t("Up to 300 ETF2L officials from each division, the last three years first and every map in the pool, downloaded slowly in the background while the app is open. Kept apart from your own matches: it will let ratings be read against the whole league, and tell you which division the players you face come from.")}
+        {t("Every ETF2L Highlander official of the last six years, playoffs and preseason cups included, downloaded slowly in the background while the app is open. Kept apart from your own matches: it lets ratings be read against the whole league, and tells you which division the players you face come from.")}
       </p>
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
       {s && (
@@ -73,10 +73,7 @@ export function LeagueSamplePanel() {
                   {s.tiers.map((x) => (
                     <tr key={x.tier}>
                       <th scope="row">{x.division}</th>
-                      <td title={t("Chosen, of the {0} wanted", { "0": s.targetPerTier })}>
-                        {x.matches}
-                        <span className="muted"> / {s.targetPerTier}</span>
-                      </td>
+                      <td>{x.matches}</td>
                       <td>
                         <Bar done={x.jsonLogstf + x.jsonMoretf} of={x.logs} />
                         {x.jsonMoretf > 0 && <span className="muted" title={t("From more.tf while logs.tf was resting; asked of logs.tf again later")}> ({x.jsonMoretf} more.tf)</span>}
@@ -98,7 +95,7 @@ export function LeagueSamplePanel() {
               <p className="hint" style={{ marginTop: 8 }}>
                 {t("Player catalogue: {0} players from {1} of {2} officials' rosters.", { "0": s.players.toLocaleString(), "1": s.rostersRead.toLocaleString(), "2": s.officials.toLocaleString() })}{" "}
                 {t("{0} ETF2L logs listed; {1} MB held so far.", { "0": s.logsListed.toLocaleString(), "1": (s.bytes / 1e6).toFixed(0) })}{" "}
-                {s.tiers.some((x) => x.matches < s.targetPerTier) && t("Where a division is short of 300, ETF2L did not play that many officials in the seasons read.")}
+
               </p>
             </>
           )}

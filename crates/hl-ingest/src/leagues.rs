@@ -24,27 +24,57 @@ pub const DETAILS_PER_SYNC: i64 = 60;
 /// Competition-list pages read at most: a guard, not a limit.
 const MAX_LIST_PAGES: i64 = 25;
 
-/// `"Highlander Season 36 (Autumn 2026): Open Playoffs"` ->
-/// `(36, "Autumn 2026", "Open", "Playoffs")`. Seasons before 32 are named
-/// without the brackets -- `"Highlander Season 22: Premiership Qualifiers"`,
-/// or just `"Highlander Season 22"` -- and read as season `"Season 22"`.
+/// ETF2L's seasons between 27 and 32 carry no number: they are named by the
+/// time of year. Their places in the numbering, by date -- Season 27 ended
+/// in October 2022 and Season 32 began in July 2024 (Flashy's results page).
+const UNNUMBERED: [(&str, i64); 4] = [("Winter 2023", 28), ("Spring 2023", 29), ("Autumn 2023", 30), ("Winter 2024", 31)];
+
+/// A competition's name as `(season, season name, division, stage)`:
+/// - `"Highlander Season 36 (Autumn 2026): Open Playoffs"` ->
+///   `(36, "Autumn 2026", "Open", "Playoffs")`;
+/// - before season 32, no brackets: `"Highlander Season 22: Premiership
+///   Qualifiers"` -> season name `"Season 22"`;
+/// - between 27 and 32, no number at all: `"Highlander Winter 2024: Low"`,
+///   `"Highlander Winter 2023 Premiership"` ([`UNNUMBERED`]).
+///
+/// A preseason cup is stage `"Cup"`: its officials are the player's, but it
+/// is not the league, so it neither makes a division nor gives a medal.
 pub fn parse_name(name: &str) -> Option<(i64, String, String, String)> {
-    let rest = name.strip_prefix("Highlander Season ")?;
-    let digits = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-    let season: i64 = rest[..digits].parse().ok()?;
-    let rest = rest[digits..].trim_start();
-    let (season_name, rest) = match rest.strip_prefix('(') {
-        Some(r) => {
-            let (n, r) = r.split_once(')')?;
-            (n.to_string(), r)
+    let rest = name.strip_prefix("Highlander ")?;
+    let (season, season_name, rest) = if let Some(rest) = rest.strip_prefix("Season ") {
+        let digits = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+        let season: i64 = rest[..digits].parse().ok()?;
+        let rest = rest[digits..].trim_start();
+        match rest.strip_prefix('(') {
+            Some(r) => {
+                let (n, r) = r.split_once(')')?;
+                (season, n.to_string(), r)
+            }
+            None => (season, format!("Season {season}"), rest),
         }
-        None => (format!("Season {season}"), rest),
+    } else {
+        let (label, season) = UNNUMBERED.iter().find(|(label, _)| rest.starts_with(label))?;
+        (*season, label.to_string(), &rest[label.len()..])
     };
-    let label = rest.trim_start_matches(':').trim();
-    const STAGES: [&str; 6] = ["Grand Final", "3rd Place", "Playoffs", "Final", "Relegation", "Qualifiers"];
+    let label = rest.trim_start_matches([':', ' ', '-']).trim();
+    if label.contains("Preseason Cup") {
+        // "Preseason Cup: Low Playoffs" is the Low bracket; a bare cup has none.
+        let division = label.split_once(':').map_or("", |(_, d)| d).trim().trim_end_matches("Playoffs").trim().to_string();
+        return Some((season, season_name, division, "Cup".to_string()));
+    }
+    const STAGES: [(&str, &str); 8] = [
+        ("Grand Final", "Grand Final"),
+        ("3rd Place Match", "3rd Place"),
+        ("3rd Place", "3rd Place"),
+        ("Playoffs", "Playoffs"),
+        ("Final", "Final"),
+        ("Relegation", "Relegation"),
+        ("Qualifiers", "Qualifiers"),
+        ("Signups", "Signups"),
+    ];
     let (division, stage) = STAGES
         .iter()
-        .find_map(|s| label.strip_suffix(s).map(|d| (d.trim().to_string(), (*s).to_string())))
+        .find_map(|(suffix, stage)| label.strip_suffix(suffix).map(|d| (d.trim().to_string(), (*stage).to_string())))
         .unwrap_or_else(|| (label.to_string(), "regular".to_string()));
     Some((season, season_name, if division.is_empty() { label.to_string() } else { division }, stage))
 }
@@ -105,7 +135,9 @@ pub async fn fetch_seasons(
         let (mut wanted, mut older) = (false, false);
         for c in &data {
             let (Some(id), Some(name)) = (c.get("id").and_then(Value::as_i64), c.get("name").and_then(Value::as_str)) else { continue };
-            if c.get("category").and_then(Value::as_str) != Some("Highlander Season") {
+            // The league, and its preseason cups; not the fun cups, the
+            // Nations' Cup or the Highlander Open.
+            if !matches!(c.get("category").and_then(Value::as_str), Some("Highlander Season" | "Highlander Cup")) {
                 continue;
             }
             let Some((season, ..)) = parse_name(name) else { continue };
@@ -523,5 +555,16 @@ mod tests {
         // Before season 32: no season name in brackets.
         assert_eq!(parse_name("Highlander Season 22"), Some((22, "Season 22".into(), "".into(), "regular".into())));
         assert_eq!(parse_name("Highlander Season 22: Premiership Qualifiers"), Some((22, "Season 22".into(), "Premiership".into(), "Qualifiers".into())));
+        assert_eq!(parse_name("Highlander Season 34: High 3rd Place Match"), Some((34, "Season 34".into(), "High".into(), "3rd Place".into())));
+        // Between 27 and 32: named by the time of year.
+        assert_eq!(parse_name("Highlander Winter 2024: Low Playoffs"), Some((31, "Winter 2024".into(), "Low".into(), "Playoffs".into())));
+        assert_eq!(parse_name("Highlander Winter 2024"), Some((31, "Winter 2024".into(), "".into(), "regular".into())));
+        assert_eq!(parse_name("Highlander Winter 2023 Premiership"), Some((28, "Winter 2023".into(), "Premiership".into(), "regular".into())));
+        assert_eq!(parse_name("Highlander Spring 2023 Top Tiers"), Some((29, "Spring 2023".into(), "Top Tiers".into(), "regular".into())));
+        assert_eq!(parse_name("Highlander Autumn 2023: Premiership Qualifiers"), Some((30, "Autumn 2023".into(), "Premiership".into(), "Qualifiers".into())));
+        // Preseason cups are officials, not the league.
+        assert_eq!(parse_name("Highlander Autumn 2023 Preseason Cup"), Some((30, "Autumn 2023".into(), "".into(), "Cup".into())));
+        assert_eq!(parse_name("Highlander Spring 2023 Preseason Cup: Low Playoffs"), Some((29, "Spring 2023".into(), "Low".into(), "Cup".into())));
+        assert_eq!(parse_name("Highlander Experimental Cup #10"), None);
     }
 }
