@@ -301,6 +301,23 @@ impl Db {
         .await?)
     }
 
+    /// Sample logs downloaded since the last full rating pass: their JSON is
+    /// in and their raw log settled (downloaded, or known to be missing),
+    /// and nothing of theirs is rated under `version`. Oldest first.
+    pub async fn league_unrated(&self, version: &str, limit: i64) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT l.log_id FROM league_log l
+             WHERE l.picked = 1 AND l.json_source IS NOT NULL AND l.raw_state IS NOT NULL
+               AND l.log_id NOT IN (SELECT log_id FROM log_index)
+               AND NOT EXISTS (SELECT 1 FROM league_rating r WHERE r.model_version = ?1 AND r.log_id = l.log_id)
+             ORDER BY l.log_id LIMIT ?2",
+        )
+        .bind(version)
+        .bind(limit)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
     /// One sample log's JSON and, if it was downloaded, its raw server log.
     pub async fn league_log_files(&self, log_id: i64) -> Result<(Option<String>, Option<Vec<u8>>)> {
         let json = sqlx::query_scalar("SELECT json FROM league_log_json WHERE log_id = ?1").bind(log_id).fetch_optional(self.pool()).await?;

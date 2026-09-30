@@ -175,7 +175,7 @@ pub fn run() {
             // The league sample, when it is switched on (Settings).
             let busy = Arc::new(AtomicBool::new(false));
             let league_activity = league::SharedActivity::default();
-            league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone());
+            league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
 
             app.manage(AppState {
                 db,

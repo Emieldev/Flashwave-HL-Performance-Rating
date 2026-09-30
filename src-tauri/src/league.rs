@@ -95,7 +95,11 @@ pub fn snapshot(activity: &SharedActivity, sources: &Sources) -> Activity {
     a
 }
 
-pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: SharedActivity) {
+/// Sample logs rated per turn of the loop: ~10 ms each, and the first
+/// turn after a long download catches up a few hundred at a time.
+const RATE_BATCH: i64 = 200;
+
+pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: SharedActivity, weights_path: std::path::PathBuf) {
     activity.lock().unwrap().state = "starting";
     tauri::async_runtime::spawn(async move {
         // Let the startup passes have the database first.
@@ -107,7 +111,18 @@ pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: Sha
             Ok(n) => tracing::info!(logs = n, "league players indexed"),
             Err(e) => tracing::warn!(error = %format!("{e:#}"), "indexing league players failed"),
         }
+        // Sample logs rated as they settle, between full passes; the ones
+        // with nothing rateable are not read again this run.
+        let mut tried = std::collections::HashSet::new();
         loop {
+            if !busy.load(Ordering::Acquire) {
+                let (weights, _) = hl_rating::Weights::load(&weights_path);
+                match hl_ingest::league_rating::rate_new(&db, &weights, &mut tried, RATE_BATCH).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::debug!(logs = n, "league sample logs rated"),
+                    Err(e) => tracing::warn!(error = %format!("{e:#}"), "rating new league sample logs failed"),
+                }
+            }
             let (state, gap) = if !league_sample::enabled(&db).await.unwrap_or(false) {
                 ("paused", IDLE_GAP)
             } else if busy.load(Ordering::Acquire) {

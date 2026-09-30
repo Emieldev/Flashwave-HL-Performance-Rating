@@ -769,6 +769,13 @@ impl Catalogue {
     }
 }
 
+/// A rated game's season: its ETF2L match's, where known, else by date.
+/// Seasons overlap by date (AFA 2025 began before Season 34's playoffs were
+/// over), and an official belongs to its competition's season.
+fn game_season(cat: &Catalogue, windows: &[(i64, String, i64, i64)], g: &hl_db::RatedGame) -> Option<i64> {
+    g.etf2l_match_id.and_then(|id| cat.matches.get(&id)).map(|m| m.season).or_else(|| season_of(windows, g.played_at))
+}
+
 fn season_of(windows: &[(i64, String, i64, i64)], at: i64) -> Option<i64> {
     windows.iter().find(|(_, _, a, b)| at >= *a && at <= *b).map(|(s, _, _, _)| *s)
 }
@@ -792,6 +799,7 @@ fn mean(xs: impl Iterator<Item = f64>) -> Option<f64> {
 /// first: `(account, officials, average rating, team)`. The average is over
 /// their logs; the threshold is over officials (see [`MIN_RANK_GAMES`]).
 fn rank_table(
+    cat: &Catalogue,
     games: &[hl_db::RatedGame],
     windows: &[(i64, String, i64, i64)],
     divisions: &HashMap<(u32, i64), (i64, String, i64)>,
@@ -804,7 +812,7 @@ fn rank_table(
     // Officials only: the sample holds nothing else, so a player's pugs and
     // scrims would put them on a different footing from everyone else's.
     for g in games.iter().filter(|g| g.class == class && g.official) {
-        if season_of(windows, g.played_at) != Some(season) {
+        if game_season(cat, windows, g) != Some(season) {
             continue;
         }
         if divisions.get(&(g.account_id, season)).is_some_and(|(t, _, _)| *t == tier) {
@@ -867,7 +875,7 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
     let divisions = cat.played_divisions();
     let mut theirs: BTreeMap<(i64, String), std::collections::HashSet<i64>> = BTreeMap::new();
     for g in mine.iter().filter(|g| g.official) {
-        if let Some(s) = season_of(&windows, g.played_at) {
+        if let Some(s) = game_season(&cat, &windows, g) {
             theirs.entry((s, g.class.clone())).or_default().insert(g.etf2l_match_id.unwrap_or(-g.log_id));
         }
     }
@@ -879,7 +887,7 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
                 continue;
             }
             let Some((tier, division, _)) = divisions.get(&(account, season)).cloned() else { continue };
-            let table = rank_table(&everyone, &windows, &divisions, season, tier, &class);
+            let table = rank_table(&cat, &everyone, &windows, &divisions, season, tier, &class);
             if let Some(i) = table.iter().position(|r| r.0 == account) {
                 let name = windows.iter().find(|w| w.0 == season).map(|w| w.1.clone()).unwrap_or_default();
                 ranks.push(Rank { season, season_name: name, division, tier, class, rank: i + 1, of: table.len(), avg: table[i].2, games: table[i].1 });
@@ -910,7 +918,7 @@ pub async fn rankings(db: &Db, season: Option<i64>, tier: Option<i64>, class: &s
         }
     }
     let tier = tier.or_else(|| tiers.keys().next().copied()).unwrap_or(0);
-    let rows = rank_table(&everyone, &windows, &divisions, season, tier, class)
+    let rows = rank_table(&cat, &everyone, &windows, &divisions, season, tier, class)
         .into_iter()
         .enumerate()
         .map(|(i, (a, n, avg, team))| RankRow { rank: i + 1, account_id: a, name: cat.name_of(a), team: Some(cat.team(team)), games: n, avg })

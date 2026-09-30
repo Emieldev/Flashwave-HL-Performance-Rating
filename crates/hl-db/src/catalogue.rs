@@ -207,6 +207,24 @@ impl Db {
     pub async fn replace_league_ratings(&self, version: &str, rows: &[(i64, u32, &str, f64, f64, String)]) -> Result<()> {
         let mut tx = self.pool().begin().await?;
         sqlx::query("DELETE FROM league_rating WHERE model_version = ?1").bind(version).execute(&mut *tx).await?;
+        Self::insert_league_ratings(&mut tx, version, rows).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Adds sample ratings, keeping the rest: a log rated as it arrives.
+    pub async fn put_league_ratings(&self, version: &str, rows: &[(i64, u32, &str, f64, f64, String)]) -> Result<()> {
+        let mut tx = self.pool().begin().await?;
+        Self::insert_league_ratings(&mut tx, version, rows).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn insert_league_ratings(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        version: &str,
+        rows: &[(i64, u32, &str, f64, f64, String)],
+    ) -> Result<()> {
         for (log_id, account, class, score, minutes, groups) in rows {
             sqlx::query(
                 "INSERT OR REPLACE INTO league_rating (model_version, log_id, account_id, class, score, minutes, groups)
@@ -219,10 +237,9 @@ impl Db {
             .bind(score)
             .bind(minutes)
             .bind(groups)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
-        tx.commit().await?;
         Ok(())
     }
 

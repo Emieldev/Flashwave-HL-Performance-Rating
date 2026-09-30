@@ -42,6 +42,53 @@ pub async fn performances(db: &Db, w: &Weights) -> Result<Vec<(i64, Performance)
     Ok(out)
 }
 
+/// Rates up to `limit` sample logs downloaded since the last full pass,
+/// against its baselines and scale, as [`crate::rating::rate_logs`] does for
+/// the owner's: a season the downloader has just reached is ranked as its
+/// logs land, not at the next Sync (Flashy: "#1 of 1" in AFA 2025).
+///
+/// `tried` holds logs already tried this run: one with no rateable player
+/// stays unrated and is not read again. Returns the logs read (0 when there
+/// is nothing new, or no full pass yet to measure against).
+pub async fn rate_new(db: &Db, w: &Weights, tried: &mut std::collections::HashSet<i64>, limit: i64) -> Result<usize> {
+    let ids: Vec<i64> = db
+        .league_unrated(hl_rating::MODEL_VERSION, limit + tried.len() as i64)
+        .await?
+        .into_iter()
+        .filter(|id| !tried.contains(id))
+        .take(limit as usize)
+        .collect();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let baseline = crate::rating::load_baseline(db).await?;
+    let Some(scale) = crate::rating::load_scale(db).await? else { return Ok(0) };
+    if baseline.is_empty() {
+        return Ok(0);
+    }
+    for &log_id in &ids {
+        tried.insert(log_id);
+        let (Some(json), zip) = db.league_log_files(log_id).await? else { continue };
+        let w2 = w.clone();
+        let perfs = match tokio::task::spawn_blocking(move || rate_one(log_id, &json, zip.as_deref(), &w2)).await? {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(log_id, error = %format!("{e:#}"), "league sample log not rated");
+                continue;
+            }
+        };
+        let rows: Vec<(i64, u32, &str, f64, f64, String)> = perfs
+            .iter()
+            .filter_map(|p| {
+                let r = hl_rating::model::rate(p, &baseline, w)?.scaled(&scale);
+                Some((log_id, p.account_id, p.class.as_str(), r.score, r.minutes, hl_rating::guide::group_scores_json(&r.parts)))
+            })
+            .collect();
+        db.put_league_ratings(hl_rating::MODEL_VERSION, &rows).await?;
+    }
+    Ok(ids.len())
+}
+
 /// One sample log's performances: its JSON, and its raw log where there is one.
 pub fn rate_one(log_id: i64, json: &str, zip: Option<&[u8]>, w: &Weights) -> Result<Vec<Performance>> {
     let value: serde_json::Value = serde_json::from_str(json)?;
