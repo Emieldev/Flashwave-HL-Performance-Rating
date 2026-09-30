@@ -20,9 +20,17 @@ use tauri::{AppHandle, Emitter};
 /// How often the demo folders are listed.
 const POLL: Duration = Duration::from_secs(10);
 
-/// A file whose size has not moved for this long is finished. TF2 flushes as
-/// it records, so a demo still being written grows every few seconds.
+/// A file whose size has not moved for this long is finished -- once it has
+/// something in it (see [`MIN_FINISHED_BYTES`]).
 const SETTLED_FOR: Duration = Duration::from_secs(20);
+
+/// A demo smaller than this is still being recorded, however long it has
+/// sat still. TF2 can hold a recording at 0 bytes for the whole match and
+/// write it at the end (Flashy, 30 Sept 2026: two demos "finished" 25 s
+/// after they were created, at 0 bytes, so the after-game check ran at the
+/// start of the match and gave up long before its log existed). A played
+/// match's demo is megabytes; a header alone is about a kilobyte.
+const MIN_FINISHED_BYTES: u64 = 256 * 1024;
 
 pub const EV_NEW_DEMO: &str = "demos://new";
 
@@ -82,22 +90,17 @@ pub fn spawn(app: AppHandle, tf: PathBuf) {
                 if known.contains_key(path) {
                     continue;
                 }
-                match settling.get(path).copied() {
-                    Some((last, n)) if last == *size => {
-                        if n + 1 < needed {
-                            settling.insert(path.clone(), (*size, n + 1));
-                            continue;
-                        }
-                        // Finished: announce it once and never again.
+                match settle(settling.get(path).copied(), *size, needed) {
+                    Some(state) => {
+                        settling.insert(path.clone(), state);
+                    }
+                    // Finished: announce it once and never again.
+                    None => {
                         settling.remove(path);
                         known.insert(path.clone(), *size);
                         let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
                         tracing::info!(demo = %name, bytes = size, "new demo finished");
                         let _ = app.emit(EV_NEW_DEMO, NewDemo { file_name: name, bytes: *size });
-                    }
-                    // Still growing, or seen for the first time.
-                    _ => {
-                        settling.insert(path.clone(), (*size, 0));
                     }
                 }
             }
@@ -105,4 +108,49 @@ pub fn spawn(app: AppHandle, tf: PathBuf) {
             settling.retain(|p, _| now.contains_key(p));
         }
     });
+}
+
+/// One poll of one demo: its new `(size, polls unchanged)`, or `None` once
+/// it is finished -- big enough to be a recording, and unchanged for
+/// `needed` polls in a row.
+fn settle(prev: Option<(u64, u32)>, size: u64, needed: u32) -> Option<(u64, u32)> {
+    match prev {
+        // Empty or header-only: still recording, however long it sits still.
+        _ if size < MIN_FINISHED_BYTES => Some((size, 0)),
+        Some((last, n)) if last == size => (n + 1 < needed).then_some((size, n + 1)),
+        // Still growing, or seen for the first time.
+        _ => Some((size, 0)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Polls a file of these sizes until it is announced; the poll it was.
+    fn finished_at(sizes: &[u64]) -> Option<usize> {
+        let mut state = None;
+        for (i, &size) in sizes.iter().enumerate() {
+            match settle(state, size, 2) {
+                Some(s) => state = Some(s),
+                None => return Some(i),
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn an_empty_recording_is_not_finished_however_long_it_sits() {
+        assert_eq!(finished_at(&[0; 50]), None, "TF2 can hold a demo at 0 bytes for the whole match");
+        assert_eq!(finished_at(&[1_072; 50]), None, "a header alone is not a match");
+    }
+
+    #[test]
+    fn a_demo_is_finished_once_written_and_still() {
+        let mb = 1_000_000;
+        // Empty through the match, written at the end, then still.
+        assert_eq!(finished_at(&[0, 0, 0, 30 * mb, 30 * mb, 30 * mb]), Some(5));
+        // Growing as it records, then still.
+        assert_eq!(finished_at(&[mb, 2 * mb, 3 * mb, 3 * mb, 3 * mb]), Some(4));
+    }
 }
