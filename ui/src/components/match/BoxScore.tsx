@@ -5,6 +5,7 @@ import { ClassIcon } from "../ClassIcon";
 import { t as tr, tx, k } from "../../lib/i18n";
 import { classLabel } from "../analysis/common";
 import { DivTag, useMatchDivisions } from "./Divisions";
+import { PlayerPopCard, nameProps, usePlayerCard } from "../players/PlayerPopCard";
 
 const CLASS_ORDER = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
 
@@ -52,6 +53,8 @@ const COLS: Col[] = [
  */
 export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }) {
   const divisions = useMatchDivisions(d.logId);
+  // Click a name: their card (Q40).
+  const card = usePlayerCard();
   const [sort, setSort] = useState<{ key: Key; desc: boolean }>({ key: "team", desc: false });
   const rows = useMemo(() => {
     const byTeamClass = (a: PlayerRow, b: PlayerRow) =>
@@ -112,7 +115,9 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
               <tr key={p.accountId} className={`row-${p.team.toLowerCase()}${p.isMe ? " me-row" : ""}`}>
                 <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</td>
                 <td className="nowrap player-name">
-                  {p.name}
+                  <span {...nameProps(card.open({ accountId: p.accountId, name: p.name, cls: p.classes[0]?.[0] ?? null, isMe: p.isMe }))} title={tr("Their card")}>
+                    {p.name}
+                  </span>
                   <DivTag divisions={divisions} accountId={p.accountId} />
                   {p.isMe && <span className="you-tag">{tr("you")}</span>}
                 </td>
@@ -136,6 +141,7 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
           </tbody>
         </table>
       </div>
+      {card.target && <PlayerPopCard target={card.target} divisions={divisions} onClose={card.close} />}
     </section>
   );
 }

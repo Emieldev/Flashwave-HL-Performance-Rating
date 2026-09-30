@@ -167,7 +167,7 @@ function HeaderRanks({ accountId }: { accountId: number }) {
 }
 
 /** "Low winner" x2, "High runner-up" x1, ... best first. */
-function medalTitles(medals: Medal[]): [string, number, number][] {
+export function medalTitles(medals: Medal[]): [string, number, number][] {
   const count = new Map<string, [number, number, number]>();
   for (const m of medals) {
     const what = m.place === 1 ? t("{0} winner", { "0": m.division }) : m.place === 2 ? t("{0} runner-up", { "0": m.division }) : t("{0} third", { "0": m.division });

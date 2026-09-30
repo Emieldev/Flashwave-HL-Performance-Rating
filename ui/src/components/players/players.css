@@ -311,3 +311,30 @@
 .rank-pop-name, .rank-pop-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-pop-avg { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .rank-pop-games { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Q40: a player's card from a match page. */
+.pc-name { cursor: pointer; border-bottom: 1px dotted transparent; }
+.pc-name:hover { border-bottom-color: currentColor; }
+.pc-name:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; border-radius: 2px; }
+.pc-card { position: fixed; z-index: 60; padding: 12px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem; text-align: left; white-space: normal; }
+.pc-who { display: flex; gap: 10px; align-items: center; }
+.pc-avatar { width: 44px; height: 44px; flex: none; }
+.pc-who-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pc-name-row { display: flex; gap: 6px; align-items: center; font-size: 1rem; }
+.pc-name-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-divs { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 0.78rem; }
+.pc-medals { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pc-medal { position: relative; width: 34px; height: 34px; display: inline-grid; place-items: center; }
+.pc-medal-n { position: absolute; right: 2px; bottom: 0; font-size: 0.7rem; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+.pc-title { font-weight: 600; margin-left: 4px; }
+.pc-class { display: flex; gap: 8px; align-items: center; }
+.pc-class-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.pc-small { font-size: 0.76rem; }
+.pc-rating { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pc-rating-small { font-size: 1.05rem; }
+.pc-here { opacity: 0.9; }
+.pc-bars { margin: 0; gap: 6px; }
+.pc-together { margin: 0; font-size: 0.8rem; }
+.pc-links { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pc-links a { font-size: 0.8rem; }

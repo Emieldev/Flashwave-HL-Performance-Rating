@@ -6,6 +6,7 @@ import { t, tx } from "../../lib/i18n";
 import { classLabel } from "../analysis/common";
 import { goTo } from "../../lib/goto";
 import { DivTag, SideDivisions, useMatchDivisions } from "./Divisions";
+import { PlayerPopCard, nameProps, usePlayerCard } from "../players/PlayerPopCard";
 
 /**
  * The nine class matchups: the headline of the match page.
@@ -17,6 +18,9 @@ import { DivTag, SideDivisions, useMatchDivisions } from "./Divisions";
 export function Matchups({ d }: { d: MatchDetail }) {
   const [open, setOpen] = useState<string | null>(null);
   const divisions = useMatchDivisions(d.logId);
+  // Click a name: their card (Q40).
+  const card = usePlayerCard();
+  const isMe = (accountId: number) => d.players.some((p) => p.accountId === accountId && p.isMe);
 
   const left = d.leftTeam;
   const right: Team = left === "Red" ? "Blue" : "Red";
@@ -79,8 +83,10 @@ export function Matchups({ d }: { d: MatchDetail }) {
           open={open === m.class}
           onToggle={() => setOpen(open === m.class ? null : m.class)}
           divisions={divisions}
+          onName={(side, cls) => card.open({ accountId: side.accountId, name: side.name, cls, isMe: isMe(side.accountId) })}
         />
       ))}
+      {card.target && <PlayerPopCard target={card.target} divisions={divisions} onClose={card.close} />}
 
       {d.weightsWarning && <p className="error mu-warn">{d.weightsWarning}</p>}
     </section>
@@ -96,8 +102,9 @@ function MatchupRow(props: {
   open: boolean;
   onToggle: () => void;
   divisions: MatchDivisions | undefined;
+  onName: (side: Side, cls: string) => (e: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => void;
 }) {
-  const { m, left, right, maxGap, perPct, open, onToggle, divisions } = props;
+  const { m, left, right, maxGap, perPct, open, onToggle, divisions, onName } = props;
   const pct = m.diff === null ? 0 : Math.min(50, (Math.abs(m.diff) / maxGap) * 50);
   const leftWins = m.winner === "left";
   const rightWins = m.winner === "right";
@@ -116,7 +123,7 @@ function MatchupRow(props: {
           {m.involvesMe && <span className="you-tag">{t("you")}</span>}
         </span>
 
-        <SideCell side={m.left} align="left" winning={leftWins} divisions={divisions} />
+        <SideCell side={m.left} align="left" winning={leftWins} divisions={divisions} onName={m.left ? onName(m.left, m.class) : undefined} />
 
         <span className="mu-center">
           <span className="bar">
@@ -141,7 +148,7 @@ function MatchupRow(props: {
           </span>
         </span>
 
-        <SideCell side={m.right} align="right" winning={rightWins} divisions={divisions} />
+        <SideCell side={m.right} align="right" winning={rightWins} divisions={divisions} onName={m.right ? onName(m.right, m.class) : undefined} />
 
         <span className="mu-tag">
           {m.decisive ? (
@@ -157,13 +164,25 @@ function MatchupRow(props: {
   );
 }
 
-function SideCell({ side, align, winning, divisions }: { side: Side | null; align: "left" | "right"; winning: boolean; divisions: MatchDivisions | undefined }) {
+function SideCell({
+  side,
+  align,
+  winning,
+  divisions,
+  onName,
+}: {
+  side: Side | null;
+  align: "left" | "right";
+  winning: boolean;
+  divisions: MatchDivisions | undefined;
+  onName?: (e: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => void;
+}) {
   if (!side) {
     return <span className={`mu-side ${align} muted`}>{t("nobody")}</span>;
   }
   const name = (
     <span className="mu-name" title={side.subs.length ? t("Also played: {0}", { "0": side.subs.join(", ") }) : undefined}>
-      {side.name}
+      {onName ? <span {...nameProps(onName)}>{side.name}</span> : side.name}
       <DivTag divisions={divisions} accountId={side.accountId} />
       {side.subs.length > 0 && <span className="sub-tag">+{side.subs.length}</span>}
     </span>

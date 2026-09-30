@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type CatalogueHit } from "../../api/types";
@@ -9,6 +9,7 @@ import { t, tx } from "../../lib/i18n";
 import { DivisionBadge, PlayerProfile } from "./PlayerProfile";
 import { TopPlayers } from "./PlayerStats";
 import { MedalGlyph } from "./MedalGlyph";
+import { onOpenPlayer, takePendingPlayer } from "../../lib/goto";
 
 /**
  * Look other people up (Q14).
@@ -25,7 +26,17 @@ import { MedalGlyph } from "./MedalGlyph";
  */
 export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => void }) {
   const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | null>(() => takePendingPlayer());
+  // "Open profile" on a match page's player card (Q40).
+  useEffect(
+    () =>
+      onOpenPlayer((id) => {
+        setQuery("");
+        setPicked(id);
+        window.scrollTo({ top: 0 });
+      }),
+    [],
+  );
 
   // Only search once there is enough to search for: one letter matches half
   // the database and the answer is never what anyone wanted.
