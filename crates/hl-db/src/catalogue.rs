@@ -47,6 +47,13 @@ pub struct RatedGame {
     pub score: f64,
     pub parts: Option<String>,
     pub groups: Option<String>,
+    /// An ETF2L official: every league-sample game, and the owner's matches
+    /// classified as officials. Ranks count only these.
+    pub official: bool,
+    /// The ETF2L match it belongs to, where known: an official is one log
+    /// in the owner's matches (combined) and one per map in the sample, so
+    /// ranks count officials, not logs.
+    pub etf2l_match_id: Option<i64>,
 }
 
 /// ETF2L's page for a player, as kept.
@@ -225,11 +232,13 @@ impl Db {
     pub async fn rated_games(&self, version: &str, account: Option<u32>) -> Result<Vec<RatedGame>> {
         let rows = sqlx::query(
             "SELECT r.account_id, r.log_id, COALESCE(m.played_at, 0) AS played_at, r.class, r.score,
-                    r.parts AS parts, NULL AS groups
+                    r.parts AS parts, NULL AS groups,
+                    EXISTS (SELECT 1 FROM match_context c WHERE c.log_id = r.log_id AND c.kind = 'official') AS official,
+                    (SELECT c.etf2l_match_id FROM match_context c WHERE c.log_id = r.log_id) AS etf2l_match_id
              FROM rating r JOIN match m ON m.log_id = r.log_id
              WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
              UNION ALL
-             SELECT r.account_id, r.log_id, l.played_at, r.class, r.score, NULL, r.groups
+             SELECT r.account_id, r.log_id, l.played_at, r.class, r.score, NULL, r.groups, 1, l.etf2l_match_id
              FROM league_rating r JOIN league_log l ON l.log_id = r.log_id
              WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
                AND r.log_id NOT IN (SELECT log_id FROM log_index)",
@@ -248,6 +257,8 @@ impl Db {
                 score: r.get("score"),
                 parts: r.get("parts"),
                 groups: r.get("groups"),
+                official: r.get::<i64, _>("official") != 0,
+                etf2l_match_id: r.get("etf2l_match_id"),
             })
             .collect())
     }

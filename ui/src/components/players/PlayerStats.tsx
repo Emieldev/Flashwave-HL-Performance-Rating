@@ -76,9 +76,9 @@ export function PlayerStatsCard({ accountId }: { accountId: number }) {
           <ul>
             {s.ranks.slice(0, 6).map((r) => (
               <li key={`${r.season}-${r.class}`}>
-                <RankChip r={r} />
+                <RankChip r={r} accountId={accountId} />
                 <span className="muted">
-                  {tx("{0} over {1} games", { "0": rating(r.avg), "1": r.games })}
+                  {tx("{0} over {1} officials", { "0": rating(r.avg), "1": r.games })}
                 </span>
               </li>
             ))}
@@ -89,10 +89,48 @@ export function PlayerStatsCard({ accountId }: { accountId: number }) {
   );
 }
 
-export function RankChip({ r }: { r: Rank }) {
+/**
+ * "#3 of 8 Sniper in Mid, S34", and on hover or focus the whole table it
+ * comes from, the player highlighted (Flashy: "is it possible to get like
+ * an overview when you hover over that").
+ */
+export function RankChip({ r, accountId }: { r: Rank; accountId?: number }) {
+  const [open, setOpen] = useState(false);
+  const q = useQuery({ queryKey: ["rankings", r.season, r.tier, r.class], queryFn: () => api.getRankings(r.season, r.tier, r.class), enabled: open });
   return (
-    <span className="ps-rank" title={tx("{0} of {1} ranked {2}s in {3}, Season {4}, with {5} or more games", { "0": r.rank, "1": r.of, "2": classLabel(r.class), "3": r.division, "4": r.season, "5": 8 }) as string}>
-      <strong>#{r.rank}</strong> <ClassIcon cls={r.class} size={16} /> {t("in")} <DivisionBadge d={{ name: r.division, tier: r.tier }} /> <span className="muted">S{r.season}</span>
+    <span
+      className="ps-rank"
+      tabIndex={0}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+      aria-describedby={open ? `rank-${r.season}-${r.class}` : undefined}
+    >
+      <strong>#{r.rank}</strong>
+      <span className="muted">{t("of {0}", { "0": r.of })}</span> <ClassIcon cls={r.class} size={16} /> {t("in")} <DivisionBadge d={{ name: r.division, tier: r.tier }} /> <span className="muted">S{r.season}</span>
+      {open && (
+        <span className="rank-pop" role="tooltip" id={`rank-${r.season}-${r.class}`}>
+          <span className="rank-pop-head">
+            {tx("{0} in {1}, Season {2}", { "0": classLabel(r.class), "1": r.division, "2": r.season })}
+          </span>
+          <span className="rank-pop-sub">{tx("Officials only; {0} or more to be ranked.", { "0": 4 })}</span>
+          {!q.data && <span className="hint">{t("Loading…")}</span>}
+          {q.data && (
+            <span className="rank-pop-rows">
+              {q.data.rows.map((x) => (
+                <span key={x.accountId} className={x.accountId === accountId ? "rank-pop-row me" : "rank-pop-row"}>
+                  <span className="rank-pop-n">#{x.rank}</span>
+                  <span className="rank-pop-name">{x.name}</span>
+                  <span className="muted rank-pop-team">{x.team?.name}</span>
+                  <span className="rank-pop-avg">{rating(x.avg)}</span>
+                  <span className="muted rank-pop-games">{x.games}</span>
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      )}
     </span>
   );
 }
@@ -109,7 +147,7 @@ export function TopPlayers({ onPick }: { onPick: (accountId: number) => void }) 
   return (
     <div className="panel top-players">
       <h2>{t("Top players")}</h2>
-      <p className="hint" style={{ marginTop: 6 }}>{tx("By average rating in one season, on one class, in the division they played. {0} or more games to be ranked.", { "0": 8 })}</p>
+      <p className="hint" style={{ marginTop: 6 }}>{tx("By average rating in one season, on one class, in the division they played, over their officials. {0} or more officials to be ranked.", { "0": 4 })}</p>
       <div className="tp-controls">
         <div className="ps-classes">
           {CLASSES.map((c) => (
@@ -145,7 +183,7 @@ export function TopPlayers({ onPick }: { onPick: (accountId: number) => void }) 
               <th>#</th>
               <th>{t("Player")}</th>
               <th>{t("Team")}</th>
-              <th>{t("Games")}</th>
+              <th>{t("Officials")}</th>
               <th>{t("Rating")}</th>
             </tr>
           </thead>

@@ -296,3 +296,18 @@
 .medal-img { display: block; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
 .medal-silver { filter: grayscale(1) brightness(1.18) contrast(1.05) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
 .medal-bronze { filter: sepia(0.55) saturate(1.25) hue-rotate(-14deg) brightness(0.78) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+
+/* A rank's whole table, on hover or focus. */
+.ps-rank { position: relative; cursor: default; }
+.ps-rank:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.rank-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 330px; max-width: 420px; padding: 10px 12px; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; }
+.rank-pop-head { font-weight: 700; }
+.rank-pop-sub { color: var(--muted); font-size: 0.74rem; }
+.rank-pop-rows { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
+.rank-pop-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr) 40px 22px; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 4px; }
+.rank-pop-row.me { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.rank-pop-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rank-pop-name, .rank-pop-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-pop-avg { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.rank-pop-games { text-align: right; font-variant-numeric: tabular-nums; }

@@ -573,8 +573,10 @@ pub async fn season_medals(db: &Db, season: i64) -> Result<Vec<(String, Vec<(u8,
 
 // ---- Ratings, stat bars and ranks (Q36) ----------------------------------
 
-/// Games in a season, class and division before a player is ranked.
-pub const MIN_RANK_GAMES: usize = 8;
+/// Officials in a season, class and division before a player is ranked.
+/// Counted as officials, not logs: the owner's matches hold one combined log
+/// per official and the league sample one log per map.
+pub const MIN_RANK_GAMES: usize = 4;
 /// "Recent form": the games in this long before a player's newest.
 const RECENT_S: i64 = 90 * 24 * 3600;
 /// Recent games needed before the bars show recent form, not the career.
@@ -784,8 +786,9 @@ fn mean(xs: impl Iterator<Item = f64>) -> Option<f64> {
     (n > 0).then(|| s / n as f64)
 }
 
-/// One season, division and class, everyone with enough games, best first:
-/// `(account, games, average, team)`.
+/// One season, division and class, everyone with enough officials, best
+/// first: `(account, officials, average rating, team)`. The average is over
+/// their logs; the threshold is over officials (see [`MIN_RANK_GAMES`]).
 fn rank_table(
     games: &[hl_db::RatedGame],
     windows: &[(i64, String, i64, i64)],
@@ -794,19 +797,24 @@ fn rank_table(
     tier: i64,
     class: &str,
 ) -> Vec<(u32, usize, f64, i64)> {
-    let mut by: HashMap<u32, Vec<f64>> = HashMap::new();
-    for g in games.iter().filter(|g| g.class == class) {
+    // account -> (scores, officials)
+    let mut by: HashMap<u32, (Vec<f64>, std::collections::HashSet<i64>)> = HashMap::new();
+    // Officials only: the sample holds nothing else, so a player's pugs and
+    // scrims would put them on a different footing from everyone else's.
+    for g in games.iter().filter(|g| g.class == class && g.official) {
         if season_of(windows, g.played_at) != Some(season) {
             continue;
         }
         if divisions.get(&(g.account_id, season)).is_some_and(|(t, _, _)| *t == tier) {
-            by.entry(g.account_id).or_default().push(g.score);
+            let e = by.entry(g.account_id).or_default();
+            e.0.push(g.score);
+            e.1.insert(g.etf2l_match_id.unwrap_or(-g.log_id));
         }
     }
     let mut rows: Vec<(u32, usize, f64, i64)> = by
         .into_iter()
-        .filter(|(_, v)| v.len() >= MIN_RANK_GAMES)
-        .map(|(a, v)| (a, v.len(), v.iter().sum::<f64>() / v.len() as f64, divisions[&(a, season)].2))
+        .filter(|(_, (_, officials))| officials.len() >= MIN_RANK_GAMES)
+        .map(|(a, (v, officials))| (a, officials.len(), v.iter().sum::<f64>() / v.len() as f64, divisions[&(a, season)].2))
         .collect();
     rows.sort_by(|a, b| b.2.total_cmp(&a.2));
     rows
@@ -855,17 +863,17 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
     let cat = Catalogue::load(db).await?;
     let windows = cat.season_windows();
     let divisions = cat.played_divisions();
-    let mut theirs: BTreeMap<(i64, String), usize> = BTreeMap::new();
-    for g in &mine {
+    let mut theirs: BTreeMap<(i64, String), std::collections::HashSet<i64>> = BTreeMap::new();
+    for g in mine.iter().filter(|g| g.official) {
         if let Some(s) = season_of(&windows, g.played_at) {
-            *theirs.entry((s, g.class.clone())).or_default() += 1;
+            theirs.entry((s, g.class.clone())).or_default().insert(g.etf2l_match_id.unwrap_or(-g.log_id));
         }
     }
     let mut ranks = Vec::new();
-    if theirs.values().any(|n| *n >= MIN_RANK_GAMES) {
+    if theirs.values().any(|n| n.len() >= MIN_RANK_GAMES) {
         let everyone = db.rated_games(version, None).await?;
         for ((season, class), n) in theirs {
-            if n < MIN_RANK_GAMES {
+            if n.len() < MIN_RANK_GAMES {
                 continue;
             }
             let Some((tier, division, _)) = divisions.get(&(account, season)).cloned() else { continue };

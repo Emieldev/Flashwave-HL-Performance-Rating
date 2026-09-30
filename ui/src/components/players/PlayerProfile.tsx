@@ -160,7 +160,7 @@ function HeaderRanks({ accountId }: { accountId: number }) {
         .filter((r) => r.season === newest)
         .slice(0, 3)
         .map((r) => (
-          <RankChip key={r.class} r={r} />
+          <RankChip key={r.class} r={r} accountId={accountId} />
         ))}
     </div>
   );
