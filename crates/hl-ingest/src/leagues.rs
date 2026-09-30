@@ -142,6 +142,43 @@ pub fn parse_name(name: &str) -> Option<(i64, String, String, String)> {
     Some((season, season_name, if division.is_empty() { label.to_string() } else { division }, stage))
 }
 
+/// ETF2L's other Highlander tournaments (Flashy: "all highlander
+/// tournaments"): the Experimental Cups, one-night cups, the Highlander
+/// Open, the Nations' Cup. Not the fun-team brackets. They are named after
+/// themselves, not a season.
+pub fn is_tournament(category: &str, kind: &str, name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    matches!(category, "Fun Cup" | "1 Day Cup" | "The Highlander Open" | "Nations' Cup")
+        && n.contains("highlander")
+        && !n.contains("fun team")
+        && !kind.to_ascii_lowercase().contains("fun team")
+}
+
+/// A tournament's name as `(tournament, division)`, stage always `"Cup"`:
+/// `"Highlander Experimental Cup #10: Mid 3rd Place"` ->
+/// `("Highlander Experimental Cup #10", "Mid")`;
+/// `"Highlander Nations Cup #7 - Bronze Match"` -> `(".. #7", "")`.
+pub fn parse_tournament(name: &str) -> (String, String) {
+    let (cup, label) = name.split_once(':').or_else(|| name.split_once(" - ")).unwrap_or((name, ""));
+    let mut division = label.trim().to_string();
+    for suffix in ["3rd Place Match", "Third Place Match", "3rd Place", "Bronze Match", "Grand Final", "Playoffs", "Final"] {
+        if let Some(d) = division.strip_suffix(suffix) {
+            division = d.trim().to_string();
+            break;
+        }
+    }
+    (cup.trim().to_string(), division)
+}
+
+/// A competition's division and stage, whichever kind it is.
+pub fn division_and_stage(name: &str) -> Option<(String, String)> {
+    if let Some((_, _, division, stage)) = parse_name(name) {
+        return Some((division, stage));
+    }
+    let (cup, division) = parse_tournament(name);
+    (!cup.is_empty()).then(|| (division, "Cup".to_string()))
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchSummary {
@@ -179,8 +216,12 @@ pub async fn fetch_seasons(
     let mut out = FetchSummary::default();
 
     // 1. Which competitions: newest first, until the seasons run out.
-    let mut found: Vec<(i64, String, bool)> = Vec::new();
+    // (id, name, archived, season for a tournament)
+    let mut found: Vec<(i64, String, bool, Option<i64>)> = Vec::new();
     let mut newest: Option<i64> = None;
+    // A tournament goes with the season after it (a preseason cup is for the
+    // season it comes before): the last numbered season met, walking back.
+    let mut after: Option<i64> = None;
     for page in 1..=MAX_LIST_PAGES {
         let Some(body) = sources.etf2l_get(&format!("/competition/list?page={page}")).await? else { break };
         // ETF2L answers a busy moment with an HTML page: the walk ends
@@ -198,12 +239,29 @@ pub async fn fetch_seasons(
         let (mut wanted, mut older) = (false, false);
         for c in &data {
             let (Some(id), Some(name)) = (c.get("id").and_then(Value::as_i64), c.get("name").and_then(Value::as_str)) else { continue };
-            // The league, and its preseason cups; not the fun cups, the
-            // Nations' Cup or the Highlander Open.
-            if !matches!(c.get("category").and_then(Value::as_str), Some("Highlander Season" | "Highlander Cup")) {
+            // The league and its preseason cups, and the other Highlander
+            // tournaments; not the fun-team brackets.
+            let category = c.get("category").and_then(Value::as_str).unwrap_or("");
+            let kind = c.get("type").and_then(Value::as_str).unwrap_or("");
+            let archived = c.get("archived").and_then(Value::as_bool).unwrap_or(false);
+            if is_tournament(category, kind, name) {
+                let Some(season) = after.or(newest) else {
+                    // Newer than every season: the newest, once it is met.
+                    found.push((id, name.to_string(), archived, None));
+                    continue;
+                };
+                if season_order(season) >= season_order(newest.unwrap_or(season) - seasons_back) {
+                    found.push((id, name.to_string(), archived, Some(season)));
+                }
+                continue;
+            }
+            if !matches!(category, "Highlander Season" | "Highlander Cup") {
                 continue;
             }
             let Some((season, ..)) = parse_name(name) else { continue };
+            if season < OFF_SEASON {
+                after = Some(season);
+            }
             // The newest numbered season sets the window; one between two
             // is in it when the season before it is.
             if season < OFF_SEASON {
@@ -212,7 +270,7 @@ pub async fn fetch_seasons(
             let top = newest.unwrap_or(season % OFF_SEASON);
             if season_order(season) >= season_order(top - seasons_back) {
                 wanted = true;
-                found.push((id, name.to_string(), c.get("archived").and_then(Value::as_bool).unwrap_or(false)));
+                found.push((id, name.to_string(), archived, None));
             } else {
                 older = true;
             }
@@ -225,10 +283,18 @@ pub async fn fetch_seasons(
     // 2. Each competition's pool and results. An archived one already held is
     // settled and not asked for again.
     let held: HashMap<i64, bool> = db.competitions().await?.into_iter().map(|c| (c.competition_id, c.archived)).collect();
-    let todo: Vec<&(i64, String, bool)> = found.iter().filter(|(id, _, archived)| !(*archived && held.get(id) == Some(&true))).collect();
-    for (i, (id, name, archived)) in todo.iter().enumerate() {
+    let todo: Vec<&(i64, String, bool, Option<i64>)> = found.iter().filter(|(id, _, archived, _)| !(*archived && held.get(id) == Some(&true))).collect();
+    for (i, (id, name, archived, cup_season)) in todo.iter().enumerate() {
         progress(i, todo.len());
-        let Some((season, season_name, division, stage)) = parse_name(name) else { continue };
+        let (season, season_name, division, stage) = match parse_name(name) {
+            Some(x) => x,
+            None => {
+                // A tournament: named after itself, kept with its season.
+                let Some(season) = cup_season.or(newest) else { continue };
+                let (cup, division) = parse_tournament(name);
+                (season, cup, division, "Cup".to_string())
+            }
+        };
         let pool = match sources.etf2l_get(&format!("/competition/{id}")).await {
             Ok(Some(body)) => serde_json::from_str::<Value>(&body).ok().and_then(|v| v.pointer("/competition/pool").map(|p| p.to_string())),
             _ => None,
@@ -403,7 +469,9 @@ pub struct SeasonView {
 
 fn seasons_of(comps: &[hl_db::Competition]) -> Vec<SeasonInfo> {
     let mut by: BTreeMap<i64, SeasonInfo> = BTreeMap::new();
-    for c in comps {
+    // A tournament is kept with a season but is not one (its season name
+    // is its own: "Highlander Experimental Cup #10").
+    for c in comps.iter().filter(|c| !(c.stage == "Cup" && c.season_name.contains("Highlander"))) {
         let s = by.entry(season_order(c.season)).or_insert_with(|| SeasonInfo { season: c.season, name: c.season_name.clone(), divisions: Vec::new(), pool: Vec::new() });
         if s.pool.is_empty() {
             s.pool = c.pool.clone();
@@ -631,6 +699,16 @@ mod tests {
         assert_eq!(parse_name("Highlander AFA 2025: Top Tiers"), Some((134, "AFA 2025".into(), "Top Tiers".into(), "regular".into())));
         assert_eq!(parse_name("Highlander AFA 2025: Low 3rd Place"), Some((134, "AFA 2025".into(), "Low".into(), "3rd Place".into())));
         assert_eq!(parse_name("Highlander AFA 2025"), Some((134, "AFA 2025".into(), "".into(), "regular".into())));
+        // Tournaments: named after themselves, a cup stage.
+        assert_eq!(parse_name("Highlander Experimental Cup #10: Mid 3rd Place"), None);
+        assert_eq!(parse_tournament("Highlander Experimental Cup #10: Mid 3rd Place"), ("Highlander Experimental Cup #10".into(), "Mid".into()));
+        assert_eq!(parse_tournament("Highlander Nations Cup #7 - Bronze Match"), ("Highlander Nations Cup #7".into(), "".into()));
+        assert_eq!(parse_tournament("High-Tide Highlander One-Night-Cup"), ("High-Tide Highlander One-Night-Cup".into(), "".into()));
+        assert_eq!(division_and_stage("The Highlander Open #4: Playoffs"), Some(("".into(), "Cup".into())));
+        assert!(is_tournament("Fun Cup", "Highlander", "Highlander Experimental Cup #10: Mid Grand Final"));
+        assert!(!is_tournament("Fun Cup", "Highlander Fun Team", "Highlander Experimental Cup #10 (Fun Teams)"));
+        assert!(is_tournament("Nations' Cup", "National Highlander Team", "Highlander Nations Cup #9: 3rd Place Match"));
+        assert!(!is_tournament("Fun Cup", "6v6", "6v6 Fun Cup"));
         assert!(season_order(34) < season_order(134) && season_order(134) < season_order(35));
         assert_eq!(parse_name("Highlander Winter 2023 Premiership"), Some((28, "Winter 2023".into(), "Premiership".into(), "regular".into())));
         assert_eq!(parse_name("Highlander Spring 2023 Top Tiers"), Some((29, "Spring 2023".into(), "Top Tiers".into(), "regular".into())));

@@ -234,11 +234,13 @@ function Overview({ p }: { p: Profile }) {
           {recent.map((o) => (
             <li key={o.matchId} className={o.won === true ? "won" : o.won === false ? "lost" : undefined}>
               <span className="pp-vs">
-                {t("vs")} <TeamAvatar src={o.opponent.avatar} /> <strong>{o.opponent.name}</strong>
+                <TeamAvatar src={o.team.avatar} /> {o.team.name} <span className="muted">{t("vs")}</span> <TeamAvatar src={o.opponent.avatar} /> <strong>{o.opponent.name}</strong>
               </span>
               <span className="muted pp-where">
-                {seasonShort(o.season)} {o.division}
-                {o.stage !== "regular" ? ` · ${o.round ?? o.stage}` : ""}
+                {o.division && o.tier !== null && <DivisionBadge d={{ name: o.division, tier: o.tier }} />}{" "}
+                {o.stage === "Cup" ? o.competition.replace(/:.*$/, "") : seasonShort(o.season)}
+                {o.division && o.tier === null ? ` ${o.division}` : ""}
+                {o.stage !== "regular" && o.stage !== "Cup" ? ` · ${o.round ?? o.stage}` : o.stage === "Cup" && o.round ? ` · ${o.round}` : ""}
                 {o.time ? ` · ${formatDate(o.time, true)}` : ""}
               </span>
               <span className="pp-score">

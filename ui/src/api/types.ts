@@ -266,7 +266,9 @@ export interface Official {
   matchId: number;
   time: number | null;
   season: number;
+  competition: string;
   division: string;
+  tier: number | null;
   stage: string;
   round: string | null;
   team: CatTeam;

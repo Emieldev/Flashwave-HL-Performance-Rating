@@ -83,7 +83,10 @@ pub struct Official {
     pub match_id: i64,
     pub time: Option<i64>,
     pub season: i64,
+    /// ETF2L's name for the competition ("Highlander Experimental Cup #10").
+    pub competition: String,
     pub division: String,
+    pub tier: Option<i64>,
     pub stage: String,
     pub round: Option<String>,
     pub team: Team,
@@ -158,7 +161,7 @@ impl Catalogue {
         // now: one stored before the parser knew "3rd Place Match" was kept
         // as a regular division called "Premiership 3rd Place Match".
         for m in matches.values_mut() {
-            if let Some((_, _, division, stage)) = crate::leagues::parse_name(&m.comp_name) {
+            if let Some((division, stage)) = crate::leagues::division_and_stage(&m.comp_name).filter(|_| !m.comp_name.is_empty()) {
                 m.comp_division = division;
                 m.stage = stage;
             }
@@ -176,7 +179,8 @@ impl Catalogue {
             }
         }
         let tier_by_name = votes.into_iter().filter_map(|(d, v)| Some((d, v.into_iter().max_by_key(|(_, n)| *n)?.0))).collect();
-        let newest_season = matches.values().map(|m| m.season).max().unwrap_or(0);
+        // The newest numbered season: 134 (AFA 2025) is older than 35.
+        let newest_season = matches.values().map(|m| m.season).filter(|s| *s < crate::leagues::OFF_SEASON).max().unwrap_or(0);
         Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season })
     }
 
@@ -294,7 +298,7 @@ impl Catalogue {
         }
         // Divisions without a final: the table, once the season is over.
         let mut tables: HashMap<(i64, String), HashMap<i64, (u32, i64)>> = HashMap::new();
-        for m in self.matches.values().filter(|m| Self::played(m) && m.stage == "regular" && m.season < self.newest_season) {
+        for m in self.matches.values().filter(|m| Self::played(m) && m.stage == "regular" && season_order(m.season) < season_order(self.newest_season)) {
             let t = tables.entry((m.season, self.medal_division(m))).or_default();
             for team in [m.clan1, m.clan2] {
                 let (f, a, won) = Self::result_for(m, team);
@@ -330,15 +334,20 @@ impl Catalogue {
             }
             let (division, tier) = self.division_of(m);
             let (f, a, won) = Self::result_for(m, team);
-            let e = seasons.entry((m.season, team)).or_default();
-            *e.0.entry((division.clone(), tier)).or_default() += 1;
-            e.1 += 1;
-            e.2 += u32::from(won == Some(true));
-            e.3 += u32::from(won == Some(false));
+            // A tournament is their official, not their season.
+            if m.stage != "Cup" || m.comp_name.is_empty() || crate::leagues::parse_name(&m.comp_name).is_some() {
+                let e = seasons.entry((m.season, team)).or_default();
+                *e.0.entry((division.clone(), tier)).or_default() += 1;
+                e.1 += 1;
+                e.2 += u32::from(won == Some(true));
+                e.3 += u32::from(won == Some(false));
+            }
             officials.push(Official {
                 match_id: m.match_id,
                 time: m.time,
                 season: m.season,
+                competition: m.comp_name.clone(),
+                tier,
                 division,
                 stage: m.stage.clone(),
                 round: m.round.clone(),
@@ -351,7 +360,17 @@ impl Catalogue {
         }
         officials.sort_by_key(|o| std::cmp::Reverse(o.time.unwrap_or(0)));
 
-        let season_name = |s: i64| self.matches.values().find(|m| m.season == s).map(|m| m.season_name.clone()).unwrap_or_default();
+        // A season's own name, not a tournament's kept with it.
+        let season_name = |s: i64| {
+            let of = |m: &&CatMatch| m.season == s;
+            self.matches
+                .values()
+                .filter(of)
+                .find(|m| m.stage != "Cup")
+                .or_else(|| self.matches.values().find(of))
+                .map(|m| m.season_name.clone())
+                .unwrap_or_default()
+        };
         let mut won_medals: Vec<Medal> = Vec::new();
         let mut out: Vec<PlayerSeason> = seasons
             .into_iter()
@@ -654,7 +673,8 @@ impl Catalogue {
     fn season_windows(&self) -> Vec<(i64, String, i64, i64)> {
         // keyed by the season's place in time: AFA 2025 between 34 and 35
         let mut w: BTreeMap<i64, (i64, String, i64, i64)> = BTreeMap::new();
-        for m in self.matches.values() {
+        // The league's dates: a tournament kept with a season can be months off.
+        for m in self.matches.values().filter(|m| m.stage != "Cup") {
             let Some(t) = m.time else { continue };
             let e = w.entry(season_order(m.season)).or_insert((m.season, m.season_name.clone(), t, t));
             e.2 = e.2.min(t);
@@ -773,7 +793,12 @@ impl Catalogue {
 /// Seasons overlap by date (AFA 2025 began before Season 34's playoffs were
 /// over), and an official belongs to its competition's season.
 fn game_season(cat: &Catalogue, windows: &[(i64, String, i64, i64)], g: &hl_db::RatedGame) -> Option<i64> {
-    g.etf2l_match_id.and_then(|id| cat.matches.get(&id)).map(|m| m.season).or_else(|| season_of(windows, g.played_at))
+    match g.etf2l_match_id.and_then(|id| cat.matches.get(&id)) {
+        // A cup is an official but not the season's league: not ranked.
+        Some(m) if m.stage == "Cup" => None,
+        Some(m) => Some(m.season),
+        None => season_of(windows, g.played_at),
+    }
 }
 
 fn season_of(windows: &[(i64, String, i64, i64)], at: i64) -> Option<i64> {

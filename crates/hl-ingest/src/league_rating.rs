@@ -47,8 +47,8 @@ pub async fn performances(db: &Db, w: &Weights) -> Result<Vec<(i64, Performance)
 /// the owner's: a season the downloader has just reached is ranked as its
 /// logs land, not at the next Sync (Flashy: "#1 of 1" in AFA 2025).
 ///
-/// `tried` holds logs already tried this run: one with no rateable player
-/// stays unrated and is not read again. Returns the logs read (0 when there
+/// `tried` holds logs tried this run that gave no rating: one with no
+/// rateable player stays unrated and is not read again. Returns the logs read (0 when there
 /// is nothing new, or no full pass yet to measure against).
 pub async fn rate_new(db: &Db, w: &Weights, tried: &mut std::collections::HashSet<i64>, limit: i64) -> Result<usize> {
     let ids: Vec<i64> = db
@@ -67,6 +67,8 @@ pub async fn rate_new(db: &Db, w: &Weights, tried: &mut std::collections::HashSe
         return Ok(0);
     }
     for &log_id in &ids {
+        // Kept only for a log that gives no rating: one rated is not picked
+        // again, until its server log lands and it is rated anew.
         tried.insert(log_id);
         let (Some(json), zip) = db.league_log_files(log_id).await? else { continue };
         let w2 = w.clone();
@@ -84,6 +86,9 @@ pub async fn rate_new(db: &Db, w: &Weights, tried: &mut std::collections::HashSe
                 Some((log_id, p.account_id, p.class.as_str(), r.score, r.minutes, hl_rating::guide::group_scores_json(&r.parts)))
             })
             .collect();
+        if !rows.is_empty() {
+            tried.remove(&log_id);
+        }
         db.put_league_ratings(hl_rating::MODEL_VERSION, &rows).await?;
     }
     Ok(ids.len())

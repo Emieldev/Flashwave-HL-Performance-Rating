@@ -110,9 +110,39 @@ impl Db {
         .bind(account.map(i64::from))
         .fetch_all(self.pool())
         .await?;
+        // ETF2L lists a merc -- someone playing for a team they are not on
+        // yet -- with no team (Flashy's first DD14 official). Their team is
+        // the one whose players were on their side in the match's logs.
+        let guessed: HashMap<(i64, i64), i64> = {
+            let rows = sqlx::query(
+                "WITH merc AS (SELECT match_id, account_id FROM etf2l_season_player WHERE team_id IS NULL),
+                 side AS (
+                   SELECT l.log_id, l.etf2l_match_id AS match_id, p.account_id, p.team FROM league_log l
+                     JOIN league_log_player p ON p.log_id = l.log_id WHERE l.etf2l_match_id IN (SELECT match_id FROM merc)
+                   UNION
+                   SELECT c.log_id, c.etf2l_match_id, p.account_id, p.team FROM match_context c
+                     JOIN match_player p ON p.log_id = c.log_id WHERE c.etf2l_match_id IN (SELECT match_id FROM merc)
+                 )
+                 SELECT me.match_id, me.account_id, o.team_id, COUNT(*) AS n
+                 FROM merc
+                 JOIN side me ON me.match_id = merc.match_id AND me.account_id = merc.account_id
+                 JOIN side mate ON mate.log_id = me.log_id AND mate.team = me.team AND mate.account_id != me.account_id
+                 JOIN etf2l_season_player o ON o.match_id = me.match_id AND o.account_id = mate.account_id AND o.team_id IS NOT NULL
+                 GROUP BY me.match_id, me.account_id, o.team_id
+                 ORDER BY n ASC",
+            )
+            .fetch_all(self.pool())
+            .await?;
+            // Ascending, so the team seen most is inserted last and kept.
+            rows.into_iter().map(|r| ((r.get("match_id"), r.get("account_id")), r.get("team_id"))).collect()
+        };
         Ok(rows
             .into_iter()
-            .map(|r| (r.get("match_id"), r.get::<i64, _>("account_id") as u32, r.get("team_id"), r.get("name")))
+            .map(|r| {
+                let (m, a): (i64, i64) = (r.get("match_id"), r.get("account_id"));
+                let team: Option<i64> = r.get::<Option<i64>, _>("team_id").or_else(|| guessed.get(&(m, a)).copied());
+                (m, a as u32, team, r.get("name"))
+            })
             .collect())
     }
 
