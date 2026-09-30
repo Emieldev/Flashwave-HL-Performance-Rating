@@ -89,6 +89,19 @@ pub const SNIPER_V1: [(Component, f64); 7] = [
 /// Both Snipers of one decided match. Percentiles are 0-1 with lower-is-better
 /// components flipped, in the order of the component list; `None` where the
 /// log could not measure one (no raw log, no headshot tracking).
+/// One division's matchups (Q39).
+#[derive(Debug, Clone, Serialize)]
+pub struct TierRow {
+    pub tier: i64,
+    pub pairs: usize,
+    /// The live model.
+    pub live: Accuracy,
+    /// The model proposed from every pair.
+    pub pooled: Accuracy,
+    /// A model fitted on this division alone, each block held out once.
+    pub own_cv: Accuracy,
+}
+
 #[derive(Debug, Clone)]
 pub struct Pair {
     pub log_id: i64,
@@ -97,6 +110,9 @@ pub struct Pair {
     pub a_won: bool,
     pub a: Vec<Option<f64>>,
     pub b: Vec<Option<f64>>,
+    /// The ETF2L division it was played in, for a league matchup (Q39):
+    /// 0 Premiership .. 5 Fresh Meat. `None` for the owner's matches.
+    pub tier: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
@@ -171,6 +187,10 @@ pub struct Report {
     /// two numbers are read off the same pairs.
     pub cv_live: Accuracy,
     pub cv_generic: Accuracy,
+    /// How many of the pairs are league officials (Q39).
+    pub league_pairs: usize,
+    /// Per ETF2L division, league pairs only.
+    pub by_tier: Vec<TierRow>,
 }
 
 /// How many blocks the cross-validation splits the pairs into.
@@ -408,9 +428,38 @@ pub async fn run(db: &Db, class: TfClass, live: &Weights, candidates: Vec<Candid
                 return None;
             }
             let (b, a) = (v.pop()?, v.pop()?);
-            Some(Pair { log_id, played_at: a.1, a_won: a.0, a: a.2, b: b.2 })
+            Some(Pair { log_id, played_at: a.1, a_won: a.0, a: a.2, b: b.2, tier: None })
         })
         .collect();
+    // Q39: the league's officials as matchups too, not only as pool --
+    // ~1,800 a class from Open to Premiership, each with its division.
+    if league {
+        let mut decided: HashMap<(i64, u32), (bool, i64, Option<i64>)> = HashMap::new();
+        for (log_id, account, won, at, division) in db.league_decided().await? {
+            let tier = division.as_deref().and_then(crate::leagues::canonical_tier);
+            decided.insert((log_id, account), (won, at, tier));
+        }
+        let mut by_log: HashMap<i64, Vec<(bool, i64, Option<i64>, Vec<Option<f64>>)>> = HashMap::new();
+        for (log_id, p) in &sample {
+            let Some(&(won, at, tier)) = decided.get(&(*log_id, p.account_id)) else { continue };
+            let pcts = comps
+                .iter()
+                .map(|&c| {
+                    let raw = p.values.iter().find(|(x, _)| *x == c)?.1;
+                    let pct = baseline.percentile(class, c, p.map.as_deref(), raw)?;
+                    Some(if c.higher_is_better() { pct } else { 1.0 - pct })
+                })
+                .collect();
+            by_log.entry(*log_id).or_default().push((won, at, tier, pcts));
+        }
+        pairs.extend(by_log.into_iter().filter_map(|(log_id, mut v)| {
+            if v.len() != 2 || v[0].0 == v[1].0 {
+                return None;
+            }
+            let (b, a) = (v.pop()?, v.pop()?);
+            Some(Pair { log_id, played_at: a.1, a_won: a.0, a: a.3, b: b.3, tier: a.2 })
+        }));
+    }
     pairs.sort_by_key(|p| (p.played_at, p.log_id));
     if pairs.len() < 50 {
         bail!(
@@ -471,6 +520,25 @@ pub async fn run(db: &Db, class: TfClass, live: &Weights, candidates: Vec<Candid
     let cv_proposed = cross_validate(&pairs, &comps);
     let generic = live.generic_model().to_vec();
 
+    // Q39: does one model serve every division? Per division: the live
+    // model, the pooled proposal, and a model fitted on that division alone
+    // (cross-validated within it). A division's own fit beating the pooled
+    // one by more than noise says the top needs its own.
+    let mut by_tier: Vec<TierRow> = Vec::new();
+    for tier in 0..=5 {
+        let here: Vec<Pair> = pairs.iter().filter(|p| p.tier == Some(tier)).cloned().collect();
+        if here.len() < 60 {
+            continue;
+        }
+        by_tier.push(TierRow {
+            tier,
+            pairs: here.len(),
+            live: accuracy(&here, &comps, live.model_for(class)),
+            pooled: accuracy(&here, &comps, &proposed),
+            own_cv: cross_validate(&here, &comps),
+        });
+    }
+
     Ok(Report {
         proposed,
         cv_proposed,
@@ -486,6 +554,8 @@ pub async fn run(db: &Db, class: TfClass, live: &Weights, candidates: Vec<Candid
         fitted,
         fitted_in_sample: accuracy(before.iter().copied(), &comps, &as_weights),
         fitted_out_of_sample: accuracy(after.iter().copied(), &comps, &as_weights),
+        league_pairs: pairs.iter().filter(|p| p.tier.is_some()).count(),
+        by_tier,
     })
 }
 
@@ -559,6 +629,14 @@ Over every pair, each held out once ({} blocks of time):
             "generic",
             pct(self.cv_generic),
         )?;
+        if !self.by_tier.is_empty() {
+            writeln!(f, "\n{} of the pairs are league officials. By division:", self.league_pairs)?;
+            writeln!(f, "  division       pairs    live   pooled   own fit (cv)")?;
+            for t in &self.by_tier {
+                let name = crate::leagues::TIER_NAMES.get(t.tier as usize).copied().unwrap_or("?");
+                writeln!(f, "  {:<12} {:>6}  {}  {}  {}", name, t.pairs, pct(t.live), pct(t.pooled), pct(t.own_cv))?;
+            }
+        }
         if !self.proposed.is_empty() {
             writeln!(f, "
 Proposed, fitted on every pair:
@@ -612,7 +690,7 @@ mod tests {
     }
 
     fn pair(a_won: bool, a: [f64; 2], b: [f64; 2]) -> Pair {
-        Pair { log_id: 0, played_at: 0, a_won, a: a.map(Some).to_vec(), b: b.map(Some).to_vec() }
+        Pair { log_id: 0, played_at: 0, a_won, a: a.map(Some).to_vec(), b: b.map(Some).to_vec(), tier: None }
     }
 
     #[test]

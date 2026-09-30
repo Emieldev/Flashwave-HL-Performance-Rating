@@ -29,7 +29,9 @@ use std::collections::HashMap;
 /// v6: the score is an HLTV-style rating around 1.00, not a 0-100 percentile.
 /// v7: a model per class (Q8), each fitted against who won and
 /// cross-validated, in place of six classes sharing one generic model.
-pub const MODEL_VERSION: &str = "v8";
+/// v9: seven models refitted on the league sample (Q39): ~4,650 matchups a
+/// class, 3,900 of them ETF2L officials.
+pub const MODEL_VERSION: &str = "v9";
 
 /// How far one standard deviation moves the rating.
 ///

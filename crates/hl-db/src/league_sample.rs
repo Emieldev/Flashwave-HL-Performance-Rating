@@ -324,6 +324,36 @@ impl Db {
         .await?)
     }
 
+    /// Each sample log's players and whether their side won, for the
+    /// validator's league matchups (Q39): `(log_id, account, won, played_at,
+    /// division)`. Ties and logs without a score are left out; so are the
+    /// owner's own logs, which the validator reads from their matches.
+    pub async fn league_decided(&self) -> Result<Vec<(i64, u32, bool, i64, Option<String>)>> {
+        let rows = sqlx::query(
+            "WITH s AS (
+                 SELECT l.log_id, l.played_at, l.etf2l_match_id,
+                        json_extract(j.json, '$.teams.Red.score') AS red,
+                        json_extract(j.json, '$.teams.Blue.score') AS blue
+                 FROM league_log l JOIN league_log_json j ON j.log_id = l.log_id
+                 WHERE l.picked = 1 AND l.log_id NOT IN (SELECT log_id FROM log_index)
+             )
+             SELECT s.log_id, p.account_id, s.played_at,
+                    CASE WHEN p.team = 'Red' THEN s.red > s.blue ELSE s.blue > s.red END AS won,
+                    COALESCE(m.division, c.division) AS division
+             FROM s
+             JOIN league_log_player p ON p.log_id = s.log_id
+             LEFT JOIN etf2l_season_match m ON m.match_id = s.etf2l_match_id
+             LEFT JOIN etf2l_competition c ON c.competition_id = m.competition_id
+             WHERE s.red IS NOT NULL AND s.blue IS NOT NULL AND s.red != s.blue AND p.team IN ('Red', 'Blue')",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.get("log_id"), r.get::<i64, _>("account_id") as u32, r.get::<i64, _>("won") != 0, r.get("played_at"), r.get("division")))
+            .collect())
+    }
+
     /// One sample log's JSON and, if it was downloaded, its raw server log.
     pub async fn league_log_files(&self, log_id: i64) -> Result<(Option<String>, Option<Vec<u8>>)> {
         let json = sqlx::query_scalar("SELECT json FROM league_log_json WHERE log_id = ?1").bind(log_id).fetch_optional(self.pool()).await?;

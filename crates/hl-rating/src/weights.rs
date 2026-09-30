@@ -431,11 +431,11 @@ engineer = 3.0
 
     #[test]
     fn a_typo_in_a_component_is_an_error() {
-        let line = DEFAULT_TOML.lines().find(|l| l.starts_with("duel ")).expect("the Sniper model rates the duel");
-        let broken = DEFAULT_TOML.replace(line, &line.replacen("duel", "dual", 1));
+        let line = DEFAULT_TOML.lines().find(|l| l.starts_with("backstabs ")).expect("the Spy model rates backstabs");
+        let broken = DEFAULT_TOML.replace(line, &line.replacen("backstabs", "backstab", 1));
         assert_ne!(broken, DEFAULT_TOML, "the test must break something");
         let err = Weights::parse(&broken).unwrap_err();
-        assert!(format!("{err:#}").contains("dual"));
+        assert!(format!("{err:#}").contains("backstab"));
     }
 
     #[test]
