@@ -8,6 +8,7 @@ import { classLabel } from "../analysis/common";
 import { t, tx } from "../../lib/i18n";
 import { PlayerStatsCard, RankChip } from "./PlayerStats";
 import { MedalGlyph } from "./MedalGlyph";
+import { Country } from "../Country";
 
 /**
  * A player's profile, HLTV-style (Q35, Flashy; PLAN §26): who they are,
@@ -79,7 +80,9 @@ function Header({ p }: { p: Profile }) {
             {p.country && (
               <>
                 <dt>{t("Country")}</dt>
-                <dd>{p.country}</dd>
+                <dd>
+                  <Country raw={p.country} />
+                </dd>
               </>
             )}
             <dt>{t("Main class")}</dt>

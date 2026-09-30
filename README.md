@@ -130,6 +130,7 @@ has the whole of it, including what to do if one does break.
 | [demos.tf](https://demos.tf) | STV demos, downloaded only when you ask |
 | [more.tf](https://more.tf) | The top-down map images under the kill map, shipped with their permission |
 | [Official TF2 Wiki](https://wiki.teamfortress.com/wiki/Tournament_Medal_-_ETF2L_Highlander) | The ETF2L Highlander medal icon on player profiles (Valve's in-game item art, Season 17 design) |
+| [flagcdn](https://flagcdn.com) | Country flags on player profiles, player cards and team pages (public domain, bundled with the app) |
 | Your own `.dem` files | Aim, deaths and movement: read on your PC, never uploaded |
 
 Every rating comes from logs alone — the raw logs.tf log covers all 18 players

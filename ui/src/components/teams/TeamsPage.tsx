@@ -1,3 +1,4 @@
+import { Country } from "../Country";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
@@ -131,7 +132,13 @@ function Team({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
         <div>
           <h2>{v.name}</h2>
           <p className="hint">
-            {[v.country, v.seasons.map(([s, d]) => (s >= 100 ? `AFA ${d}` : t("S{0} {1}", { "0": s, "1": d }))).join(" · ")].filter(Boolean).join(" · ")}
+            {v.country && (
+              <>
+                <Country raw={v.country} />
+                {v.seasons.length > 0 && " · "}
+              </>
+            )}
+            {v.seasons.map(([s, d]) => (s >= 100 ? `AFA ${d}` : t("S{0} {1}", { "0": s, "1": d }))).join(" · ")}
           </p>
         </div>
         <div className="team-record">

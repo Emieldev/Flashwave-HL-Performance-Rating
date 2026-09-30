@@ -8,6 +8,7 @@ import { t, tx } from "../../lib/i18n";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
 import { MedalGlyph } from "./MedalGlyph";
+import { Country } from "../Country";
 import { DivisionBadge, medalTitles, seasonShort } from "./PlayerProfile";
 import "./players.css";
 
@@ -164,7 +165,11 @@ export function PlayerPopCard({ target, divisions, onClose }: { target: CardTarg
                 <span className="muted">{t("best")}</span> <DivisionBadge d={p.highest} />
               </span>
             )}
-            {p?.country && <span className="muted">{p.country}</span>}
+            {p?.country && (
+              <span className="muted">
+                <Country raw={p.country} />
+              </span>
+            )}
           </div>
         </div>
       </div>
