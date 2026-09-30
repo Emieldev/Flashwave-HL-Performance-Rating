@@ -152,7 +152,16 @@ pub struct Catalogue {
 
 impl Catalogue {
     pub async fn load(db: &Db) -> Result<Catalogue> {
-        let matches: HashMap<i64, CatMatch> = db.catalogue_matches().await?.into_iter().map(|m| (m.match_id, m)).collect();
+        let mut matches: HashMap<i64, CatMatch> = db.catalogue_matches().await?.into_iter().map(|m| (m.match_id, m)).collect();
+        // A competition's stage and division as the parser reads its name
+        // now: one stored before the parser knew "3rd Place Match" was kept
+        // as a regular division called "Premiership 3rd Place Match".
+        for m in matches.values_mut() {
+            if let Some((_, _, division, stage)) = crate::leagues::parse_name(&m.comp_name) {
+                m.comp_division = division;
+                m.stage = stage;
+            }
+        }
         let mut rosters: HashMap<i64, Vec<(u32, Option<i64>, String)>> = HashMap::new();
         for (m, a, t, n) in db.catalogue_rosters(None).await? {
             rosters.entry(m).or_default().push((a, t, n));
@@ -261,6 +270,24 @@ impl Catalogue {
             } else if m.stage == "3rd Place" {
                 if let Some((w, _)) = winner_loser(m) {
                     out.entry(key).or_default().push((3, w, format!("3rd place match {}", score(m, w))));
+                }
+            }
+        }
+        // No 3rd-place match: the two losing semi-finalists share third, as
+        // ETF2L gives it (Flashy's S34 Mid: lost the semi-final 3-6, and
+        // there was no match for third).
+        let mut semis: BTreeMap<(i64, String), Vec<(i64, String)>> = BTreeMap::new();
+        for m in self.matches.values().filter(|m| Self::played(m) && m.stage == "Playoffs") {
+            if m.round.as_deref().is_some_and(|r| r.to_ascii_lowercase().starts_with("semi")) {
+                if let Some((_, l)) = winner_loser(m) {
+                    semis.entry((m.season, self.medal_division(m))).or_default().push((l, format!("joint 3rd: semi-final {}", score(m, l))));
+                }
+            }
+        }
+        for (key, losers) in semis {
+            if let Some(e) = out.get_mut(&key) {
+                if !e.iter().any(|(p, _, _)| *p == 3) {
+                    e.extend(losers.into_iter().map(|(team, how)| (3u8, team, how)));
                 }
             }
         }
@@ -527,6 +554,21 @@ pub async fn index_league_players(db: &Db, limit: i64) -> Result<usize> {
         }
     }
     Ok(n)
+}
+
+/// One season's medals by division: `(place, team name, how)`, for checking
+/// against ETF2L (`hl medals <season>`).
+pub async fn season_medals(db: &Db, season: i64) -> Result<Vec<(String, Vec<(u8, String, String)>)>> {
+    let cat = Catalogue::load(db).await?;
+    Ok(cat
+        .medals()
+        .into_iter()
+        .filter(|((s, _), _)| *s == season)
+        .map(|((_, d), mut list)| {
+            list.sort_by_key(|x| x.0);
+            (d, list.into_iter().map(|(p, t, how)| (p, cat.team(t).name, how)).collect())
+        })
+        .collect())
 }
 
 // ---- Ratings, stat bars and ranks (Q36) ----------------------------------
@@ -938,6 +980,7 @@ mod tests {
             competition_id: 1,
             season,
             season_name: format!("S{season}"),
+            comp_name: String::new(),
             comp_division: comp_div.into(),
             stage: stage.into(),
             division: div.map(str::to_string),
@@ -1003,6 +1046,30 @@ mod tests {
     }
 
     #[test]
+    fn without_a_third_place_match_both_semi_final_losers_share_bronze() {
+        // S34 Mid: two semi-finals, a Grand Final, no match for third.
+        let c = cat(vec![
+            m(1, 34, "Playoffs", None, "Mid", Some("Semi-finals"), 10, 11, 3, 6),
+            m(2, 34, "Playoffs", None, "Mid", Some("Semi-finals"), 12, 13, 6, 0),
+            m(3, 34, "Playoffs", None, "Mid", Some("Grand Final"), 12, 11, 3, 6),
+        ]);
+        let mid = &c.medals()[&(34, "Mid".to_string())];
+        let bronze: Vec<i64> = mid.iter().filter(|x| x.0 == 3).map(|x| x.1).collect();
+        assert_eq!(bronze.len(), 2);
+        assert!(bronze.contains(&10) && bronze.contains(&13), "both losing semi-finalists");
+        assert!(mid.contains(&(3, 10, "joint 3rd: semi-final 3-6".into())));
+        // With a 3rd-place match, only its winner.
+        let c = cat(vec![
+            m(1, 34, "Playoffs", None, "Mid", Some("Semi-finals"), 10, 11, 3, 6),
+            m(2, 34, "Playoffs", None, "Mid", Some("Semi-finals"), 12, 13, 6, 0),
+            m(3, 34, "Playoffs", None, "Mid", Some("Grand Final"), 12, 11, 3, 6),
+            m(4, 34, "3rd Place", None, "Mid", None, 10, 13, 6, 3),
+        ]);
+        let bronze: Vec<i64> = c.medals()[&(34, "Mid".to_string())].iter().filter(|x| x.0 == 3).map(|x| x.1).collect();
+        assert_eq!(bronze, vec![10]);
+    }
+
+    #[test]
     fn a_final_with_no_division_takes_its_teams_division() {
         let c = cat(vec![
             m(1, 30, "regular", Some("Open B"), "", Some("Week 1"), 10, 11, 6, 0),
@@ -1033,6 +1100,7 @@ mod tests {
                 competition_id: 1,
                 season,
                 season_name: format!("S{season}"),
+                comp_name: String::new(),
                 comp_division: format!("t{tier}"),
                 stage: stage.into(),
                 division: (stage == "regular").then(|| format!("t{tier}")),

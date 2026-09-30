@@ -14,6 +14,9 @@ pub struct CatMatch {
     pub competition_id: i64,
     pub season: i64,
     pub season_name: String,
+    /// The competition's name: the division and stage are read from it
+    /// again on load, so a name the parser learned to read later is read.
+    pub comp_name: String,
     /// The competition's division ("Low" for "Low Playoffs"), and stage.
     pub comp_division: String,
     pub stage: String,
@@ -61,7 +64,7 @@ pub struct Etf2lPlayer {
 impl Db {
     pub async fn catalogue_matches(&self) -> Result<Vec<CatMatch>> {
         let rows = sqlx::query(
-            "SELECT m.match_id, m.competition_id, c.season, c.season_name, c.division AS comp_division, c.stage,
+            "SELECT m.match_id, m.competition_id, c.season, c.season_name, c.name AS comp_name, c.division AS comp_division, c.stage,
                     m.division, m.tier, m.round, m.time, m.clan1_id, m.clan2_id, m.r1, m.r2, m.default_win
              FROM etf2l_season_match m JOIN etf2l_competition c ON c.competition_id = m.competition_id",
         )
@@ -74,6 +77,7 @@ impl Db {
                 competition_id: r.get("competition_id"),
                 season: r.get("season"),
                 season_name: r.get("season_name"),
+                comp_name: r.get("comp_name"),
                 comp_division: r.get("comp_division"),
                 stage: r.get("stage"),
                 division: r.get("division"),

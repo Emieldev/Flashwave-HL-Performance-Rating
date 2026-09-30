@@ -1210,6 +1210,17 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["medals", season] => {
+            // Every medal of one season, per division.
+            let db = Db::connect(&db_path).await?;
+            for (division, medals) in hl_ingest::catalogue::season_medals(&db, season.parse()?).await? {
+                for (place, team, how) in medals {
+                    println!("  {division:<12} {place}  {team:<32} {how}");
+                }
+            }
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;
