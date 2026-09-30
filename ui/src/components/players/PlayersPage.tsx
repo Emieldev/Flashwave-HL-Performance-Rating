@@ -8,6 +8,7 @@ import "./players.css";
 import { t, tx } from "../../lib/i18n";
 import { DivisionBadge, PlayerProfile } from "./PlayerProfile";
 import { TopPlayers } from "./PlayerStats";
+import { MedalGlyph } from "./MedalGlyph";
 
 /**
  * Look other people up (Q14).
@@ -93,7 +94,14 @@ function Results({
           <span className="ph-name">{h.name}</span>
           {h.highest && <DivisionBadge d={h.highest} />}
           <span className="ph-medals" aria-label={t("Medals")}>
-            {h.medals.map((n, i) => (n > 0 ? <span key={i} className={`ph-medal pp-${["gold", "silver", "bronze"][i]}`}>{n}</span> : null))}
+            {h.medals.map((n, i) =>
+              n > 0 ? (
+                <span key={i} className={`ph-medal pp-${["gold", "silver", "bronze"][i]}`} title={[t("Gold"), t("Silver"), t("Bronze")][i]}>
+                  <MedalGlyph size={13} />
+                  {n}
+                </span>
+              ) : null,
+            )}
           </span>
           <span className="ph-meta muted">
             {h.officials > 0 ? tx("{0} official{1}", { "0": h.officials, "1": h.officials === 1 ? "" : "s" }) : t("your matches")}

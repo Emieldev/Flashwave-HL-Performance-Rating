@@ -202,18 +202,23 @@
 .pp-team { display: inline-flex; align-items: center; gap: 7px; }
 .pp-team-avatar { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; background: var(--sunken); display: inline-block; flex: none; }
 .pp-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.pp-title { padding: 3px 10px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; color: #1b1714; }
+.pp-title { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 7px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; }
 .pp-links { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; font-size: 0.85rem; }
 
 /* Medals: gold, silver, bronze -- each also says its place and season in text. */
 .pp-gold { --medal: #e3b341; }
 .pp-silver { --medal: #b9c0c8; }
 .pp-bronze { --medal: #c98a52; }
-.pp-title { background: var(--medal); }
+/* Medals: rounded squares in the medal's own colour, see-through (Flashy),
+   the medal drawn in the full colour on top, and the count or label in text. */
+.pp-title, .pp-medal-tile, .ph-medal {
+  color: var(--medal);
+  background: color-mix(in srgb, var(--medal) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--medal) 55%, transparent);
+}
 .pp-trophies { display: flex; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--sunken); overflow-x: auto; }
 .pp-medal { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; flex: none; min-width: 58px; }
-.pp-medal-disc { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 1.05rem; color: #1b1714;
-  background: radial-gradient(circle at 35% 30%, #fff8 0, transparent 45%), var(--medal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--medal) 35%, transparent); }
+.pp-medal-tile { width: 46px; height: 46px; border-radius: 10px; display: grid; place-items: center; }
 .pp-medal-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 .pp-place { font-weight: 700; color: var(--medal); }
 
@@ -252,7 +257,7 @@
 
 /* Search rows: division badge and medal counts beside the name. */
 .ph-medals { display: inline-flex; gap: 4px; }
-.ph-medal { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: inline-grid; place-items: center; font-size: 0.72rem; font-weight: 800; color: #1b1714; background: var(--medal); }
+.ph-medal { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 6px 0 3px; border-radius: 6px; font-size: 0.74rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pp-links a { color: var(--accent-text); text-decoration: none; }
 .pp-links a:hover { text-decoration: underline; }
 

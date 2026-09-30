@@ -1462,6 +1462,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | Q37 | **Career numbers from trends.tf, on demand** (Flashy) | small | trends.tf's player page read when a profile is opened (never in search), cached a day: W-L, per-class winrate, damage per minute, hours, aliases, ETF2L and RGL teams; parsed defensively, credited, tested against a saved page. See §26. |
 | ~~Q38~~ | ~~**The division of the people you play** (Flashy)~~ | medium | **Done (30 Sept).** Every player on a match page carries their ETF2L division at the time -- the season the match was in, else their nearest season within a year, shown faded and dashed -- beside their name in the scoreboard and the class matchups; the matchups header gives each side's average ("BLU ~Mid (2.1, 9/9)"). On a S36 High official 17 of 18 players read High S36; a pug ran from Premiership to Low. Left for later: the profile's "Who you played" by division. See §26. |
 | Q39 | **Refit the models on the league** | medium | ~1,800 more matchups a class, Open to Premiership: refit all nine, settle damage per minute (SchmitShot) and the deaths weights with 3.6x the data, and find out whether one model serves every division. See §25. |
+| Q40 | **A player card from the scoreboard** (Flashy) | medium | Click a name on the scoreboard or in the matchups: a small card beside it with their avatar, divisions then and at best, medal tiles and best title, main class rating and best rank, their rating on the class played if it is not their main, four compact stat bars, your record together and against, and "Open profile". Click, not hover; one request; see §26. |
 
 ### Reported by testers, and fixed
 
@@ -2651,6 +2652,62 @@ owner's `rating`. Then:
   with fewer than eight shows none. The sample is at most ~300 matches a
   division over six years, so a Premiership regular is in dozens of games
   and an Open one-season player in a handful.
+
+### Q40. A player card from the scoreboard
+
+> "When you click on someone on the scoreboard you will get a kind of
+> tooltip with their achievements like medals, main class rating and maybe
+> something else." (Flashy)
+
+A match page is where you meet people; the profile is a tab away. Clicking
+a name -- on the scoreboard or in the class matchups -- opens a small card
+beside it, like a Steam or HLTV hover card, with what tells you who they
+are at a glance, and a way through to the full profile.
+
+**What the card shows**, top to bottom, each part only when there is data:
+
+1. **Who.** Avatar, name, country; their division then (the match's tag,
+   Q38) and their highest division, when different ("High in S35 · best:
+   Premiership").
+2. **Medals.** The gold, silver and bronze tiles with counts (the same
+   rounded, see-through squares as the profile), and the best title
+   ("2x Premiership winner").
+3. **Main class.** Class icon, rating on the league scale over the last
+   three months (else the career) and the number of games; their best rank
+   ("#3 Sniper in Low, S33").
+4. **On this class in this match.** When the class they played here is not
+   their main one, their rating on it too -- an off-class game reads
+   differently.
+5. **Four stat bars**, compact: the component groups of their main class
+   (Kills and damage, Staying alive, Playing for the team, Objective).
+6. **You and them.** Games together and against, and the record against
+   them, from the owner's matches (what the profile's "In your matches"
+   shows).
+7. **Links.** "Open profile" (the Players tab, on them), ETF2L and
+   trends.tf.
+
+**How it behaves.**
+- Click to open, click elsewhere or Escape to close; one card at a time.
+  Not on hover: the scoreboard is dense and a hover card would follow the
+  mouse across every row.
+- Placed beside the row, flipped to stay inside the window; on a narrow
+  window, under the row.
+- Opens at once with what the match page already has (name, class, the
+  division tag), and fills in the rest from one request.
+
+**Data.** One command, `get_player_card(account, class)`: the profile's
+header facts, medal counts and best title, `player_stats` for the main
+class and for the class played, the best rank, and the you-and-them
+counts. Everything it needs exists (Q35, Q36, Q38); the ranks are the one
+slow part (they read every rated game), so the card asks for the stats
+the profile already caches with the same query key, and a rank that is
+not ready yet appears when it is.
+
+**Checks.** The card on the owner's own row says "you" and shows their own
+numbers; a player with no catalogue entry (never played an official) shows
+the name, the class played and "no ETF2L officials" rather than an empty
+card; keyboard: Enter on a focused name opens it, Escape closes it and
+returns focus.
 
 ### Q37. Career numbers from trends.tf, on demand
 

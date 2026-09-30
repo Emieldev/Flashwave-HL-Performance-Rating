@@ -7,6 +7,7 @@ import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
 import { t, tx } from "../../lib/i18n";
 import { PlayerStatsCard, RankChip } from "./PlayerStats";
+import { MedalGlyph } from "./MedalGlyph";
 
 /**
  * A player's profile, HLTV-style (Q35, Flashy; PLAN §26): who they are,
@@ -118,6 +119,7 @@ function Header({ p }: { p: Profile }) {
             <div className="pp-titles">
               {titles.map(([label, n, place]) => (
                 <span key={label} className={`pp-title pp-${PLACE[place - 1]}`}>
+                  <MedalGlyph size={16} />
                   {n}× {label}
                 </span>
               ))}
@@ -182,7 +184,9 @@ function MedalIcon({ m }: { m: Medal }) {
   const kind = PLACE[m.place - 1];
   return (
     <span className={`pp-medal pp-${kind}`} title={`${m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")} · ${m.division} · ${t("Season {0}", { "0": m.season })} (${m.seasonName}) · ${m.team.name} · ${m.how}`}>
-      <span className="pp-medal-disc">{m.place}</span>
+      <span className="pp-medal-tile">
+        <MedalGlyph size={30} place={m.place} />
+      </span>
       <span className="pp-medal-label">
         S{m.season} {shortDivision(m.division)}
       </span>
