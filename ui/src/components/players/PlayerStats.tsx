@@ -6,6 +6,7 @@ import { rating } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
 import { t, tx } from "../../lib/i18n";
+import { seasonShort } from "./PlayerProfile";
 import { DivisionBadge } from "./PlayerProfile";
 import "../rating/rating.css";
 
@@ -108,11 +109,13 @@ export function RankChip({ r, accountId }: { r: Rank; accountId?: number }) {
       aria-describedby={open ? `rank-${r.season}-${r.class}` : undefined}
     >
       <strong>#{r.rank}</strong>
-      <span className="muted">{t("of {0}", { "0": r.of })}</span> <ClassIcon cls={r.class} size={16} /> {t("in")} <DivisionBadge d={{ name: r.division, tier: r.tier }} /> <span className="muted">S{r.season}</span>
+      <span className="muted">{t("of {0}", { "0": r.of })}</span> <ClassIcon cls={r.class} size={16} /> {t("in")} <DivisionBadge d={{ name: r.division, tier: r.tier }} /> <span className="muted">{seasonShort(r.season, r.seasonName)}</span>
       {open && (
         <span className="rank-pop" role="tooltip" id={`rank-${r.season}-${r.class}`}>
           <span className="rank-pop-head">
-            {tx("{0} in {1}, Season {2}", { "0": classLabel(r.class), "1": r.division, "2": r.season })}
+            {r.season >= 100
+              ? tx("{0} in {1}, {2}", { "0": classLabel(r.class), "1": r.division, "2": r.seasonName })
+              : tx("{0} in {1}, Season {2}", { "0": classLabel(r.class), "1": r.division, "2": r.season })}
           </span>
           <span className="rank-pop-sub">{tx("Officials only; {0} or more to be ranked.", { "0": 4 })}</span>
           {!q.data && <span className="hint">{t("Loading…")}</span>}
@@ -168,7 +171,7 @@ export function TopPlayers({ onPick }: { onPick: (accountId: number) => void }) 
             <select value={r.season} onChange={(e) => { setSeason(Number(e.target.value)); setTier(null); }} aria-label={t("Season")}>
               {r.seasons.map(([s, name]) => (
                 <option key={s} value={s}>
-                  {tx("S{0} · {1}", { "0": s, "1": name })}
+                  {s >= 100 ? name : tx("S{0} · {1}", { "0": s, "1": name })}
                 </option>
               ))}
             </select>

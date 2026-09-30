@@ -308,8 +308,9 @@ impl Db {
         Ok((json, zip))
     }
 
-    /// The newest Highlander season ETF2L has listed.
+    /// The newest numbered Highlander season ETF2L has listed (one between
+    /// two, kept at 100 and up, is not newer).
     pub async fn newest_etf2l_season(&self) -> Result<Option<i64>> {
-        Ok(sqlx::query_scalar("SELECT MAX(season) FROM etf2l_competition").fetch_one(self.pool()).await?)
+        Ok(sqlx::query_scalar("SELECT MAX(season) FROM etf2l_competition WHERE season < 100").fetch_one(self.pool()).await?)
     }
 }

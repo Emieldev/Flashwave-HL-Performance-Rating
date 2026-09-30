@@ -107,7 +107,8 @@ impl Db {
     pub async fn competitions(&self) -> Result<Vec<Competition>> {
         let rows = sqlx::query(
             "SELECT competition_id, season, season_name, division, stage, archived, pool, fetched_at
-             FROM etf2l_competition ORDER BY season DESC, competition_id",
+             FROM etf2l_competition
+             ORDER BY CASE WHEN season >= 100 THEN (season - 100) * 2 + 1 ELSE season * 2 END DESC, competition_id",
         )
         .fetch_all(self.pool())
         .await?;

@@ -72,13 +72,33 @@ pub fn canonical_tier(division: &str) -> Option<i64> {
 /// in October 2022 and Season 32 began in July 2024 (Flashy's results page).
 const UNNUMBERED: [(&str, i64); 4] = [("Winter 2023", 28), ("Spring 2023", 29), ("Autumn 2023", 30), ("Winter 2024", 31)];
 
+/// Seasons ETF2L ran between two numbered ones, with no number free for
+/// them: [`OFF_SEASON`] plus the season they followed. "AFA 2025" came after
+/// Season 34 (Summer 2025) and before Season 35 (Spring 2026).
+const BETWEEN: [(&str, i64); 1] = [("AFA 2025", OFF_SEASON + 34)];
+
+/// Where the seasons between numbered ones are kept: 134 is the one after
+/// Season 34. Never shown as a number; sorted by [`season_order`].
+pub const OFF_SEASON: i64 = 100;
+
+/// A season's place in time, for sorting: 134 falls between 34 and 35.
+pub fn season_order(season: i64) -> i64 {
+    if season >= OFF_SEASON {
+        (season - OFF_SEASON) * 2 + 1
+    } else {
+        season * 2
+    }
+}
+
 /// A competition's name as `(season, season name, division, stage)`:
 /// - `"Highlander Season 36 (Autumn 2026): Open Playoffs"` ->
 ///   `(36, "Autumn 2026", "Open", "Playoffs")`;
 /// - before season 32, no brackets: `"Highlander Season 22: Premiership
 ///   Qualifiers"` -> season name `"Season 22"`;
 /// - between 27 and 32, no number at all: `"Highlander Winter 2024: Low"`,
-///   `"Highlander Winter 2023 Premiership"` ([`UNNUMBERED`]).
+///   `"Highlander Winter 2023 Premiership"` ([`UNNUMBERED`]);
+/// - between two numbered seasons: `"Highlander AFA 2025: Top Tiers"`
+///   ([`BETWEEN`]).
 ///
 /// A preseason cup is stage `"Cup"`: its officials are the player's, but it
 /// is not the league, so it neither makes a division nor gives a medal.
@@ -96,7 +116,7 @@ pub fn parse_name(name: &str) -> Option<(i64, String, String, String)> {
             None => (season, format!("Season {season}"), rest),
         }
     } else {
-        let (label, season) = UNNUMBERED.iter().find(|(label, _)| rest.starts_with(label))?;
+        let (label, season) = UNNUMBERED.iter().chain(BETWEEN.iter()).find(|(label, _)| rest.starts_with(label))?;
         (*season, label.to_string(), &rest[label.len()..])
     };
     let label = rest.trim_start_matches([':', ' ', '-']).trim();
@@ -184,8 +204,13 @@ pub async fn fetch_seasons(
                 continue;
             }
             let Some((season, ..)) = parse_name(name) else { continue };
-            let top = *newest.get_or_insert(season);
-            if season >= top - seasons_back {
+            // The newest numbered season sets the window; one between two
+            // is in it when the season before it is.
+            if season < OFF_SEASON {
+                newest.get_or_insert(season);
+            }
+            let top = newest.unwrap_or(season % OFF_SEASON);
+            if season_order(season) >= season_order(top - seasons_back) {
                 wanted = true;
                 found.push((id, name.to_string(), c.get("archived").and_then(Value::as_bool).unwrap_or(false)));
             } else {
@@ -379,7 +404,7 @@ pub struct SeasonView {
 fn seasons_of(comps: &[hl_db::Competition]) -> Vec<SeasonInfo> {
     let mut by: BTreeMap<i64, SeasonInfo> = BTreeMap::new();
     for c in comps {
-        let s = by.entry(c.season).or_insert_with(|| SeasonInfo { season: c.season, name: c.season_name.clone(), divisions: Vec::new(), pool: Vec::new() });
+        let s = by.entry(season_order(c.season)).or_insert_with(|| SeasonInfo { season: c.season, name: c.season_name.clone(), divisions: Vec::new(), pool: Vec::new() });
         if s.pool.is_empty() {
             s.pool = c.pool.clone();
         }
@@ -602,6 +627,11 @@ mod tests {
         // Between 27 and 32: named by the time of year.
         assert_eq!(parse_name("Highlander Winter 2024: Low Playoffs"), Some((31, "Winter 2024".into(), "Low".into(), "Playoffs".into())));
         assert_eq!(parse_name("Highlander Winter 2024"), Some((31, "Winter 2024".into(), "".into(), "regular".into())));
+        // Between Season 34 and 35.
+        assert_eq!(parse_name("Highlander AFA 2025: Top Tiers"), Some((134, "AFA 2025".into(), "Top Tiers".into(), "regular".into())));
+        assert_eq!(parse_name("Highlander AFA 2025: Low 3rd Place"), Some((134, "AFA 2025".into(), "Low".into(), "3rd Place".into())));
+        assert_eq!(parse_name("Highlander AFA 2025"), Some((134, "AFA 2025".into(), "".into(), "regular".into())));
+        assert!(season_order(34) < season_order(134) && season_order(134) < season_order(35));
         assert_eq!(parse_name("Highlander Winter 2023 Premiership"), Some((28, "Winter 2023".into(), "Premiership".into(), "regular".into())));
         assert_eq!(parse_name("Highlander Spring 2023 Top Tiers"), Some((29, "Spring 2023".into(), "Top Tiers".into(), "regular".into())));
         assert_eq!(parse_name("Highlander Autumn 2023: Premiership Qualifiers"), Some((30, "Autumn 2023".into(), "Premiership".into(), "Qualifiers".into())));

@@ -24,6 +24,7 @@
 //! is the best one that counted in any season; every per-season division
 //! -- the tags on a match, the ranks -- follows the same rule.
 
+use crate::leagues::season_order;
 use crate::sources::Sources;
 use anyhow::{Context, Result};
 use hl_core::SteamId;
@@ -374,8 +375,8 @@ impl Catalogue {
                 PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0) }
             })
             .collect();
-        out.sort_by(|a, b| b.season.cmp(&a.season).then(b.played.cmp(&a.played)));
-        won_medals.sort_by(|a, b| b.season.cmp(&a.season).then(a.place.cmp(&b.place)));
+        out.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(b.played.cmp(&a.played)));
+        won_medals.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(a.place.cmp(&b.place)));
         (out, won_medals, officials)
     }
 }
@@ -651,15 +652,16 @@ impl Catalogue {
     /// a few days either side for the matches played around them. Newest
     /// first.
     fn season_windows(&self) -> Vec<(i64, String, i64, i64)> {
-        let mut w: BTreeMap<i64, (String, i64, i64)> = BTreeMap::new();
+        // keyed by the season's place in time: AFA 2025 between 34 and 35
+        let mut w: BTreeMap<i64, (i64, String, i64, i64)> = BTreeMap::new();
         for m in self.matches.values() {
             let Some(t) = m.time else { continue };
-            let e = w.entry(m.season).or_insert((m.season_name.clone(), t, t));
-            e.1 = e.1.min(t);
-            e.2 = e.2.max(t);
+            let e = w.entry(season_order(m.season)).or_insert((m.season, m.season_name.clone(), t, t));
+            e.2 = e.2.min(t);
+            e.3 = e.3.max(t);
         }
         const SLACK: i64 = 3 * 24 * 3600;
-        w.into_iter().rev().map(|(s, (n, a, b))| (s, n, a - SLACK, b + SLACK)).collect()
+        w.into_values().rev().map(|(s, n, a, b)| (s, n, a - SLACK, b + SLACK)).collect()
     }
 
     /// Every player's division each season, by the rule in the module doc:
@@ -884,7 +886,7 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
             }
         }
     }
-    ranks.sort_by(|a, b| b.season.cmp(&a.season).then(a.rank.cmp(&b.rank)));
+    ranks.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(a.rank.cmp(&b.rank)));
     Ok(PlayerStats { classes, ranks })
 }
 

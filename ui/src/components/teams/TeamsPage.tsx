@@ -44,7 +44,7 @@ export function TeamsPage() {
           <select value={s.season} onChange={(e) => setSeason(Number(e.target.value))} aria-label={t("Season")}>
             {v.seasons.map((x) => (
               <option key={x.season} value={x.season}>
-                {t("Season {0} ({1})", { "0": x.season, "1": x.name })}
+                {x.season >= 100 ? x.name : t("Season {0} ({1})", { "0": x.season, "1": x.name })}
               </option>
             ))}
           </select>
@@ -131,7 +131,7 @@ function Team({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
         <div>
           <h2>{v.name}</h2>
           <p className="hint">
-            {[v.country, v.seasons.map(([s, d]) => t("S{0} {1}", { "0": s, "1": d })).join(" · ")].filter(Boolean).join(" · ")}
+            {[v.country, v.seasons.map(([s, d]) => (s >= 100 ? `AFA ${d}` : t("S{0} {1}", { "0": s, "1": d }))).join(" · ")].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="team-record">

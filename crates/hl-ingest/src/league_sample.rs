@@ -54,9 +54,9 @@ const KEY_WINDOW: &str = "league_sample_window";
 
 /// Changes when discovery must run again at once: a wider window, or a
 /// name parser that reads competitions it skipped before (2: the unnumbered
-/// seasons 28-31 and the preseason cups).
+/// seasons 28-31 and the preseason cups; 3: AFA 2025, between 34 and 35).
 fn window() -> String {
-    format!("{SEASONS_BACK}/{MAX_YEARS}/2")
+    format!("{SEASONS_BACK}/{MAX_YEARS}/3")
 }
 
 pub async fn enabled(db: &Db) -> Result<bool> {

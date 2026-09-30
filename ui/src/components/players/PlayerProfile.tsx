@@ -104,7 +104,7 @@ function Header({ p }: { p: Profile }) {
                   <TeamAvatar src={p.current.team.avatar} />
                   {p.current.team.name}
                   <span className="muted">
-                    {" "}· {p.current.division} · S{p.current.season}
+                    {" "}· {p.current.division} · {seasonShort(p.current.season, p.current.seasonName)}
                   </span>
                 </span>
               ) : (
@@ -183,15 +183,25 @@ function medalTitles(medals: Medal[]): [string, number, number][] {
 function MedalIcon({ m }: { m: Medal }) {
   const kind = PLACE[m.place - 1];
   return (
-    <span className={`pp-medal pp-${kind}`} title={`${m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")} · ${m.division} · ${t("Season {0}", { "0": m.season })} (${m.seasonName}) · ${m.team.name} · ${m.how}`}>
+    <span className={`pp-medal pp-${kind}`} title={`${m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")} · ${m.division} · ${seasonLong(m.season, m.seasonName)} · ${m.team.name} · ${m.how}`}>
       <span className="pp-medal-tile">
         <MedalGlyph size={38} place={m.place} />
       </span>
       <span className="pp-medal-label">
-        S{m.season} {shortDivision(m.division)}
+        {seasonShort(m.season, m.seasonName)} {shortDivision(m.division)}
       </span>
     </span>
   );
+}
+
+/** "S34", or a season between two numbered ones by its name ("AFA 2025"). */
+export function seasonShort(season: number, name?: string): string {
+  return season >= 100 ? (name ?? "AFA") : `S${season}`;
+}
+
+/** "Season 34 (Summer 2025)", or just "AFA 2025". */
+export function seasonLong(season: number, name: string): string {
+  return season >= 100 ? name : `${tx("Season {0}", { "0": season })} (${name})`;
 }
 
 function shortDivision(d: string): string {
@@ -224,7 +234,7 @@ function Overview({ p }: { p: Profile }) {
                 {t("vs")} <TeamAvatar src={o.opponent.avatar} /> <strong>{o.opponent.name}</strong>
               </span>
               <span className="muted pp-where">
-                S{o.season} {o.division}
+                {seasonShort(o.season)} {o.division}
                 {o.stage !== "regular" ? ` · ${o.round ?? o.stage}` : ""}
                 {o.time ? ` · ${formatDate(o.time, true)}` : ""}
               </span>
@@ -260,7 +270,7 @@ function Teams({ p }: { p: Profile }) {
         {p.seasons.map((s) => (
           <tr key={`${s.season}-${s.team.id}`}>
             <td>
-              S{s.season} <span className="muted">{s.seasonName}</span>
+              {s.season >= 100 ? s.seasonName : <>S{s.season} <span className="muted">{s.seasonName}</span></>}
             </td>
             <td>
               <span className="pp-team">
@@ -291,7 +301,7 @@ function Achievements({ medals }: { medals: Medal[] }) {
         <li key={i}>
           <MedalIcon m={m} />
           <span>
-            <strong>{m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")}</strong> · {m.division} · {t("Season {0}", { "0": m.season })} <span className="muted">({m.seasonName})</span>
+            <strong>{m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")}</strong> · {m.division} · {seasonLong(m.season, m.seasonName)}
           </span>
           <span className="pp-team">
             <TeamAvatar src={m.team.avatar} />
