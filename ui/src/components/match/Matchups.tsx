@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { MatchDetail, Matchup, Part, Side, Team } from "../../api/types";
+import type { MatchDetail, MatchDivisions, Matchup, Part, Side, Team } from "../../api/types";
 import { rating, RATING_GAP_FULL, teamLabel } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { t, tx } from "../../lib/i18n";
 import { classLabel } from "../analysis/common";
 import { goTo } from "../../lib/goto";
+import { DivTag, SideDivisions, useMatchDivisions } from "./Divisions";
 
 /**
  * The nine class matchups: the headline of the match page.
@@ -15,6 +16,7 @@ import { goTo } from "../../lib/goto";
  */
 export function Matchups({ d }: { d: MatchDetail }) {
   const [open, setOpen] = useState<string | null>(null);
+  const divisions = useMatchDivisions(d.logId);
 
   const left = d.leftTeam;
   const right: Team = left === "Red" ? "Blue" : "Red";
@@ -43,6 +45,7 @@ export function Matchups({ d }: { d: MatchDetail }) {
               t("Not rated yet — ratings appear after the next Sync or Rebuild.")
             )}
           </p>
+          <SideDivisions d={d} divisions={divisions} />
         </div>
         <div className="mu-head-right">
           <span
@@ -75,6 +78,7 @@ export function Matchups({ d }: { d: MatchDetail }) {
           perPct={d.ratingPerPercentile}
           open={open === m.class}
           onToggle={() => setOpen(open === m.class ? null : m.class)}
+          divisions={divisions}
         />
       ))}
 
@@ -91,8 +95,9 @@ function MatchupRow(props: {
   perPct: number;
   open: boolean;
   onToggle: () => void;
+  divisions: MatchDivisions | undefined;
 }) {
-  const { m, left, right, maxGap, perPct, open, onToggle } = props;
+  const { m, left, right, maxGap, perPct, open, onToggle, divisions } = props;
   const pct = m.diff === null ? 0 : Math.min(50, (Math.abs(m.diff) / maxGap) * 50);
   const leftWins = m.winner === "left";
   const rightWins = m.winner === "right";
@@ -111,7 +116,7 @@ function MatchupRow(props: {
           {m.involvesMe && <span className="you-tag">{t("you")}</span>}
         </span>
 
-        <SideCell side={m.left} align="left" winning={leftWins} />
+        <SideCell side={m.left} align="left" winning={leftWins} divisions={divisions} />
 
         <span className="mu-center">
           <span className="bar">
@@ -136,7 +141,7 @@ function MatchupRow(props: {
           </span>
         </span>
 
-        <SideCell side={m.right} align="right" winning={rightWins} />
+        <SideCell side={m.right} align="right" winning={rightWins} divisions={divisions} />
 
         <span className="mu-tag">
           {m.decisive ? (
@@ -152,13 +157,14 @@ function MatchupRow(props: {
   );
 }
 
-function SideCell({ side, align, winning }: { side: Side | null; align: "left" | "right"; winning: boolean }) {
+function SideCell({ side, align, winning, divisions }: { side: Side | null; align: "left" | "right"; winning: boolean; divisions: MatchDivisions | undefined }) {
   if (!side) {
     return <span className={`mu-side ${align} muted`}>{t("nobody")}</span>;
   }
   const name = (
     <span className="mu-name" title={side.subs.length ? t("Also played: {0}", { "0": side.subs.join(", ") }) : undefined}>
       {side.name}
+      <DivTag divisions={divisions} accountId={side.accountId} />
       {side.subs.length > 0 && <span className="sub-tag">+{side.subs.length}</span>}
     </span>
   );

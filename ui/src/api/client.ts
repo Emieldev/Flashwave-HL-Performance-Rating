@@ -66,6 +66,7 @@ import type {
   PlayerProfile,
   PlayerStats,
   Rankings,
+  MatchDivisions,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -105,6 +106,7 @@ const realApi = {
   searchCatalogue: (query: string) => invoke<CatalogueHit[]>("search_catalogue", { query }),
   getPlayerProfile: (accountId: number) => invoke<PlayerProfile>("get_player_profile", { accountId }),
   getPlayerStats: (accountId: number) => invoke<PlayerStats>("get_player_stats", { accountId }),
+  getMatchDivisions: (logId: number) => invoke<MatchDivisions>("get_match_divisions", { logId }),
   getRankings: (season: number | null, tier: number | null, cls: string) => invoke<Rankings>("get_rankings", { season, tier, class: cls }),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),

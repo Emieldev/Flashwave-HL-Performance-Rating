@@ -336,6 +336,12 @@ export interface Rankings {
   divisions: [number, string][];
 }
 
+/** Every player's ETF2L division at the time of a match (Q38). */
+export interface MatchDivisions {
+  players: Record<number, { tier: number; division: string; season: number; exact: boolean }>;
+  tierNames: Record<number, string>;
+}
+
 /** What the league sample's job is doing right now. */
 export interface LeagueActivity {
   state: "starting" | "working" | "waiting" | "resting" | "sync" | "paused" | "done";

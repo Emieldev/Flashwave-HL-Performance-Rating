@@ -1292,6 +1292,12 @@ pub async fn get_rankings(state: State<'_, AppState>, season: Option<i64>, tier:
     Ok(hl_ingest::catalogue::rankings(&state.db, season, tier, &class).await?)
 }
 
+/// Every player's ETF2L division at the time of a match (Q38).
+#[tauri::command]
+pub async fn get_match_divisions(state: State<'_, AppState>, log_id: i64) -> CmdResult<hl_ingest::catalogue::MatchDivisions> {
+    Ok(hl_ingest::catalogue::match_divisions(&state.db, log_id).await?)
+}
+
 /// Find a player by name or by any form of Steam ID.
 #[tauri::command]
 pub async fn search_players(state: State<'_, AppState>, query: String) -> CmdResult<Vec<hl_db::PlayerHit>> {

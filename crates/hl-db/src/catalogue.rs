@@ -105,6 +105,20 @@ impl Db {
             .collect())
     }
 
+    /// A match's date and everyone in it, for their divisions (Q38).
+    pub async fn match_accounts(&self, log_id: i64) -> Result<Option<(i64, Vec<u32>)>> {
+        let Some(played_at) = sqlx::query_scalar::<_, Option<i64>>("SELECT played_at FROM match WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(self.pool())
+            .await?
+            .flatten()
+        else {
+            return Ok(None);
+        };
+        let accounts: Vec<i64> = sqlx::query_scalar("SELECT account_id FROM match_player WHERE log_id = ?1").bind(log_id).fetch_all(self.pool()).await?;
+        Ok(Some((played_at, accounts.into_iter().map(|a| a as u32).collect())))
+    }
+
     /// Every ETF2L team: name and avatar.
     pub async fn etf2l_teams(&self) -> Result<HashMap<i64, (String, Option<String>)>> {
         let rows = sqlx::query("SELECT team_id, name, avatar FROM etf2l_team").fetch_all(self.pool()).await?;

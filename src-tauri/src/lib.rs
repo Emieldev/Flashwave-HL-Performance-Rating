@@ -214,6 +214,7 @@ pub fn run() {
             sync_commands::get_player_profile,
             sync_commands::get_player_stats,
             sync_commands::get_rankings,
+            sync_commands::get_match_divisions,
             sync_commands::index_stats,
             sync_commands::list_matches,
             sync_commands::get_match,

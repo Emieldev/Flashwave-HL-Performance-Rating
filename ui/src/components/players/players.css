@@ -281,3 +281,8 @@
 .tp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
 .tp-row { cursor: pointer; }
 .tp-row:hover td { background: var(--raised); }
+
+/* Division tags beside names on the match page (Q38). */
+.div-small { margin-left: 6px; padding: 0 5px; font-size: 0.66rem; vertical-align: 1px; }
+.div-near { opacity: 0.5; border-style: dashed; }
+.side-divisions { margin-top: 4px; }

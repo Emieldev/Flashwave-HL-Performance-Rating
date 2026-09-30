@@ -1196,6 +1196,20 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["divisions", log_id] => {
+            // Q38: everyone's ETF2L division at the time of a match.
+            let db = Db::connect(&db_path).await?;
+            let d = hl_ingest::catalogue::match_divisions(&db, log_id.parse()?).await?;
+            let names = db.log_names().await?;
+            let mut rows: Vec<_> = d.players.iter().collect();
+            rows.sort_by_key(|(_, p)| p.tier);
+            for (a, p) in rows {
+                println!("  {:<22} {:<12} S{}{}", names.get(a).and_then(|n| n.first()).map_or("?", |n| n.as_str()), p.division, p.season, if p.exact { "" } else { " (nearest)" });
+            }
+            println!("{} of the players have a division", d.players.len());
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;

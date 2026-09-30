@@ -775,6 +775,67 @@ pub async fn rankings(db: &Db, season: Option<i64>, tier: Option<i64>, class: &s
     })
 }
 
+// ---- The division of the people you play (Q38) ----------------------------
+
+/// How far from a season a match may be and still take its division.
+const NEAREST_SEASON_S: i64 = 365 * 24 * 3600;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerDivision {
+    pub tier: i64,
+    pub division: String,
+    pub season: i64,
+    /// The match was inside that season; false when it was between seasons
+    /// or in one the player did not play, and the nearest was used.
+    pub exact: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchDivisions {
+    /// Account -> their division at the time of the match.
+    pub players: HashMap<u32, PlayerDivision>,
+    /// Tier -> its newest name, to name a side's average.
+    pub tier_names: BTreeMap<i64, String>,
+}
+
+/// Every player's ETF2L division at the time of a match (Q38): the season
+/// the match was in, else the nearest season they played within a year.
+pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
+    let Some((played_at, accounts)) = db.match_accounts(log_id).await? else {
+        return Ok(MatchDivisions { players: HashMap::new(), tier_names: BTreeMap::new() });
+    };
+    let cat = Catalogue::load(db).await?;
+    let windows = cat.season_windows();
+    let divisions = cat.divisions();
+    let mut players = HashMap::new();
+    for a in accounts {
+        let best = windows
+            .iter()
+            .filter_map(|(s, _, from, to)| {
+                let (tier, division, _) = divisions.get(&(a, *s))?;
+                let gap = if played_at < *from { from - played_at } else if played_at > *to { played_at - to } else { 0 };
+                (gap <= NEAREST_SEASON_S).then(|| (gap, *s, *tier, division.clone()))
+            })
+            .min_by_key(|(gap, s, ..)| (*gap, -s));
+        if let Some((gap, season, tier, division)) = best {
+            players.insert(a, PlayerDivision { tier, division, season, exact: gap == 0 });
+        }
+    }
+    // The newest name of each tier: "High", not the older "Division 1".
+    let mut tier_names: BTreeMap<i64, (i64, String)> = BTreeMap::new();
+    for m in cat.matches.values() {
+        if let (Some(d), Some(t)) = (&m.division, m.tier) {
+            let e = tier_names.entry(t).or_insert((m.season, d.clone()));
+            if m.season > e.0 {
+                *e = (m.season, d.clone());
+            }
+        }
+    }
+    Ok(MatchDivisions { players, tier_names: tier_names.into_iter().map(|(t, (_, n))| (t, n)).collect() })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

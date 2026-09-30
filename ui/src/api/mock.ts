@@ -53,7 +53,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings, MatchDivisions } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -1199,6 +1199,18 @@ export const mockApi: Api = {
     delay(MOCK_HITS.filter((h) => h.name.toLowerCase().includes(query.trim().toLowerCase()))),
   getPlayerProfile: (accountId: number) => delay(mockProfile(accountId)),
   // The numbers the owner's real profile gave on a copy of the database.
+  // The browser build: every player of the match gets a division by the
+  // account number, a few from a nearby season.
+  getMatchDivisions: async (logId: number) => {
+    const d = (await mockApi.getMatch(logId)) as MatchDetail | null;
+    const names = ["Premiership", "High", "Mid", "Low", "Open"];
+    const players: MatchDivisions["players"] = {};
+    for (const p of d?.players ?? []) {
+      const tier = (p.accountId % 7) % 5;
+      players[p.accountId] = { tier, division: names[tier], season: 36, exact: p.accountId % 3 !== 0 };
+    }
+    return { players, tierNames: { 0: "Premiership", 1: "High", 2: "Mid", 3: "Low", 4: "Open" } };
+  },
   getPlayerStats: () =>
     delay({
       classes: [

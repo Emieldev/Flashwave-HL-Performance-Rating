@@ -4,6 +4,7 @@ import { clock, rating, teamLabel } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { t as tr, tx, k } from "../../lib/i18n";
 import { classLabel } from "../analysis/common";
+import { DivTag, useMatchDivisions } from "./Divisions";
 
 const CLASS_ORDER = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
 
@@ -50,6 +51,7 @@ const COLS: Col[] = [
  * first.
  */
 export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }) {
+  const divisions = useMatchDivisions(d.logId);
   const [sort, setSort] = useState<{ key: Key; desc: boolean }>({ key: "team", desc: false });
   const rows = useMemo(() => {
     const byTeamClass = (a: PlayerRow, b: PlayerRow) =>
@@ -111,6 +113,7 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
                 <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</td>
                 <td className="nowrap player-name">
                   {p.name}
+                  <DivTag divisions={divisions} accountId={p.accountId} />
                   {p.isMe && <span className="you-tag">{tr("you")}</span>}
                 </td>
                 <td className="sb-classes">
