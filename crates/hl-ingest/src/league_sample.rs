@@ -152,7 +152,8 @@ pub async fn select(db: &Db) -> Result<(usize, usize)> {
     // tier -> match -> (played_at, logs, maps)
     let mut by_tier: BTreeMap<i64, HashMap<i64, (i64, Vec<i64>, HashSet<String>)>> = BTreeMap::new();
     for c in candidates.iter().filter(|c| played_map(&c.map) && c.duration_s >= MIN_DURATION_S && c.played_at >= t - MAX_YEARS * YEAR_S) {
-        let e = by_tier.entry(c.tier).or_default().entry(c.match_id).or_insert_with(|| (c.played_at, Vec::new(), HashSet::new()));
+        let tier = crate::leagues::canonical_tier(&c.division).unwrap_or(c.tier);
+        let e = by_tier.entry(tier).or_default().entry(c.match_id).or_insert_with(|| (c.played_at, Vec::new(), HashSet::new()));
         e.0 = e.0.max(c.played_at);
         e.1.push(c.log_id);
         e.2.insert(hl_core::maps::map_base(&c.map));
@@ -327,6 +328,49 @@ pub struct Status {
     pub target_per_tier: usize,
 }
 
+/// Progress rows are counted by ETF2L's tier and name; this puts them on
+/// today's ladder ("Division 5A" with Low). Maps are summed, so a division
+/// merged from two eras may count a map twice.
+fn progress_by_ladder(rows: Vec<hl_db::TierProgress>) -> Vec<hl_db::TierProgress> {
+    let mut out: BTreeMap<i64, hl_db::TierProgress> = BTreeMap::new();
+    for r in rows {
+        let tier = crate::leagues::canonical_tier(&r.division).unwrap_or(r.tier);
+        match out.get_mut(&tier) {
+            None => {
+                let name = crate::leagues::TIER_NAMES.get(tier as usize).map_or(r.division.clone(), |n| n.to_string());
+                out.insert(tier, hl_db::TierProgress { tier, division: name, ..r });
+            }
+            Some(e) => {
+                e.matches += r.matches;
+                e.logs += r.logs;
+                e.json_logstf += r.json_logstf;
+                e.json_moretf += r.json_moretf;
+                e.raw += r.raw;
+                e.raw_missing += r.raw_missing;
+                e.maps = e.maps.max(r.maps);
+                e.rosters += r.rosters;
+                e.oldest = e.oldest.min(r.oldest).or(e.oldest.or(r.oldest));
+                e.newest = e.newest.max(r.newest);
+            }
+        }
+    }
+    out.into_values().collect()
+}
+
+/// The sample's size on disk. Summing thousands of stored logs takes over a
+/// second and Settings asks every ten, so the answer is kept five minutes.
+async fn bytes_held(db: &Db) -> Result<i64> {
+    static HELD: std::sync::Mutex<Option<(std::time::Instant, i64)>> = std::sync::Mutex::new(None);
+    if let Some((at, bytes)) = *HELD.lock().unwrap() {
+        if at.elapsed() < std::time::Duration::from_secs(300) {
+            return Ok(bytes);
+        }
+    }
+    let bytes = db.league_bytes().await?;
+    *HELD.lock().unwrap() = Some((std::time::Instant::now(), bytes));
+    Ok(bytes)
+}
+
 pub async fn status(db: &Db, sources: &Sources) -> Result<Status> {
     let (officials, rosters_read, players) = db.league_catalogue(now() - MAX_YEARS * YEAR_S).await?;
     Ok(Status {
@@ -336,8 +380,8 @@ pub async fn status(db: &Db, sources: &Sources) -> Result<Status> {
         enabled: enabled(db).await?,
         discovered_at: db.get_setting(KEY_DISCOVERED).await?.and_then(|s| s.parse().ok()),
         logs_listed: db.league_logs_known().await?.0,
-        tiers: db.league_progress().await?,
-        bytes: db.league_bytes().await?,
+        tiers: progress_by_ladder(db.league_progress().await?),
+        bytes: bytes_held(db).await?,
         logstf_resting: sources.logstf_resting(),
         target_per_tier: MATCHES_PER_TIER,
     })

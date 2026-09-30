@@ -24,6 +24,49 @@ pub const DETAILS_PER_SYNC: i64 = 60;
 /// Competition-list pages read at most: a guard, not a limit.
 const MAX_LIST_PAGES: i64 = 25;
 
+/// Today's ladder, top first: the tier every division of every era is put
+/// on (see [`canonical_tier`]).
+pub const TIER_NAMES: [&str; 6] = ["Premiership", "High", "Mid", "Low", "Open", "Fresh Meat"];
+
+/// A division's place on today's ladder, whatever the season called it
+/// (Flashy): ETF2L once numbered its divisions, and its own tier numbers
+/// do not line up across eras. Division 1 and 2 are High, 3 and 4 Mid, 5
+/// Low, 6 Open, 7 Fresh Meat; a group letter ("Division 5A", "Mid B",
+/// "Open A") is dropped. `None` for a name that is not a division ("Top
+/// Tiers", a cup's label), which falls back to ETF2L's own tier.
+pub fn canonical_tier(division: &str) -> Option<i64> {
+    let d = division.trim().to_ascii_lowercase();
+    // "Division 5A" -> 5; "Div 2" -> 2.
+    let number = d
+        .strip_prefix("division ")
+        .or_else(|| d.strip_prefix("div "))
+        .and_then(|n| n.trim().trim_end_matches(|c: char| c.is_ascii_alphabetic()).trim().parse::<i64>().ok());
+    if let Some(n) = number {
+        return match n {
+            1 | 2 => Some(1),
+            3 | 4 => Some(2),
+            5 => Some(3),
+            6 => Some(4),
+            7 => Some(5),
+            _ => None,
+        };
+    }
+    // "Mid B" -> "mid": the last word, when it is a single letter, is a group.
+    let base = match d.rsplit_once(' ') {
+        Some((head, last)) if last.len() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()) => head,
+        _ => d.as_str(),
+    };
+    match base {
+        "premiership" | "prem" => Some(0),
+        "high" => Some(1),
+        "mid" => Some(2),
+        "low" => Some(3),
+        "open" => Some(4),
+        "fresh" | "freshest" | "fresh meat" => Some(5),
+        _ => None,
+    }
+}
+
 /// ETF2L's seasons between 27 and 32 carry no number: they are named by the
 /// time of year. Their places in the numbering, by date -- Season 27 ended
 /// in October 2022 and Season 32 began in July 2024 (Flashy's results page).
@@ -566,5 +609,28 @@ mod tests {
         assert_eq!(parse_name("Highlander Autumn 2023 Preseason Cup"), Some((30, "Autumn 2023".into(), "".into(), "Cup".into())));
         assert_eq!(parse_name("Highlander Spring 2023 Preseason Cup: Low Playoffs"), Some((29, "Spring 2023".into(), "Low".into(), "Cup".into())));
         assert_eq!(parse_name("Highlander Experimental Cup #10"), None);
+    }
+
+    #[test]
+    fn every_era_s_divisions_land_on_today_s_ladder() {
+        for (name, tier) in [
+            ("Premiership", 0),
+            ("High", 1),
+            ("Division 1", 1),
+            ("Division 2", 1),
+            ("Division 3", 2),
+            ("Division 4", 2),
+            ("Mid B", 2),
+            ("Division 5A", 3),
+            ("Low A", 3),
+            ("Division 6", 4),
+            ("Open A", 4),
+            ("Division 7", 5),
+            ("Fresh", 5),
+            ("Freshest", 5),
+        ] {
+            assert_eq!(canonical_tier(name), Some(tier), "{name}");
+        }
+        assert_eq!(canonical_tier("Top Tiers"), None);
     }
 }

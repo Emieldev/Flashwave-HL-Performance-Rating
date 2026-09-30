@@ -178,8 +178,10 @@ impl Catalogue {
     /// A match's division, and its tier where one can be found.
     fn division_of(&self, m: &CatMatch) -> (String, Option<i64>) {
         let name = m.division.clone().unwrap_or_else(|| m.comp_division.clone());
-        let tier = m
-            .tier
+        // Today's ladder first; ETF2L's own tier only for a name that is not
+        // a division.
+        let tier = crate::leagues::canonical_tier(&name)
+            .or(m.tier)
             .or_else(|| self.tiers.get(&(m.season, name.clone())).copied())
             .or_else(|| self.tier_by_name.get(&name).copied());
         (name, tier)
@@ -315,7 +317,7 @@ impl Catalogue {
                         season,
                         season_name: season_name(season),
                         division: d.clone(),
-                        tier: self.tiers.get(&(season, d.clone())).copied().or_else(|| self.tier_by_name.get(d).copied()),
+                        tier: crate::leagues::canonical_tier(d).or_else(|| self.tiers.get(&(season, d.clone())).copied()).or_else(|| self.tier_by_name.get(d).copied()),
                         place: *p,
                         team: self.team(team),
                         how: how.clone(),
@@ -628,10 +630,10 @@ impl Catalogue {
             }
         }
         let name = |season: i64, tier: i64| {
-            names
-                .get(&(season, tier))
-                .cloned()
-                .or_else(|| self.tier_by_name.iter().find(|(_, t)| **t == tier).map(|(n, _)| n.clone()))
+            crate::leagues::TIER_NAMES
+                .get(tier as usize)
+                .map(|n| n.to_string())
+                .or_else(|| names.get(&(season, tier)).cloned())
                 .unwrap_or_default()
         };
         let mut out = HashMap::new();
@@ -873,17 +875,9 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
             players.insert(a, PlayerDivision { tier, division, season, exact: gap == 0 });
         }
     }
-    // The newest name of each tier: "High", not the older "Division 1".
-    let mut tier_names: BTreeMap<i64, (i64, String)> = BTreeMap::new();
-    for m in cat.matches.values() {
-        if let (Some(d), Some(t)) = (&m.division, m.tier) {
-            let e = tier_names.entry(t).or_insert((m.season, d.clone()));
-            if m.season > e.0 {
-                *e = (m.season, d.clone());
-            }
-        }
-    }
-    Ok(MatchDivisions { players, tier_names: tier_names.into_iter().map(|(t, (_, n))| (t, n)).collect() })
+    // Every tier by today's name: "High", not the older "Division 1".
+    let tier_names: BTreeMap<i64, String> = crate::leagues::TIER_NAMES.iter().enumerate().map(|(t, n)| (t as i64, n.to_string())).collect();
+    Ok(MatchDivisions { players, tier_names })
 }
 
 #[cfg(test)]
@@ -940,7 +934,7 @@ mod tests {
         let (seasons, won, officials) = c.player(10, &medals);
         assert_eq!(won.len(), 1);
         assert_eq!(won[0].place, 2);
-        assert_eq!(seasons.iter().find(|s| s.season == 35).unwrap().tier, Some(2), "the playoffs take the season's tier");
+        assert_eq!(seasons.iter().find(|s| s.season == 35).unwrap().tier, Some(3), "the playoffs are Low, tier 3 on the ladder");
         assert_eq!(officials.len(), 4);
     }
 
