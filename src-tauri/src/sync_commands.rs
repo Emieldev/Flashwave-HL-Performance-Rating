@@ -1268,6 +1268,18 @@ pub struct PlayerResponse {
     pub class: Option<String>,
 }
 
+/// Search every player the app knows: the ETF2L catalogue and your matches.
+#[tauri::command]
+pub async fn search_catalogue(state: State<'_, AppState>, query: String) -> CmdResult<Vec<hl_ingest::catalogue::Hit>> {
+    Ok(hl_ingest::catalogue::search(&state.db, &query, 30).await?)
+}
+
+/// One player's profile: teams, divisions, medals, officials (Q35).
+#[tauri::command]
+pub async fn get_player_profile(state: State<'_, AppState>, account_id: u32) -> CmdResult<hl_ingest::catalogue::Profile> {
+    Ok(hl_ingest::catalogue::profile(&state.db, &state.sources, account_id).await?)
+}
+
 /// Find a player by name or by any form of Steam ID.
 #[tauri::command]
 pub async fn search_players(state: State<'_, AppState>, query: String) -> CmdResult<Vec<hl_db::PlayerHit>> {

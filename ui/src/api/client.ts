@@ -62,6 +62,8 @@ import type {
   RatingGuide,
   LeagueSample,
   LeagueActivity,
+  CatalogueHit,
+  PlayerProfile,
 } from "./types";
 import { withChosenNames } from "../lib/names";
 
@@ -98,6 +100,8 @@ const realApi = {
   getLeagueSample: () => invoke<LeagueSample>("get_league_sample"),
   setLeagueSample: (on: boolean) => invoke<void>("set_league_sample", { on }),
   getLeagueActivity: () => invoke<LeagueActivity>("get_league_activity"),
+  searchCatalogue: (query: string) => invoke<CatalogueHit[]>("search_catalogue", { query }),
+  getPlayerProfile: (accountId: number) => invoke<PlayerProfile>("get_player_profile", { accountId }),
   syncStart: (full: boolean) => invoke<void>("sync_start", { full }),
   reprocessStart: () => invoke<void>("reprocess_start"),
   getMatch: (logId: number) => invoke<MatchDetail | null>("get_match", { logId }),

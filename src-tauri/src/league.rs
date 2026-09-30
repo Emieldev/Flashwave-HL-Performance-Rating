@@ -101,6 +101,12 @@ pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: Sha
         // Let the startup passes have the database first.
         activity.lock().unwrap().next_at = Some(now() + 30);
         tokio::time::sleep(Duration::from_secs(30)).await;
+        // Each sample log's players and main classes, for the profiles.
+        match hl_ingest::catalogue::index_league_players(&db, 100_000).await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(logs = n, "league players indexed"),
+            Err(e) => tracing::warn!(error = %format!("{e:#}"), "indexing league players failed"),
+        }
         loop {
             let (state, gap) = if !league_sample::enabled(&db).await.unwrap_or(false) {
                 ("paused", IDLE_GAP)
@@ -130,6 +136,10 @@ pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: Sha
                     }
                     Ok(Step::Json { log_id, source }) => {
                         a.log(format!("Log {log_id} from {source}"), true);
+                        let db = db.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = hl_ingest::catalogue::index_league_players(&db, 5).await;
+                        });
                         ("waiting", STEP_GAP)
                     }
                     Ok(Step::Raw { log_id, found }) => {

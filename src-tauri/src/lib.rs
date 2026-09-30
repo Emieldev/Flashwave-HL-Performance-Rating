@@ -210,6 +210,8 @@ pub fn run() {
             sync_commands::get_league_sample,
             sync_commands::set_league_sample,
             sync_commands::get_league_activity,
+            sync_commands::search_catalogue,
+            sync_commands::get_player_profile,
             sync_commands::index_stats,
             sync_commands::list_matches,
             sync_commands::get_match,

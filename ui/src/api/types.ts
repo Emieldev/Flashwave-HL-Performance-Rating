@@ -214,6 +214,87 @@ export interface LeagueTier {
   newest: number | null;
 }
 
+/** An ETF2L team, as a profile shows it. */
+export interface CatTeam {
+  id: number;
+  name: string;
+  avatar: string | null;
+}
+
+/** A division, and its tier: 0 Premiership, 1 High, 2 Mid, 3 Low, 4 Open. */
+export interface CatDivision {
+  name: string;
+  tier: number;
+}
+
+/** One row of a player search across the catalogue. */
+export interface CatalogueHit {
+  accountId: number;
+  name: string;
+  highest: CatDivision | null;
+  mainClass: string | null;
+  /** Gold, silver, bronze. */
+  medals: [number, number, number];
+  officials: number;
+  lastSeen: number | null;
+}
+
+export interface PlayerSeason {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number | null;
+  team: CatTeam;
+  played: number;
+  won: number;
+  lost: number;
+  place: number | null;
+}
+
+export interface Medal {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number | null;
+  /** 1 gold, 2 silver, 3 bronze. */
+  place: number;
+  team: CatTeam;
+  how: string;
+}
+
+export interface Official {
+  matchId: number;
+  time: number | null;
+  season: number;
+  division: string;
+  stage: string;
+  round: string | null;
+  team: CatTeam;
+  opponent: CatTeam;
+  scoreFor: number | null;
+  scoreAgainst: number | null;
+  won: boolean | null;
+}
+
+/** A player's profile (Q35): who they are, their teams, divisions and medals. */
+export interface PlayerProfile {
+  accountId: number;
+  steamid64: string;
+  name: string;
+  aliases: string[];
+  country: string | null;
+  avatar: string | null;
+  declaredClasses: string[];
+  playedClasses: [string, number][];
+  mainClass: string | null;
+  current: PlayerSeason | null;
+  highest: CatDivision | null;
+  medals: Medal[];
+  seasons: PlayerSeason[];
+  officials: Official[];
+  etf2lId: number | null;
+}
+
 /** What the league sample's job is doing right now. */
 export interface LeagueActivity {
   state: "starting" | "working" | "waiting" | "resting" | "sync" | "paused" | "done";

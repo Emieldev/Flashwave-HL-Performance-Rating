@@ -19,7 +19,7 @@
 
 .player-hit {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
@@ -186,3 +186,72 @@
     display: none;
   }
 }
+
+/* ---- Player profiles, HLTV-style (Q35) ---- */
+.pp-head { padding: 0; overflow: hidden; }
+.pp-top { display: grid; grid-template-columns: auto 1fr auto; gap: 20px; padding: 20px; }
+.pp-avatar { width: 112px; height: 112px; border-radius: 10px; overflow: hidden; background: var(--sunken); border: 1px solid var(--border); display: grid; place-items: center; font-size: 2.6rem; font-weight: 700; color: var(--muted); }
+.pp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pp-name-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pp-name { margin: 0; font-size: 1.7rem; }
+.pp-aka { margin: 2px 0 0; }
+.pp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 14px 0 0; font-size: 0.9rem; }
+.pp-facts dt { color: var(--muted); }
+.pp-facts dd { margin: 0; }
+.pp-classes span { display: inline-flex; align-items: center; gap: 5px; }
+.pp-team { display: inline-flex; align-items: center; gap: 7px; }
+.pp-team-avatar { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; background: var(--sunken); display: inline-block; flex: none; }
+.pp-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.pp-title { padding: 3px 10px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; color: #1b1714; }
+.pp-links { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; font-size: 0.85rem; }
+
+/* Medals: gold, silver, bronze -- each also says its place and season in text. */
+.pp-gold { --medal: #e3b341; }
+.pp-silver { --medal: #b9c0c8; }
+.pp-bronze { --medal: #c98a52; }
+.pp-title { background: var(--medal); }
+.pp-trophies { display: flex; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--sunken); overflow-x: auto; }
+.pp-medal { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; flex: none; min-width: 58px; }
+.pp-medal-disc { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 1.05rem; color: #1b1714;
+  background: radial-gradient(circle at 35% 30%, #fff8 0, transparent 45%), var(--medal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--medal) 35%, transparent); }
+.pp-medal-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.pp-place { font-weight: 700; color: var(--medal); }
+
+/* Division badges: one colour per tier, always with its name. */
+.div-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.02em; border: 1px solid currentColor; white-space: nowrap; }
+.div-t0 { color: #e3b341; }
+.div-t1 { color: #e0763a; }
+.div-t2 { color: #3fb8a0; }
+.div-t3 { color: #6aa3e8; }
+.div-t4 { color: #a8998b; }
+
+.pp-body { padding-top: 6px; }
+.pp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.pp-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; color: var(--muted); font: inherit; cursor: pointer; }
+.pp-tab:hover { color: var(--text); }
+.pp-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.pp-overview { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+.pp-overview h3 { margin: 0 0 10px; font-size: 0.95rem; }
+@media (max-width: 900px) { .pp-overview { grid-template-columns: 1fr; } .pp-top { grid-template-columns: auto 1fr; } .pp-links { grid-column: 1 / -1; flex-direction: row; } }
+.pp-matches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pp-matches li { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; padding: 8px 12px; border-radius: 6px; background: var(--sunken); border-right: 3px solid var(--line); }
+.pp-matches li.won { border-right-color: var(--ok); }
+.pp-matches li.lost { border-right-color: var(--bad); }
+.pp-vs { display: inline-flex; align-items: center; gap: 6px; }
+.pp-where { grid-column: 1; font-size: 0.8rem; }
+.pp-score { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pp-class-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pp-class-list li { display: grid; grid-template-columns: 20px 90px 1fr auto; align-items: center; gap: 8px; font-size: 0.88rem; }
+.pp-class-bar { height: 8px; background: var(--sunken); border-radius: 4px; overflow: hidden; }
+.pp-class-bar i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.pp-seasons { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.pp-seasons th, .pp-seasons td { padding: 7px 10px; border-top: 1px solid var(--rule); text-align: left; }
+.pp-seasons thead th { border-top: 0; color: var(--muted); font-weight: 500; }
+.pp-achievements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pp-achievements li { display: grid; grid-template-columns: 64px 1fr auto auto; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--rule); }
+
+/* Search rows: division badge and medal counts beside the name. */
+.ph-medals { display: inline-flex; gap: 4px; }
+.ph-medal { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: inline-grid; place-items: center; font-size: 0.72rem; font-weight: 800; color: #1b1714; background: var(--medal); }
+.pp-links a { color: var(--accent-text); text-decoration: none; }
+.pp-links a:hover { text-decoration: underline; }

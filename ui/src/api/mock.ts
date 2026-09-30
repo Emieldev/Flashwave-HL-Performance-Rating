@@ -53,7 +53,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -266,6 +266,43 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
 });
 
 let newestLooks = 0;
+
+const MOCK_HITS: CatalogueHit[] = [
+  { accountId: 139131191, name: "Flashy", highest: { name: "Mid", tier: 2 }, mainClass: "sniper", medals: [1, 0, 0], officials: 25, lastSeen: 1_790_532_000 },
+  { accountId: 227974365, name: "rzeke", highest: { name: "Premiership", tier: 0 }, mainClass: "spy", medals: [2, 1, 1], officials: 88, lastSeen: 1_790_532_000 },
+  { accountId: 164932866, name: "Mifune", highest: { name: "High", tier: 1 }, mainClass: "engineer", medals: [0, 1, 0], officials: 41, lastSeen: 1_789_000_000 },
+];
+
+const mockTeam = (id: number, name: string) => ({ id, name, avatar: null });
+function mockProfile(accountId: number): PlayerProfile {
+  const hit = MOCK_HITS.find((h) => h.accountId === accountId) ?? MOCK_HITS[0];
+  const dd = mockTeam(37000, "DD14"), sbq = mockTeam(35000, "SBQRRA");
+  return {
+    accountId,
+    steamid64: "76561198099396919",
+    name: hit.name,
+    aliases: ["flashy", "SBQR flashy", "FlashBangy"],
+    country: "Netherlands",
+    avatar: null,
+    declaredClasses: ["Sniper"],
+    playedClasses: [["sniper", 690], ["engineer", 30], ["scout", 16]],
+    mainClass: hit.mainClass,
+    current: { season: 36, seasonName: "Autumn 2026", division: "High", tier: 1, team: dd, played: 5, won: 4, lost: 1, place: null },
+    highest: hit.highest,
+    medals: [{ season: 33, seasonName: "Spring 2025", division: "Low", tier: 3, place: 1, team: sbq, how: "Grand Final 6-3" }],
+    seasons: [
+      { season: 36, seasonName: "Autumn 2026", division: "High", tier: 1, team: dd, played: 5, won: 4, lost: 1, place: null },
+      { season: 34, seasonName: "Summer 2025", division: "Mid", tier: 2, team: sbq, played: 6, won: 4, lost: 2, place: null },
+      { season: 33, seasonName: "Spring 2025", division: "Low", tier: 3, team: sbq, played: 9, won: 7, lost: 2, place: 1 },
+    ],
+    officials: [
+      { matchId: 93055, time: 1_790_532_000, season: 36, division: "High", stage: "regular", round: "Week 5", team: dd, opponent: mockTeam(1, "TWS"), scoreFor: 4, scoreAgainst: 2, won: true },
+      { matchId: 92011, time: 1_789_900_000, season: 36, division: "High", stage: "regular", round: "Week 4", team: dd, opponent: mockTeam(2, "ЭТО МОЁ БОЛОТО"), scoreFor: 1, scoreAgainst: 5, won: false },
+      { matchId: 85001, time: 1_757_000_000, season: 33, division: "Low", stage: "Playoffs", round: "Grand Final", team: sbq, opponent: mockTeam(3, "Gibus and The Gang"), scoreFor: 6, scoreAgainst: 3, won: true },
+    ],
+    etf2lId: 97913,
+  };
+}
 
 const tier = (tier: number, division: string, matches: number, logs: number, json: number, maps: number) => ({
   tier, division, matches, logs, jsonLogstf: json, jsonMoretf: Math.round(json / 10), raw: Math.round(json / 3), rawMissing: 2, maps, rosters: Math.round(matches / 2), oldest: 1_724_000_000, newest: 1_790_538_131,
@@ -1157,6 +1194,10 @@ export const mockApi: Api = {
       ],
     } as LeagueActivity);
   },
+  // The browser build: three players, the owner's real profile shape.
+  searchCatalogue: (query: string) =>
+    delay(MOCK_HITS.filter((h) => h.name.toLowerCase().includes(query.trim().toLowerCase()))),
+  getPlayerProfile: (accountId: number) => delay(mockProfile(accountId)),
   setLeagueSample: async (on: boolean) => {
     leagueSample = { ...leagueSample, enabled: on };
   },

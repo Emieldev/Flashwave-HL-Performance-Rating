@@ -1149,6 +1149,41 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["catalogue", query @ ..] => {
+            // Q35: search the player catalogue; the first hit's profile.
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let n = hl_ingest::catalogue::index_league_players(&db, 100_000).await?;
+            if n > 0 {
+                eprintln!("indexed {n} league logs' players");
+            }
+            let hits = hl_ingest::catalogue::search(&db, &query.join(" "), 10).await?;
+            for h in &hits {
+                println!(
+                    "  {:<22} {:<12} {:<9} {}g {}s {}b  {} officials",
+                    h.name.chars().take(22).collect::<String>(),
+                    h.highest.as_ref().map_or("-".into(), |d| d.name.clone()),
+                    h.main_class.as_deref().unwrap_or("-"),
+                    h.medals[0], h.medals[1], h.medals[2],
+                    h.officials
+                );
+            }
+            if let Some(h) = hits.first() {
+                let p = hl_ingest::catalogue::profile(&db, &sources, h.account_id).await?;
+                println!("
+{} ({}) {} · main {:?} declared {:?} · highest {:?}", p.name, p.steamid64, p.country.as_deref().unwrap_or("?"), p.main_class, p.declared_classes, p.highest.as_ref().map(|d| &d.name));
+                println!("aka {}", p.aliases.join(", "));
+                for m in &p.medals {
+                    println!("  medal {} S{} {} with {} ({})", ["gold", "silver", "bronze"][usize::from(m.place - 1)], m.season, m.division, m.team.name, m.how);
+                }
+                for s in &p.seasons {
+                    println!("  S{:<3} {:<12} {:<24} {:>2}-{:<2} of {:>2}{}", s.season, s.division, s.team.name.chars().take(24).collect::<String>(), s.won, s.lost, s.played, s.place.map_or(String::new(), |p| format!("  #{p}")));
+                }
+                println!("  {} officials; latest: {}", p.officials.len(), p.officials.iter().take(3).map(|o| format!("{} vs {} {}-{}", o.team.name, o.opponent.name, o.score_for.unwrap_or(0), o.score_against.unwrap_or(0))).collect::<Vec<_>>().join("; "));
+            }
+            Ok(())
+        }
+
         ["guide", rest @ ..] => {
             let (w, warning) = hl_rating::Weights::load(&db_path.with_file_name("weights.toml"));
             if let Some(w) = warning {

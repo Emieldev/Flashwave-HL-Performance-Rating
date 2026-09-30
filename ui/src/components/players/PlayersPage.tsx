@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type PlayerHit } from "../../api/types";
+import { errorMessage, type CatalogueHit } from "../../api/types";
 import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import "./players.css";
 import { t, tx } from "../../lib/i18n";
+import { DivisionBadge, PlayerProfile } from "./PlayerProfile";
 
 /**
  * Look other people up (Q14).
@@ -28,8 +29,8 @@ export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
   // the database and the answer is never what anyone wanted.
   const term = query.trim();
   const hits = useQuery({
-    queryKey: ["search_players", term],
-    queryFn: () => api.searchPlayers(term),
+    queryKey: ["search_catalogue", term],
+    queryFn: () => api.searchCatalogue(term),
     enabled: term.length >= 2,
     placeholderData: keepPreviousData,
   });
@@ -38,7 +39,7 @@ export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
     <div className="content players">
       <div className="panel">
         <h2>{t("Look someone up")}</h2>
-        <p className="hint" style={{ marginTop: 6 }}>{t("Anyone from your stored matches. Name or Steam ID.")}</p>
+        <p className="hint" style={{ marginTop: 6 }}>{t("Anyone who played an ETF2L official in the last six years, or is in your matches. Name or Steam ID.")}</p>
         <input
           className="player-search"
           value={query}
@@ -54,7 +55,7 @@ export function PlayersPage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
         )}
       </div>
 
-      {picked !== null && <PlayerCard accountId={picked} onOpenMatch={onOpenMatch} />}
+      {picked !== null && <PlayerProfile key={picked} accountId={picked} yours={<PlayerCard accountId={picked} onOpenMatch={onOpenMatch} />} />}
     </div>
   );
 }
@@ -65,7 +66,7 @@ function Results({
   picked,
   onPick,
 }: {
-  hits: PlayerHit[];
+  hits: CatalogueHit[];
   loading: boolean;
   picked: number | null;
   onPick: (id: number) => void;
@@ -73,7 +74,7 @@ function Results({
   if (hits.length === 0) {
     return (
       <p className="hint" style={{ marginTop: 14 }}>
-        {loading ? t("Looking…") : t("Nobody by that name has played in your matches.")}
+        {loading ? t("Looking…") : t("Nobody by that name in the ETF2L officials read or in your matches.")}
       </p>
     );
   }
@@ -86,10 +87,15 @@ function Results({
           onClick={() => onPick(h.accountId)}
           aria-pressed={picked === h.accountId}
         >
-          {h.topClass ? <ClassIcon cls={h.topClass} size={22} /> : <span style={{ width: 22 }} />}
+          {h.mainClass ? <ClassIcon cls={h.mainClass} size={22} /> : <span style={{ width: 22 }} />}
           <span className="ph-name">{h.name}</span>
+          {h.highest && <DivisionBadge d={h.highest} />}
+          <span className="ph-medals" aria-label={t("Medals")}>
+            {h.medals.map((n, i) => (n > 0 ? <span key={i} className={`ph-medal pp-${["gold", "silver", "bronze"][i]}`}>{n}</span> : null))}
+          </span>
           <span className="ph-meta muted">
-            {tx("{games} game{1}{2}", { "1": h.games === 1 ? "" : "s", "2": h.lastSeen !== null && t(" · last {0}", { "0": formatDate(h.lastSeen, true) }), games: h.games })}
+            {h.officials > 0 ? tx("{0} official{1}", { "0": h.officials, "1": h.officials === 1 ? "" : "s" }) : t("your matches")}
+            {h.lastSeen !== null && t(" · last {0}", { "0": formatDate(h.lastSeen, true) })}
           </span>
         </button>
       ))}
