@@ -291,3 +291,8 @@
 .div-small { margin-left: 6px; padding: 0 5px; font-size: 0.66rem; vertical-align: 1px; }
 .div-near { opacity: 0.5; border-style: dashed; }
 .side-divisions { margin-top: 4px; }
+
+/* ETF2L's medal: gold as the game draws it, silver and bronze tinted. */
+.medal-img { display: block; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.medal-silver { filter: grayscale(1) brightness(1.18) contrast(1.05) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.medal-bronze { filter: sepia(0.55) saturate(1.25) hue-rotate(-14deg) brightness(0.78) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }

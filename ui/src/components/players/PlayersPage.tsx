@@ -97,7 +97,7 @@ function Results({
             {h.medals.map((n, i) =>
               n > 0 ? (
                 <span key={i} className={`ph-medal pp-${["gold", "silver", "bronze"][i]}`} title={[t("Gold"), t("Silver"), t("Bronze")][i]}>
-                  <MedalGlyph size={13} />
+                  <MedalGlyph size={16} place={i + 1} />
                   {n}
                 </span>
               ) : null,

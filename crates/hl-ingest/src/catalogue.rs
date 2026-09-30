@@ -197,6 +197,28 @@ impl Catalogue {
         (f, a, won)
     }
 
+    /// The division a medal is for, by today's name ("Open", not "Open B").
+    /// A final with no division of its own (Autumn 2023's Grand Final is a
+    /// round of the season) takes the one its teams played that season.
+    fn medal_division(&self, m: &CatMatch) -> String {
+        let (mut name, _) = self.division_of(m);
+        if crate::leagues::canonical_tier(&name).is_none() {
+            let mut seen: HashMap<String, u32> = HashMap::new();
+            for x in self.matches.values().filter(|x| x.season == m.season && x.stage == "regular" && x.match_id != m.match_id) {
+                if [x.clan1, x.clan2].iter().any(|t| *t == m.clan1 || *t == m.clan2) {
+                    let (d, _) = self.division_of(x);
+                    if crate::leagues::canonical_tier(&d).is_some() {
+                        *seen.entry(d).or_default() += 1;
+                    }
+                }
+            }
+            if let Some((d, _)) = seen.into_iter().max_by_key(|(_, n)| *n) {
+                name = d;
+            }
+        }
+        crate::leagues::canonical_tier(&name).and_then(|t| crate::leagues::TIER_NAMES.get(t as usize)).map_or(name, |n| n.to_string())
+    }
+
     /// A league final: a Playoffs competition's final, a "Grand Final"
     /// competition, or -- in the seasons without a separate playoff
     /// competition (Autumn 2023) -- a regular match whose round is the Grand
@@ -229,7 +251,7 @@ impl Catalogue {
             }
         };
         for m in self.matches.values().filter(|m| Self::played(m)) {
-            let key = (m.season, self.division_of(m).0);
+            let key = (m.season, self.medal_division(m));
             if Self::is_final(m) {
                 if let Some((w, l)) = winner_loser(m) {
                     let e = out.entry(key).or_default();
@@ -245,8 +267,7 @@ impl Catalogue {
         // Divisions without a final: the table, once the season is over.
         let mut tables: HashMap<(i64, String), HashMap<i64, (u32, i64)>> = HashMap::new();
         for m in self.matches.values().filter(|m| Self::played(m) && m.stage == "regular" && m.season < self.newest_season) {
-            let (div, _) = self.division_of(m);
-            let t = tables.entry((m.season, div)).or_default();
+            let t = tables.entry((m.season, self.medal_division(m))).or_default();
             for team in [m.clan1, m.clan2] {
                 let (f, a, won) = Self::result_for(m, team);
                 let e = t.entry(team).or_default();
@@ -652,6 +673,33 @@ impl Catalogue {
         out
     }
 
+    /// Every player's division as played each season -- the one they played
+    /// most league officials in, without the Grand Final's step up -- for
+    /// ranks: a season is ranked among the division it was played in
+    /// (Flashy: "just list the div of the season").
+    fn played_divisions(&self) -> HashMap<(u32, i64), (i64, String, i64)> {
+        let mut count: HashMap<(u32, i64), HashMap<(i64, i64), u32>> = HashMap::new();
+        for (match_id, roster) in &self.rosters {
+            let Some(m) = self.matches.get(match_id) else { continue };
+            if !Self::played(m) || m.stage == "Cup" {
+                continue;
+            }
+            let (_, Some(tier)) = self.division_of(m) else { continue };
+            for (a, team, _) in roster {
+                let Some(team) = team else { continue };
+                *count.entry((*a, m.season)).or_default().entry((tier, *team)).or_default() += 1;
+            }
+        }
+        count
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let ((tier, team), _) = v.into_iter().max_by_key(|(_, n)| *n)?;
+                let name = crate::leagues::TIER_NAMES.get(tier as usize).map_or_else(String::new, |n| n.to_string());
+                Some((k, (tier, name, team)))
+            })
+            .collect()
+    }
+
     /// The best division that counted for them in any season.
     fn highest_of(divisions: &HashMap<(u32, i64), (i64, String, i64)>, account: u32) -> Option<Division> {
         divisions
@@ -760,11 +808,11 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
     }
     classes.sort_by(|a, b| b.games.cmp(&a.games));
 
-    // Ranks: every season they have a division in, on every class they
-    // played enough that season.
+    // Ranks: every season they played officials in, among the division they
+    // played, on every class they played enough that season.
     let cat = Catalogue::load(db).await?;
     let windows = cat.season_windows();
-    let divisions = cat.divisions();
+    let divisions = cat.played_divisions();
     let mut theirs: BTreeMap<(i64, String), usize> = BTreeMap::new();
     for g in &mine {
         if let Some(s) = season_of(&windows, g.played_at) {
@@ -795,7 +843,7 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
 pub async fn rankings(db: &Db, season: Option<i64>, tier: Option<i64>, class: &str) -> Result<Rankings> {
     let cat = Catalogue::load(db).await?;
     let windows = cat.season_windows();
-    let divisions = cat.divisions();
+    let divisions = cat.played_divisions();
     let everyone = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
     let seasons: Vec<(i64, String)> = windows
         .iter()
@@ -955,6 +1003,15 @@ mod tests {
     }
 
     #[test]
+    fn a_final_with_no_division_takes_its_teams_division() {
+        let c = cat(vec![
+            m(1, 30, "regular", Some("Open B"), "", Some("Week 1"), 10, 11, 6, 0),
+            m(2, 30, "regular", None, "", Some("Grand Final"), 10, 12, 5, 1),
+        ]);
+        assert!(c.medals()[&(30, "Open".to_string())].contains(&(1, 10, "Grand Final 5-1".into())));
+    }
+
+    #[test]
     fn a_grand_final_inside_the_season_counts_but_a_cups_does_not() {
         // Autumn 2023: the Grand Final is a round of the season itself.
         let c = cat(vec![
@@ -963,7 +1020,7 @@ mod tests {
             m(3, 31, "Cup", Some("Low A"), "", Some("Grand Final"), 10, 13, 6, 0),
         ]);
         let medals = c.medals();
-        assert!(medals[&(30, "Open B".to_string())].contains(&(1, 10, "Grand Final 5-1".into())));
+        assert!(medals[&(30, "Open".to_string())].contains(&(1, 10, "Grand Final 5-1".into())), "Open B is Open on the ladder");
         assert!(!medals.contains_key(&(31, "Low A".to_string())), "a preseason cup is not the league");
     }
 

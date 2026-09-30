@@ -119,7 +119,7 @@ function Header({ p }: { p: Profile }) {
             <div className="pp-titles">
               {titles.map(([label, n, place]) => (
                 <span key={label} className={`pp-title pp-${PLACE[place - 1]}`}>
-                  <MedalGlyph size={16} />
+                  <MedalGlyph size={18} place={place} />
                   {n}× {label}
                 </span>
               ))}
@@ -185,7 +185,7 @@ function MedalIcon({ m }: { m: Medal }) {
   return (
     <span className={`pp-medal pp-${kind}`} title={`${m.place === 1 ? t("Winner") : m.place === 2 ? t("Runner-up") : t("Third")} · ${m.division} · ${t("Season {0}", { "0": m.season })} (${m.seasonName}) · ${m.team.name} · ${m.how}`}>
       <span className="pp-medal-tile">
-        <MedalGlyph size={30} place={m.place} />
+        <MedalGlyph size={38} place={m.place} />
       </span>
       <span className="pp-medal-label">
         S{m.season} {shortDivision(m.division)}
