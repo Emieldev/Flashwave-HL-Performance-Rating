@@ -463,6 +463,13 @@ impl Catalogue {
                 by_match.entry(id).or_default().push(g);
             }
         }
+        // A match with its per-map logs held reads those, not also the
+        // combined upload of the same games.
+        for v in by_match.values_mut() {
+            if v.iter().any(|g| g.listed) {
+                v.retain(|g| g.listed);
+            }
+        }
         // (season, division) -> the playoff matches before the final.
         let mut playoffs: HashMap<(i64, String), Vec<i64>> = HashMap::new();
         for m in self.matches.values().filter(|m| Self::played(m) && m.stage != "Cup") {
@@ -1303,6 +1310,7 @@ mod tests {
             groups: None,
             official: true,
             etf2l_match_id: Some(match_id),
+            listed: true,
         };
         let games = vec![
             // The losing Sniper had the better final; the winners' Medic the

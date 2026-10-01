@@ -5,6 +5,18 @@
 //! would make a fresh clone fail to compile before it has ever been run.
 
 mod aim;
+
+/// The logs the owner's own rating covers: their rated Highlander logs, and
+/// the per-map logs a rated combined log replaced. A league log among these
+/// is left to the owner's rating, so no game is in the pool twice; any
+/// other -- a final whose combined upload the app could not rate (S31 Low's
+/// "FINAL", on a map name it does not know) -- is rated as the league's.
+pub(crate) const OWNER_COVERED: &str = "SELECT i.log_id FROM log_index i JOIN log_raw x ON x.log_id = i.log_id
+      WHERE i.superseded_by IS NULL AND COALESCE(i.format_override, i.format) = 'highlander'
+    UNION
+    SELECT s.log_id FROM log_index s WHERE s.superseded_by IN (
+      SELECT i.log_id FROM log_index i JOIN log_raw x ON x.log_id = i.log_id
+       WHERE i.superseded_by IS NULL AND COALESCE(i.format_override, i.format) = 'highlander')";
 mod context;
 mod demos;
 mod fights;

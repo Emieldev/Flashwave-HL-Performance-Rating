@@ -310,12 +310,13 @@ impl Db {
     /// and not one of the owner's own logs (their officials are in the
     /// sample too, and a game must not be in the pool twice).
     pub async fn league_rateable(&self) -> Result<Vec<i64>> {
-        Ok(sqlx::query_scalar(
+        Ok(sqlx::query_scalar(&format!(
             "SELECT l.log_id FROM league_log l
              WHERE l.picked = 1 AND l.json_source IS NOT NULL
-               AND l.log_id NOT IN (SELECT log_id FROM log_index)
+               AND l.log_id NOT IN ({})
              ORDER BY l.log_id",
-        )
+            crate::OWNER_COVERED
+        ))
         .fetch_all(self.pool())
         .await?)
     }
@@ -325,13 +326,14 @@ impl Db {
     /// log is still to come is rated from its JSON and rated again when the
     /// server log lands. Oldest first.
     pub async fn league_unrated(&self, version: &str, limit: i64) -> Result<Vec<i64>> {
-        Ok(sqlx::query_scalar(
+        Ok(sqlx::query_scalar(&format!(
             "SELECT l.log_id FROM league_log l
              WHERE l.picked = 1 AND l.json_source IS NOT NULL
-               AND l.log_id NOT IN (SELECT log_id FROM log_index)
+               AND l.log_id NOT IN ({})
                AND NOT EXISTS (SELECT 1 FROM league_rating r WHERE r.model_version = ?1 AND r.log_id = l.log_id)
              ORDER BY l.log_id LIMIT ?2",
-        )
+            crate::OWNER_COVERED
+        ))
         .bind(version)
         .bind(limit)
         .fetch_all(self.pool())
@@ -343,13 +345,13 @@ impl Db {
     /// division)`. Ties and logs without a score are left out; so are the
     /// owner's own logs, which the validator reads from their matches.
     pub async fn league_decided(&self) -> Result<Vec<(i64, u32, bool, i64, Option<String>)>> {
-        let rows = sqlx::query(
+        let rows = sqlx::query(&format!(
             "WITH s AS (
                  SELECT l.log_id, l.played_at, l.etf2l_match_id,
                         json_extract(j.json, '$.teams.Red.score') AS red,
                         json_extract(j.json, '$.teams.Blue.score') AS blue
                  FROM league_log l JOIN league_log_json j ON j.log_id = l.log_id
-                 WHERE l.picked = 1 AND l.log_id NOT IN (SELECT log_id FROM log_index)
+                 WHERE l.picked = 1 AND l.log_id NOT IN ({covered})
              )
              SELECT s.log_id, p.account_id, s.played_at,
                     CASE WHEN p.team = 'Red' THEN s.red > s.blue ELSE s.blue > s.red END AS won,
@@ -359,7 +361,8 @@ impl Db {
              LEFT JOIN etf2l_season_match m ON m.match_id = s.etf2l_match_id
              LEFT JOIN etf2l_competition c ON c.competition_id = m.competition_id
              WHERE s.red IS NOT NULL AND s.blue IS NOT NULL AND s.red != s.blue AND p.team IN ('Red', 'Blue')",
-        )
+            covered = crate::OWNER_COVERED
+        ))
         .fetch_all(self.pool())
         .await?;
         Ok(rows

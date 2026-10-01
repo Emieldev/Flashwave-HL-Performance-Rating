@@ -54,6 +54,10 @@ pub struct RatedGame {
     /// in the owner's matches (combined) and one per map in the sample, so
     /// ranks count officials, not logs.
     pub etf2l_match_id: Option<i64>,
+    /// One of the logs trends.tf lists for its ETF2L match: a map, not a
+    /// combined upload. Where a match has both, the MVPs read these, so no
+    /// game is counted twice.
+    pub listed: bool,
 }
 
 /// ETF2L's page for a player, as kept.
@@ -169,14 +173,15 @@ impl Db {
     /// Games per main class, for every account: from the owner's matches
     /// and the league sample together.
     pub async fn main_class_games(&self) -> Result<HashMap<u32, HashMap<String, i64>>> {
-        let rows = sqlx::query(
+        let rows = sqlx::query(&format!(
             "SELECT account_id, main_class AS class, COUNT(*) AS n FROM match_player
                WHERE main_class IS NOT NULL GROUP BY account_id, main_class
              UNION ALL
              SELECT account_id, class, COUNT(*) FROM league_log_player
-               WHERE class IS NOT NULL AND log_id NOT IN (SELECT log_id FROM log_index)
+               WHERE class IS NOT NULL AND log_id NOT IN ({covered})
                GROUP BY account_id, class",
-        )
+            covered = crate::OWNER_COVERED
+        ))
         .fetch_all(self.pool())
         .await?;
         let mut out: HashMap<u32, HashMap<String, i64>> = HashMap::new();
@@ -277,19 +282,29 @@ impl Db {
     /// one account, or everyone's. A game in both is counted once, from the
     /// owner's matches.
     pub async fn rated_games(&self, version: &str, account: Option<u32>) -> Result<Vec<RatedGame>> {
-        let rows = sqlx::query(
+        let rows = sqlx::query(&format!(
             "SELECT r.account_id, r.log_id, COALESCE(m.played_at, 0) AS played_at, r.class, r.score,
                     r.parts AS parts, NULL AS groups,
                     EXISTS (SELECT 1 FROM match_context c WHERE c.log_id = r.log_id AND c.kind = 'official') AS official,
-                    (SELECT c.etf2l_match_id FROM match_context c WHERE c.log_id = r.log_id) AS etf2l_match_id
+                    -- The owner's logs of an official, linked to its match
+                    -- however it is known: their own context, the league's
+                    -- list, trends.tf's index, or -- for a combined log,
+                    -- the one kept -- the per-map logs it replaced (S31
+                    -- Low's final had only that).
+                    COALESCE((SELECT c.etf2l_match_id FROM match_context c WHERE c.log_id = r.log_id),
+                             (SELECT l.etf2l_match_id FROM league_log l WHERE l.log_id = r.log_id),
+                             (SELECT i.etf2l_match_id FROM log_index i WHERE i.log_id = r.log_id),
+                             (SELECT i.etf2l_match_id FROM log_index i WHERE i.superseded_by = r.log_id AND i.etf2l_match_id IS NOT NULL LIMIT 1)) AS etf2l_match_id,
+                    EXISTS (SELECT 1 FROM league_log l WHERE l.log_id = r.log_id) AS listed
              FROM rating r JOIN match m ON m.log_id = r.log_id
              WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
              UNION ALL
-             SELECT r.account_id, r.log_id, l.played_at, r.class, r.score, NULL, r.groups, 1, l.etf2l_match_id
+             SELECT r.account_id, r.log_id, l.played_at, r.class, r.score, NULL, r.groups, 1, l.etf2l_match_id, 1
              FROM league_rating r JOIN league_log l ON l.log_id = r.log_id
              WHERE r.model_version = ?1 AND (?2 IS NULL OR r.account_id = ?2)
-               AND r.log_id NOT IN (SELECT log_id FROM log_index)",
-        )
+               AND r.log_id NOT IN ({covered})",
+            covered = crate::OWNER_COVERED
+        ))
         .bind(version)
         .bind(account.map(i64::from))
         .fetch_all(self.pool())
@@ -306,6 +321,7 @@ impl Db {
                 groups: r.get("groups"),
                 official: r.get::<i64, _>("official") != 0,
                 etf2l_match_id: r.get("etf2l_match_id"),
+                listed: r.get::<i64, _>("listed") != 0,
             })
             .collect())
     }
