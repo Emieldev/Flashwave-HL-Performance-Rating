@@ -300,11 +300,11 @@
 /* A rank's whole table, on hover or focus. */
 .ps-rank { position: relative; cursor: default; }
 .ps-rank:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
-.rank-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 330px; max-width: 420px; padding: 10px 12px; border-radius: 8px;
+.rank-pop { position: fixed; z-index: 30; min-width: 330px; max-width: 420px; padding: 10px 12px; border-radius: 8px;
   background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; }
 .rank-pop-head { font-weight: 700; }
 .rank-pop-sub { color: var(--muted); font-size: 0.74rem; }
-.rank-pop-rows { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
+.rank-pop-rows { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
 .rank-pop-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr) 40px 22px; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 4px; }
 .rank-pop-row.me { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .rank-pop-n { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -340,7 +340,7 @@
 .pc-links a { font-size: 0.8rem; }
 
 /* Q37: a player's career on trends.tf. */
-.pp-career-section { grid-column: 1 / -1; }
+.pp-career-title { margin-top: 18px !important; }
 .pp-career-head { margin: 0 0 8px; font-size: 1rem; }
 .pp-career-classes { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .pp-career-classes th, .pp-career-classes td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }

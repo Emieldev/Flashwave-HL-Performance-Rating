@@ -1,8 +1,10 @@
 //! Career numbers from trends.tf (Q37, Flashy; PLAN §26).
 //!
 //! trends.tf's player page holds what the app cannot work out without every
-//! log a player ever played: their Highlander W-L and winrate, per class with
-//! damage per minute, accuracy and hours, their aliases and their teams. It
+//! log a player ever played: their W-L and winrate in ETF2L Highlander
+//! officials, per class with damage per minute, accuracy and hours, their
+//! aliases and their teams. Officials only, as the ranks are: a scrim or a
+//! pug is not their record. It
 //! has no JSON API for this, so the page is read as a browser reads it --
 //! once, when a profile is opened (never during a search), and kept a day.
 //!
@@ -18,6 +20,13 @@ use serde::{Deserialize, Serialize};
 
 /// How long a page read is kept.
 const KEEP_S: i64 = 24 * 3600;
+
+/// The page read: Highlander, ETF2L only -- trends.tf counts a log as a
+/// league game when it is linked to a league match, so scrims and pugs are
+/// left out (Flashy: "only official matches, scrims do not count").
+pub fn page_url(steamid64: &str) -> String {
+    format!("https://trends.tf/player/{steamid64}/?format=highlander&league=etf2l")
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,7 +87,7 @@ fn now() -> i64 {
 /// trends.tf being down gives the last copy held, or says so.
 pub async fn career(db: &Db, sources: &Sources, account: u32) -> Result<CareerView> {
     let steamid64 = SteamId::from_account_id(account).to_steamid64();
-    let url = format!("https://trends.tf/player/{steamid64}/?format=highlander");
+    let url = page_url(&steamid64);
     let held = db.trends_career(account).await?;
     if let Some((json, at)) = &held {
         if now() - at < KEEP_S {

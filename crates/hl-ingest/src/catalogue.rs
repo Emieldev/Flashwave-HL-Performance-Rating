@@ -154,6 +154,15 @@ pub struct Catalogue {
     newest_season: i64,
 }
 
+/// The rounds a medal is read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RoundKind {
+    Final,
+    Third,
+    Semi,
+    LowerFinal,
+}
+
 impl Catalogue {
     pub async fn load(db: &Db) -> Result<Catalogue> {
         let mut matches: HashMap<i64, CatMatch> = db.catalogue_matches().await?.into_iter().map(|m| (m.match_id, m)).collect();
@@ -211,11 +220,21 @@ impl Catalogue {
         (f, a, won)
     }
 
-    /// The division a medal is for, by today's name ("Open", not "Open B").
-    /// A final with no division of its own (Autumn 2023's Grand Final is a
-    /// round of the season) takes the one its teams played that season.
+    /// The division a medal is for, as ETF2L ran it: "Division 1" and
+    /// "Division 2" each had their own final, so each has its own medals,
+    /// though today's ladder calls both High (Flashy's audit: the merged name
+    /// gave S25-S30 two golds a division). Groups of one division share it
+    /// ("Division 2A" and "2B" are Division 2, "Open B" is Open), and a
+    /// division today's ladder knows is called by today's name. A final with
+    /// no division of its own (Autumn 2023's Grand Final is a round of the
+    /// season) takes the one its teams played that season.
     fn medal_division(&self, m: &CatMatch) -> String {
-        let (mut name, _) = self.division_of(m);
+        let (name, _) = self.division_of(m);
+        let name = Self::ungrouped(&name);
+        if Self::numbered(&name).is_some() {
+            return name;
+        }
+        let mut name = name;
         if crate::leagues::canonical_tier(&name).is_none() {
             let mut seen: HashMap<String, u32> = HashMap::new();
             for x in self.matches.values().filter(|x| x.season == m.season && x.stage == "regular" && x.match_id != m.match_id) {
@@ -230,7 +249,54 @@ impl Catalogue {
                 name = d;
             }
         }
+        let name = Self::ungrouped(&name);
+        // Numbered divisions, and S33's Freshest beside its Fresh: each
+        // had its own final.
+        if Self::numbered(&name).is_some() || name.eq_ignore_ascii_case("freshest") {
+            return name;
+        }
         crate::leagues::canonical_tier(&name).and_then(|t| crate::leagues::TIER_NAMES.get(t as usize)).map_or(name, |n| n.to_string())
+    }
+
+    /// "Division 2A" -> "Division 2", "Open B" -> "Open", "Premiership
+    /// Division" -> "Premiership": one division's groups, one name.
+    fn ungrouped(name: &str) -> String {
+        let n = name.trim();
+        let n = n.strip_suffix(" Division").unwrap_or(n);
+        match n.rsplit_once(' ') {
+            Some((head, last)) if last.len() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()) => head.to_string(),
+            Some((head, last))
+                if last.len() >= 2 && last[..last.len() - 1].chars().all(|c| c.is_ascii_digit()) && last.ends_with(|c: char| c.is_ascii_alphabetic()) =>
+            {
+                format!("{head} {}", &last[..last.len() - 1])
+            }
+            _ => n.to_string(),
+        }
+    }
+
+    /// The number of a "Division 3" / "Div 3", if it is one.
+    fn numbered(name: &str) -> Option<u32> {
+        let d = name.to_ascii_lowercase();
+        d.strip_prefix("division ").or_else(|| d.strip_prefix("div ")).and_then(|n| n.trim().parse().ok())
+    }
+
+    /// What a round is, whatever ETF2L called it that season: "Grand Final",
+    /// "Grand-Final", "Division 1 Grand Final", "3rd Place " (with the
+    /// space), "Semi-Finals", a double-elimination "Lower Bracket Final".
+    fn round_kind(round: Option<&str>) -> Option<RoundKind> {
+        let r = round?.to_ascii_lowercase().replace('-', " ");
+        let r = r.split_whitespace().collect::<Vec<_>>().join(" ");
+        if r.contains("grand final") || r == "final" || r.starts_with("final ") {
+            Some(RoundKind::Final)
+        } else if r.contains("3rd place") || r.contains("third place") || r.contains("bronze") {
+            Some(RoundKind::Third)
+        } else if r.contains("lower bracket final") {
+            Some(RoundKind::LowerFinal)
+        } else if r.contains("semi") && !r.contains("bracket") {
+            Some(RoundKind::Semi)
+        } else {
+            None
+        }
     }
 
     /// A league final: a Playoffs competition's final, a "Grand Final"
@@ -238,11 +304,7 @@ impl Catalogue {
     /// competition (Autumn 2023) -- a regular match whose round is the Grand
     /// Final. A preseason cup's final is not the league's.
     fn is_final(m: &CatMatch) -> bool {
-        let final_round = m.round.as_deref().is_some_and(|r| {
-            let r = r.to_ascii_lowercase();
-            r.starts_with("grand final") || r == "final" || r.starts_with("final ")
-        });
-        m.stage != "Cup" && (m.stage == "Grand Final" || final_round)
+        m.stage != "Cup" && (m.stage == "Grand Final" || Self::round_kind(m.round.as_deref()) == Some(RoundKind::Final))
     }
 
     fn played(m: &CatMatch) -> bool {
@@ -253,9 +315,11 @@ impl Catalogue {
     /// [(place, team, how)]`.
     pub fn medals(&self) -> BTreeMap<(i64, String), Vec<(u8, i64, String)>> {
         let mut out: BTreeMap<(i64, String), Vec<(u8, i64, String)>> = BTreeMap::new();
+        // A forfeit decides a final as surely as a match does (AFA 2025's
+        // Division 1 Grand Final was won by default): it says so.
         let score = |m: &CatMatch, winner: i64| {
             let (f, a, _) = Self::result_for(m, winner);
-            format!("{}-{}", f.unwrap_or(0), a.unwrap_or(0))
+            format!("{}-{}{}", f.unwrap_or(0), a.unwrap_or(0), if m.default_win { " by default" } else { "" })
         };
         let winner_loser = |m: &CatMatch| -> Option<(i64, i64)> {
             match (m.r1?, m.r2?) {
@@ -264,7 +328,8 @@ impl Catalogue {
                 _ => None,
             }
         };
-        for m in self.matches.values().filter(|m| Self::played(m)) {
+        let decided = |m: &&CatMatch| Self::played(m) || m.default_win;
+        for m in self.matches.values().filter(decided) {
             let key = (m.season, self.medal_division(m));
             if Self::is_final(m) {
                 if let Some((w, l)) = winner_loser(m) {
@@ -272,9 +337,17 @@ impl Catalogue {
                     e.push((1, w, format!("Grand Final {}", score(m, w))));
                     e.push((2, l, format!("Grand Final {}", score(m, l))));
                 }
-            } else if m.stage == "3rd Place" {
+            } else if m.stage == "Cup" {
+                continue;
+            } else if m.stage == "3rd Place" || Self::round_kind(m.round.as_deref()) == Some(RoundKind::Third) {
                 if let Some((w, _)) = winner_loser(m) {
                     out.entry(key).or_default().push((3, w, format!("3rd place match {}", score(m, w))));
+                }
+            } else if Self::round_kind(m.round.as_deref()) == Some(RoundKind::LowerFinal) {
+                // Double elimination: losing the lower bracket's final is
+                // third outright.
+                if let Some((_, l)) = winner_loser(m) {
+                    out.entry(key).or_default().push((3, l, format!("lower bracket final {}", score(m, l))));
                 }
             }
         }
@@ -282,8 +355,10 @@ impl Catalogue {
         // ETF2L gives it (Flashy's S34 Mid: lost the semi-final 3-6, and
         // there was no match for third).
         let mut semis: BTreeMap<(i64, String), Vec<(i64, String)>> = BTreeMap::new();
-        for m in self.matches.values().filter(|m| Self::played(m) && m.stage == "Playoffs") {
-            if m.round.as_deref().is_some_and(|r| r.to_ascii_lowercase().starts_with("semi")) {
+        // Semi-finals in a Playoffs competition, or -- in the seasons whose
+        // playoffs were rounds of the season ("Top Tiers") -- in the season.
+        for m in self.matches.values().filter(|m| decided(m) && m.stage != "Cup") {
+            if Self::round_kind(m.round.as_deref()) == Some(RoundKind::Semi) {
                 if let Some((_, l)) = winner_loser(m) {
                     semis.entry((m.season, self.medal_division(m))).or_default().push((l, format!("joint 3rd: semi-final {}", score(m, l))));
                 }
@@ -1047,6 +1122,39 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_way_etf2l_named_a_playoff_round_is_read() {
+        use RoundKind::*;
+        for (r, k) in [
+            ("Grand Final", Some(Final)),
+            ("Grand-Final", Some(Final)),
+            ("Division 1 Grand Final", Some(Final)),
+            ("Premiership Grand Final", Some(Final)),
+            ("Final", Some(Final)),
+            ("3rd Place ", Some(Third)),
+            ("3rd Place Match", Some(Third)),
+            ("Semi-Finals", Some(Semi)),
+            ("Division 2 Semi-Finals", Some(Semi)),
+            ("Lower Bracket Final", Some(LowerFinal)),
+            ("Upper Bracket Final", None),
+            ("Week 3", None),
+            ("Round 4", None),
+        ] {
+            assert_eq!(Catalogue::round_kind(Some(r)), k, "{r}");
+        }
+    }
+
+    #[test]
+    fn a_numbered_division_keeps_its_number_and_groups_fold() {
+        assert_eq!(Catalogue::ungrouped("Division 2A"), "Division 2");
+        assert_eq!(Catalogue::ungrouped("Division 2"), "Division 2");
+        assert_eq!(Catalogue::ungrouped("Open B"), "Open");
+        assert_eq!(Catalogue::ungrouped("Premiership Division"), "Premiership");
+        assert_eq!(Catalogue::ungrouped("Mid"), "Mid");
+        assert_eq!(Catalogue::numbered("Division 3"), Some(3));
+        assert_eq!(Catalogue::numbered("Mid"), None);
+    }
 
     fn m(id: i64, season: i64, stage: &str, div: Option<&str>, comp_div: &str, round: Option<&str>, c1: i64, c2: i64, r1: i64, r2: i64) -> CatMatch {
         CatMatch {

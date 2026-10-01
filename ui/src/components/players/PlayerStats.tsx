@@ -97,21 +97,37 @@ export function PlayerStatsCard({ accountId }: { accountId: number }) {
  */
 export function RankChip({ r, accountId }: { r: Rank; accountId?: number }) {
   const [open, setOpen] = useState(false);
+  // Fixed to the window, beside the chip: an absolute popover near the foot
+  // of the page made the page taller and the scrollbar jump (Flashy). Up
+  // when there is no room below.
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const place = (el: HTMLElement) => {
+    const b = el.getBoundingClientRect();
+    const room = window.innerHeight - b.bottom;
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - 430));
+    setPos(room >= 340 ? { left, top: b.bottom + 6 } : { left, bottom: window.innerHeight - b.top + 6 });
+  };
   const q = useQuery({ queryKey: ["rankings", r.season, r.tier, r.class], queryFn: () => api.getRankings(r.season, r.tier, r.class), enabled: open });
   return (
     <span
       className="ps-rank"
       tabIndex={0}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={(e) => {
+        place(e.currentTarget);
+        setOpen(true);
+      }}
       onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onFocus={(e) => {
+        place(e.currentTarget);
+        setOpen(true);
+      }}
       onBlur={() => setOpen(false)}
       aria-describedby={open ? `rank-${r.season}-${r.class}` : undefined}
     >
       <strong>#{r.rank}</strong>
       <span className="muted">{t("of {0}", { "0": r.of })}</span> <ClassIcon cls={r.class} size={16} /> {t("in")} <DivisionBadge d={{ name: r.division, tier: r.tier }} /> <span className="muted">{seasonShort(r.season, r.seasonName)}</span>
       {open && (
-        <span className="rank-pop" role="tooltip" id={`rank-${r.season}-${r.class}`}>
+        <span className="rank-pop" role="tooltip" id={`rank-${r.season}-${r.class}`} style={pos ?? undefined}>
           <span className="rank-pop-head">
             {r.season >= 100
               ? tx("{0} in {1}, {2}", { "0": classLabel(r.class), "1": r.division, "2": r.seasonName })

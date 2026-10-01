@@ -253,9 +253,7 @@ function Overview({ p }: { p: Profile }) {
       <section>
         <h3>{t("Rating")}</h3>
         <PlayerStatsCard accountId={p.accountId} />
-      </section>
-      <section className="pp-career-section">
-        <h3>{t("Career on trends.tf")}</h3>
+        <h3 className="pp-career-title">{t("ETF2L officials on trends.tf")}</h3>
         <TrendsCareer accountId={p.accountId} />
       </section>
     </div>
@@ -274,7 +272,7 @@ function TrendsCareer({ accountId }: { accountId: number }) {
   const c = v.career;
   const hours = (s: number) => Math.round(s / 3600);
   if (!c || (c.wins + c.losses + c.ties === 0 && c.classes.length === 0)) {
-    return <p className="hint">{v.error ?? t("trends.tf has no Highlander games for them.")}</p>;
+    return <p className="hint">{v.error ?? t("trends.tf has no ETF2L Highlander officials for them.")}</p>;
   }
   return (
     <div className="pp-career">
@@ -283,7 +281,7 @@ function TrendsCareer({ accountId }: { accountId: number }) {
           {c.wins}–{c.losses}–{c.ties}
         </strong>{" "}
         {c.winrate !== null && <span>· {tx("{0}% won", { "0": c.winrate.toFixed(1) })}</span>}{" "}
-        <span className="muted">· {tx("{0} h of Highlander", { "0": hours(c.timeS) })}</span>
+        <span className="muted">· {tx("{0} h in officials", { "0": hours(c.timeS) })}</span>
       </p>
       <table className="pp-career-classes">
         <thead>
@@ -298,7 +296,7 @@ function TrendsCareer({ accountId }: { accountId: number }) {
         </thead>
         <tbody>
           {c.classes
-            .filter((x) => x.timeS >= 1800)
+            .filter((x) => x.timeS >= 600)
             .slice(0, 6)
             .map((x) => (
               <tr key={x.class}>

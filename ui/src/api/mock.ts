@@ -1211,24 +1211,18 @@ export const mockApi: Api = {
     }
     return { players, tierNames: { 0: "Premiership", 1: "High", 2: "Mid", 3: "Low", 4: "Open" } };
   },
-  // The owner's real trends.tf page, as parsed on 1 October 2026.
+  // The owner's real trends.tf page, ETF2L officials only, 1 October 2026.
   getTrendsCareer: () =>
     delay({
       career: {
-        wins: 458, losses: 412, ties: 25, winrate: 52.57, timeS: 918116,
-        classes: [
-          { class: "sniper", wins: 429, losses: 391, ties: 22, winrate: 52.26, dpm: 345, accuracy: 36, timeS: 853052 },
-          { class: "engineer", wins: 11, losses: 0, ties: 0, winrate: 100, dpm: 275, accuracy: 52, timeS: 13485 },
-          { class: "demoman", wins: 5, losses: 4, ties: 1, winrate: 55, dpm: 403, accuracy: 27, timeS: 13314 },
-          { class: "soldier", wins: 3, losses: 4, ties: 1, winrate: 43.75, dpm: 286, accuracy: 42, timeS: 10259 },
-          { class: "scout", wins: 5, losses: 3, ties: 1, winrate: 61.11, dpm: 308, accuracy: 61, timeS: 8786 },
-        ],
+        wins: 68, losses: 40, ties: 2, winrate: 62.73, timeS: 104303,
+        classes: [{ class: "sniper", wins: 68, losses: 40, ties: 2, winrate: 62.73, dpm: 342, accuracy: 37, timeS: 104239 }],
         aliases: [["flashy", 1045], ["Flashy", 207], ["SBQR flashy", 16]],
         teams: [{ league: "ETF2L", team: "DD14", competitions: "Highlander Season 36 (Autumn 2026): High", division: "High" }],
       },
       fetchedAt: Math.floor(Date.now() / 1000) - 3600,
       error: null,
-      url: "https://trends.tf/player/76561198099396919/?format=highlander",
+      url: "https://trends.tf/player/76561198099396919/?format=highlander&league=etf2l",
     } as CareerView),
   getPlayerStats: () =>
     delay({
