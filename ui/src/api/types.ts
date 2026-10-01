@@ -262,6 +262,25 @@ export interface Medal {
   how: string;
 }
 
+/** An event's MVP: per class from the Grand Final, or the event's own. */
+export interface Mvp {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number | null;
+  class: string;
+  accountId: number;
+  team: CatTeam;
+  won: boolean;
+  event: boolean;
+  score: number;
+  finalRating: number;
+  /** Logs of the final: one per KOTH round, one per stopwatch half. */
+  finalMaps: number;
+  playoffsRating: number | null;
+  playoffsMaps: number;
+}
+
 export interface Official {
   matchId: number;
   time: number | null;
@@ -292,6 +311,8 @@ export interface PlayerProfile {
   current: PlayerSeason | null;
   highest: CatDivision | null;
   medals: Medal[];
+  /** The events they were MVP of. */
+  mvps: Mvp[];
   seasons: PlayerSeason[];
   officials: Official[];
   etf2lId: number | null;

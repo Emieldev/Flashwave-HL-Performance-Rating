@@ -346,3 +346,9 @@
 .pp-career-classes th, .pp-career-classes td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
 .pp-career-classes .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pp-career-foot { margin-top: 6px; }
+
+/* MVPs (Flashy): a star in violet, beside the medals; a class MVP shows
+   the class too. */
+.pp-mvp { --medal: #b48cff; }
+.pp-mvp-tile { display: flex; gap: 2px; align-items: center; justify-content: center; }
+.pp-mvp-star { font-size: 1.05rem; line-height: 1; color: var(--medal); }

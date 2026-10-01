@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type CatDivision, type Medal, type PlayerProfile as Profile } from "../../api/types";
+import { errorMessage, type CatDivision, type Medal, type Mvp, type PlayerProfile as Profile } from "../../api/types";
 import { formatDate } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
@@ -38,7 +38,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
             [
               ["overview", t("Overview")],
               ["teams", t("Teams")],
-              ["achievements", tx("Achievements ({0})", { "0": p.medals.length })],
+              ["achievements", tx("Achievements ({0})", { "0": p.medals.length + (p.mvps?.length ?? 0) })],
               ["yours", t("In your matches")],
             ] as [Tab, React.ReactNode][]
           ).map(([id, label]) => (
@@ -49,7 +49,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
         </nav>
         {tab === "overview" && <Overview p={p} />}
         {tab === "teams" && <Teams p={p} />}
-        {tab === "achievements" && <Achievements medals={p.medals} />}
+        {tab === "achievements" && <Achievements medals={p.medals} mvps={p.mvps ?? []} />}
         {tab === "yours" && yours}
       </div>
     </>
@@ -118,11 +118,17 @@ function Header({ p }: { p: Profile }) {
             <dd>{tx("{0} in {1} season{2}", { "0": p.officials.length, "1": new Set(p.seasons.map((s) => s.season)).size, "2": new Set(p.seasons.map((s) => s.season)).size === 1 ? "" : "s" })}</dd>
           </dl>
           <HeaderRanks accountId={p.accountId} />
-          {titles.length > 0 && (
+          {(titles.length > 0 || mvpTitles(p.mvps ?? []).length > 0) && (
             <div className="pp-titles">
               {titles.map(([label, n, place]) => (
                 <span key={label} className={`pp-title pp-${PLACE[place - 1]}`}>
                   <MedalGlyph size={18} place={place} />
+                  {n}× {label}
+                </span>
+              ))}
+              {mvpTitles(p.mvps ?? []).map(([label, n]) => (
+                <span key={label} className="pp-title pp-mvp">
+                  <span className="pp-mvp-star" aria-hidden>★</span>
                   {n}× {label}
                 </span>
               ))}
@@ -140,10 +146,13 @@ function Header({ p }: { p: Profile }) {
           <a href={`https://steamcommunity.com/profiles/${p.steamid64}`} target="_blank" rel="noreferrer">{t("Steam ↗")}</a>
         </div>
       </div>
-      {p.medals.length > 0 && (
+      {p.medals.length + (p.mvps?.length ?? 0) > 0 && (
         <div className="pp-trophies" aria-label={t("Medals")}>
           {p.medals.map((m, i) => (
             <MedalIcon key={i} m={m} />
+          ))}
+          {(p.mvps ?? []).map((m, i) => (
+            <MvpIcon key={`mvp-${i}`} m={m} />
           ))}
         </div>
       )}
@@ -181,6 +190,36 @@ export function medalTitles(medals: Medal[]): [string, number, number][] {
   return [...count.entries()]
     .sort((a, b) => a[1][2] - b[1][2] || a[1][1] - b[1][1])
     .map(([label, [n, place]]) => [label, n, place]);
+}
+
+/** "Open Sniper MVP" x1, "Low MVP" x1: the event's first, then by class. */
+function mvpTitles(mvps: Mvp[]): [string, number][] {
+  const count = new Map<string, number>();
+  for (const m of [...mvps].sort((a, b) => Number(b.event) - Number(a.event))) {
+    const what = m.event ? t("{0} MVP", { "0": m.division }) : t("{0} {1} MVP", { "0": m.division, "1": classLabel(m.class) });
+    count.set(what, (count.get(what) ?? 0) + 1);
+  }
+  return [...count.entries()];
+}
+
+function mvpHow(m: Mvp): string {
+  const final = t("Grand Final {0} over {1} logs", { "0": m.finalRating.toFixed(2), "1": m.finalMaps });
+  return m.playoffsRating === null ? final : `${final} · ${t("playoffs {0} over {1}", { "0": m.playoffsRating.toFixed(2), "1": m.playoffsMaps })}`;
+}
+
+function MvpIcon({ m }: { m: Mvp }) {
+  const what = m.event ? t("Event MVP") : t("{0} MVP", { "0": classLabel(m.class) });
+  return (
+    <span className="pp-medal pp-mvp" title={`${what} · ${m.division} · ${seasonLong(m.season, m.seasonName)} · ${m.team.name} · ${mvpHow(m)}`}>
+      <span className="pp-medal-tile pp-mvp-tile">
+        <span className="pp-mvp-star" aria-hidden>★</span>
+        {!m.event && <ClassIcon cls={m.class} size={18} />}
+      </span>
+      <span className="pp-medal-label">
+        {seasonShort(m.season, m.seasonName)} {shortDivision(m.division)} {m.event ? "MVP" : ""}
+      </span>
+    </span>
+  );
 }
 
 function MedalIcon({ m }: { m: Medal }) {
@@ -361,8 +400,8 @@ function Teams({ p }: { p: Profile }) {
   );
 }
 
-function Achievements({ medals }: { medals: Medal[] }) {
-  if (medals.length === 0) {
+function Achievements({ medals, mvps }: { medals: Medal[]; mvps: Mvp[] }) {
+  if (medals.length === 0 && mvps.length === 0) {
     return <p className="hint">{t("No medals in the seasons read. Medals come from ETF2L playoff finals and, where a division has no playoffs, its final table.")}</p>;
   }
   return (
@@ -378,6 +417,19 @@ function Achievements({ medals }: { medals: Medal[] }) {
             {m.team.name}
           </span>
           <span className="muted">{m.how}</span>
+        </li>
+      ))}
+      {mvps.map((m, i) => (
+        <li key={`mvp-${i}`}>
+          <MvpIcon m={m} />
+          <span>
+            <strong>{m.event ? t("Event MVP") : t("{0} MVP", { "0": classLabel(m.class) })}</strong> · {m.division} · {seasonLong(m.season, m.seasonName)}
+          </span>
+          <span className="pp-team">
+            <TeamAvatar src={m.team.avatar} />
+            {m.team.name}
+          </span>
+          <span className="muted">{mvpHow(m)}</span>
         </li>
       ))}
     </ul>

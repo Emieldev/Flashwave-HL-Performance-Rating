@@ -292,6 +292,10 @@ function mockProfile(accountId: number): PlayerProfile {
     current: { season: 36, seasonName: "Autumn 2026", division: "High", tier: 1, team: dd, played: 5, won: 4, lost: 1, place: null },
     highest: hit.highest,
     medals: [{ season: 33, seasonName: "Spring 2025", division: "Low", tier: 3, place: 1, team: sbq, how: "Grand Final 6-3" }],
+    // From `hl mvp 30` on a copy, 1 October 2026.
+    mvps: [
+      { season: 30, seasonName: "Autumn 2023", division: "Open", tier: 4, class: "sniper", accountId, team: sbq, won: true, event: false, score: 1.13, finalRating: 1.21, finalMaps: 2, playoffsRating: 0.93, playoffsMaps: 2 },
+    ],
     seasons: [
       { season: 36, seasonName: "Autumn 2026", division: "High", tier: 1, team: dd, played: 5, won: 4, lost: 1, place: null },
       { season: 34, seasonName: "Summer 2025", division: "Mid", tier: 2, team: sbq, played: 6, won: 4, lost: 2, place: null },

@@ -76,6 +76,39 @@ pub struct Medal {
     pub how: String,
 }
 
+/// An event's MVP (Flashy: "whoever played the finals and did the best in
+/// the grand final", as HLTV names one). One per class for each Grand Final
+/// -- the best player of the class on either finalist -- and one for the
+/// event, the best of the winning team's.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Mvp {
+    pub season: i64,
+    pub season_name: String,
+    pub division: String,
+    pub tier: Option<i64>,
+    pub class: String,
+    pub account_id: u32,
+    pub team: Team,
+    /// Their team won the final.
+    pub won: bool,
+    /// The event MVP, not only the class's.
+    pub event: bool,
+    /// What it was picked on: [`MVP_FINAL_WEIGHT`] of the Grand Final, the
+    /// rest the other playoff games.
+    pub score: f64,
+    pub final_rating: f64,
+    pub final_maps: usize,
+    /// Their other playoff games: average and logs.
+    pub playoffs_rating: Option<f64>,
+    pub playoffs_maps: usize,
+}
+
+/// How much of an MVP's score is the Grand Final; the rest is the playoff
+/// run before it. The final decides it, as HLTV's does, but one good map
+/// against four bad ones does not.
+pub const MVP_FINAL_WEIGHT: f64 = 0.7;
+
 /// One official a player played.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -134,6 +167,8 @@ pub struct Profile {
     pub current: Option<PlayerSeason>,
     pub highest: Option<Division>,
     pub medals: Vec<Medal>,
+    /// The events they were MVP of, on their class or overall.
+    pub mvps: Vec<Mvp>,
     /// Newest season first.
     pub seasons: Vec<PlayerSeason>,
     /// Newest first.
@@ -396,6 +431,121 @@ impl Catalogue {
         out
     }
 
+    /// A season's own name, not a tournament's kept with it.
+    fn season_name(&self, s: i64) -> String {
+        let of = |m: &&CatMatch| m.season == s;
+        self.matches
+            .values()
+            .filter(of)
+            .find(|m| m.stage != "Cup")
+            .or_else(|| self.matches.values().find(of))
+            .map(|m| m.season_name.clone())
+            .unwrap_or_default()
+    }
+
+    /// Every event's MVPs, from the rated games: per Grand Final (played,
+    /// not forfeited), the best player of each class on the two finalists,
+    /// and the event's -- the best class MVP of the winning team. A final
+    /// whose logs are not held has none, rather than a guess.
+    pub fn mvps(&self, games: &[hl_db::RatedGame]) -> Vec<Mvp> {
+        let mut by_match: HashMap<i64, Vec<&hl_db::RatedGame>> = HashMap::new();
+        for g in games {
+            if let Some(id) = g.etf2l_match_id {
+                by_match.entry(id).or_default().push(g);
+            }
+        }
+        // (season, division) -> the playoff matches before the final.
+        let mut playoffs: HashMap<(i64, String), Vec<i64>> = HashMap::new();
+        for m in self.matches.values().filter(|m| Self::played(m) && m.stage != "Cup") {
+            let playoff = matches!(m.stage.as_str(), "Playoffs" | "3rd Place") || Self::round_kind(m.round.as_deref()).is_some();
+            if playoff && !Self::is_final(m) {
+                playoffs.entry((m.season, self.medal_division(m))).or_default().push(m.match_id);
+            }
+        }
+        let mean = |v: &[f64]| (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64);
+        let mut out = Vec::new();
+        for f in self.matches.values().filter(|m| Self::played(m) && Self::is_final(m)) {
+            let Some(in_final) = by_match.get(&f.match_id) else { continue };
+            let winner = match (f.r1, f.r2) {
+                (Some(a), Some(b)) if a > b => f.clan1,
+                (Some(a), Some(b)) if b > a => f.clan2,
+                _ => continue,
+            };
+            let division = self.medal_division(f);
+            let key = (f.season, division.clone());
+            let team_of: HashMap<u32, i64> =
+                self.rosters.get(&f.match_id).map(|r| r.iter().filter_map(|(a, t, _)| Some((*a, (*t)?))).collect()).unwrap_or_default();
+            let before: Vec<&hl_db::RatedGame> =
+                playoffs.get(&key).into_iter().flatten().filter_map(|id| by_match.get(id)).flatten().copied().collect();
+            let tier = crate::leagues::canonical_tier(&division).or_else(|| self.tiers.get(&key).copied()).or_else(|| self.tier_by_name.get(&division).copied());
+            // A final is several logs: one per KOTH round, one per stopwatch
+            // half. A candidate played more than half of them -- a sub with
+            // one good half, or one map of two, is not the final's MVP.
+            let mut logs: Vec<i64> = in_final.iter().map(|g| g.log_id).collect();
+            logs.sort_unstable();
+            logs.dedup();
+            let mut played: HashMap<u32, std::collections::HashSet<i64>> = HashMap::new();
+            for g in in_final.iter() {
+                played.entry(g.account_id).or_default().insert(g.log_id);
+            }
+            // (account, class) -> final scores
+            let mut fin: HashMap<(u32, &str), Vec<f64>> = HashMap::new();
+            for g in in_final.iter() {
+                fin.entry((g.account_id, g.class.as_str())).or_default().push(g.score);
+            }
+            let candidates: Vec<Mvp> = fin
+                .into_iter()
+                .filter_map(|((a, class), scores)| {
+                    let team = *team_of.get(&a)?;
+                    if team != f.clan1 && team != f.clan2 {
+                        return None;
+                    }
+                    if played.get(&a).map_or(0, |p| p.len()) * 2 <= logs.len() && logs.len() > 1 {
+                        return None;
+                    }
+                    let final_rating = mean(&scores)?;
+                    let rest: Vec<f64> = before.iter().filter(|g| g.account_id == a && g.class == class).map(|g| g.score).collect();
+                    let playoffs_rating = mean(&rest);
+                    let score = playoffs_rating.map_or(final_rating, |p| MVP_FINAL_WEIGHT * final_rating + (1.0 - MVP_FINAL_WEIGHT) * p);
+                    Some(Mvp {
+                        season: f.season,
+                        season_name: self.season_name(f.season),
+                        division: division.clone(),
+                        tier,
+                        class: class.to_string(),
+                        account_id: a,
+                        team: self.team(team),
+                        won: team == winner,
+                        event: false,
+                        score,
+                        final_rating,
+                        final_maps: scores.len(),
+                        playoffs_rating,
+                        playoffs_maps: rest.len(),
+                    })
+                })
+                .collect();
+            // Best score; a tie goes to the team that won.
+            let better = |x: &&Mvp, y: &&Mvp| x.score.total_cmp(&y.score).then(x.won.cmp(&y.won));
+            let mut classes: Vec<&str> = candidates.iter().map(|c| c.class.as_str()).collect();
+            classes.sort_unstable();
+            classes.dedup();
+            let mut class_mvps: Vec<Mvp> =
+                classes.iter().filter_map(|c| candidates.iter().filter(|m| m.class == *c).max_by(better).cloned()).collect();
+            // The event's: the best player of the team that won it, as
+            // HLTV's goes to the champions -- whether or not they out-rated
+            // the losing side's player on their own class.
+            if let Some(top) = candidates.iter().filter(|m| m.won).max_by(better) {
+                let mut e = top.clone();
+                e.event = true;
+                class_mvps.push(e);
+            }
+            out.extend(class_mvps);
+        }
+        out.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(a.tier.cmp(&b.tier)).then(b.event.cmp(&a.event)));
+        out
+    }
+
     /// One player's seasons, medals and officials.
     fn player(&self, account: u32, medals: &BTreeMap<(i64, String), Vec<(u8, i64, String)>>) -> (Vec<PlayerSeason>, Vec<Medal>, Vec<Official>) {
         let mut officials: Vec<Official> = Vec::new();
@@ -553,6 +703,8 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
     let cat = Catalogue::load(db).await?;
     let medals = cat.medals();
     let (seasons, won, officials) = cat.player(account, &medals);
+    let rated = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
+    let mvps: Vec<Mvp> = cat.mvps(&rated).into_iter().filter(|m| m.account_id == account).collect();
     let steamid = SteamId::from_account_id(account);
     let etf2l = match db.etf2l_player(account).await? {
         Some(p) if now() - p.fetched_at < ETF2L_PLAYER_KEEP_S => Some(p),
@@ -598,6 +750,7 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
         current: seasons.first().cloned(),
         highest: Catalogue::highest_of(&cat.divisions(), account),
         medals: won,
+        mvps,
         seasons,
         officials,
         etf2l_id: etf2l.and_then(|p| p.etf2l_id),
@@ -1122,6 +1275,49 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mvps_come_from_the_final_and_the_event_goes_to_the_winners() {
+        // Semi-final 1 (team 11 beat 10), Grand Final 3 (11 beat 12, 6-3).
+        let mut c = cat(vec![
+            m(1, 34, "Playoffs", None, "Mid", Some("Semi-finals"), 10, 11, 3, 6),
+            m(3, 34, "Playoffs", None, "Mid", Some("Grand Final"), 12, 11, 3, 6),
+        ]);
+        c.rosters.get_mut(&3).unwrap().extend([(211, Some(11), "medic".to_string()), (311, Some(11), "sub".to_string())]);
+        let g = |account: u32, log_id: i64, class: &str, score: f64, match_id: i64| hl_db::RatedGame {
+            account_id: account,
+            log_id,
+            played_at: 0,
+            class: class.into(),
+            score,
+            parts: None,
+            groups: None,
+            official: true,
+            etf2l_match_id: Some(match_id),
+        };
+        let games = vec![
+            // The losing Sniper had the better final; the winners' Medic the
+            // best of the team that won.
+            g(12, 31, "sniper", 1.5, 3),
+            g(12, 32, "sniper", 1.5, 3),
+            g(11, 31, "sniper", 1.2, 3),
+            g(11, 32, "sniper", 1.2, 3),
+            g(11, 10, "sniper", 0.9, 1),
+            g(211, 31, "medic", 1.3, 3),
+            g(211, 32, "medic", 1.3, 3),
+            // A sub with one great half of two: not a candidate.
+            g(311, 31, "scout", 2.0, 3),
+        ];
+        let v = c.mvps(&games);
+        let sniper = v.iter().find(|x| x.class == "sniper" && !x.event).unwrap();
+        assert_eq!((sniper.account_id, sniper.won), (12, false), "the class MVP can come from the losing finalist");
+        let won_sniper = 0.7 * 1.2 + 0.3 * 0.9;
+        assert!(won_sniper < 1.3);
+        let event = v.iter().find(|x| x.event).unwrap();
+        assert_eq!((event.account_id, event.class.as_str(), event.won), (211, "medic", true));
+        assert!(!v.iter().any(|x| x.account_id == 311), "more than half the final to be a candidate");
+        assert_eq!(event.final_maps, 2);
+    }
 
     #[test]
     fn every_way_etf2l_named_a_playoff_round_is_read() {

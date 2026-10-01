@@ -1259,6 +1259,51 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["medals", rest @ ..] => {
+            // Every medal of every season and division, for checking them
+            // (Flashy's audit, 1 Oct 2026).
+            let db = Db::connect(&db_path).await?;
+            let teams = db.etf2l_teams().await?;
+            let cat = hl_ingest::catalogue::Catalogue::load(&db).await?;
+            let only: Option<i64> = rest.first().and_then(|s| s.parse().ok());
+            for ((season, division), list) in cat.medals() {
+                if only.is_some_and(|s| s != season) {
+                    continue;
+                }
+                let names: Vec<String> = list.iter().map(|(p, t, how)| format!("{p}: {} [{how}]", teams.get(t).map_or("?", |x| x.0.as_str()))).collect();
+                println!("S{season} {division}: {}", names.join(" | "));
+            }
+            Ok(())
+        }
+
+        ["mvp", rest @ ..] => {
+            // Each event's MVPs: per class from the Grand Final, and the event's.
+            let db = Db::connect(&db_path).await?;
+            let cat = hl_ingest::catalogue::Catalogue::load(&db).await?;
+            let names = db.log_names().await?;
+            let rated = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
+            let only: Option<i64> = rest.first().and_then(|s| s.parse().ok());
+            for m in cat.mvps(&rated) {
+                if only.is_some_and(|s| s != m.season) {
+                    continue;
+                }
+                let who = names.get(&m.account_id).and_then(|n| n.first().cloned()).unwrap_or_else(|| m.account_id.to_string());
+                println!(
+                    "S{:<4} {:<12} {:<12} {:<20} {:<24} {:.2}  (final {:.2} over {}{})",
+                    m.season,
+                    m.division,
+                    if m.event { "EVENT MVP".to_string() } else { m.class.clone() },
+                    who.chars().take(20).collect::<String>(),
+                    m.team.name.chars().take(24).collect::<String>(),
+                    m.score,
+                    m.final_rating,
+                    m.final_maps,
+                    m.playoffs_rating.map(|p| format!(", playoffs {p:.2} over {}", m.playoffs_maps)).unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;
