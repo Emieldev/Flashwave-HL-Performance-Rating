@@ -12,7 +12,15 @@ use sqlx::Row;
 /// neither, so both come from their competition ("Low Playoffs") and that
 /// season's regular matches in the same division. Needs `m` (the match)
 /// and `c` (its competition) in scope.
-const DIVISION_SQL: &str = "COALESCE(m.division, c.division)";
+/// A match's division: its own, its competition's, or -- for a final played
+/// as a round of the season, with neither (Autumn 2023, Season 32) -- the
+/// one its teams played that season.
+const DIVISION_SQL: &str = "COALESCE(m.division, NULLIF(c.division, ''),
+      (SELECT m3.division FROM etf2l_season_match m3
+         JOIN etf2l_competition c3 ON c3.competition_id = m3.competition_id
+        WHERE c3.season = c.season AND m3.division IS NOT NULL AND m3.division != ''
+          AND (m3.clan1_id IN (m.clan1_id, m.clan2_id) OR m3.clan2_id IN (m.clan1_id, m.clan2_id))
+        LIMIT 1))";
 const TIER_SQL: &str = "COALESCE(m.tier, (SELECT m2.tier FROM etf2l_season_match m2
       JOIN etf2l_competition c2 ON c2.competition_id = m2.competition_id
       WHERE c2.season = c.season AND m2.division = c.division AND m2.tier IS NOT NULL LIMIT 1))";
@@ -35,8 +43,12 @@ pub struct Candidate {
     pub map: String,
     pub played_at: i64,
     pub duration_s: i64,
-    pub tier: i64,
+    /// ETF2L's own tier where it gives one; the division's name on today's
+    /// ladder decides first (`select`).
+    pub tier: Option<i64>,
     pub division: String,
+    /// The match is a Grand Final: its logs are fetched first.
+    pub is_final: bool,
 }
 
 /// One division's progress, for Settings and `hl league-sample`.
@@ -99,12 +111,13 @@ impl Db {
         let rows = sqlx::query(&format!(
             "SELECT * FROM (
                SELECT l.log_id, l.etf2l_match_id, l.map, l.played_at, COALESCE(l.duration_s, 0) AS duration_s,
-                      {TIER_SQL} AS tier, {DIVISION_SQL} AS division
+                      {TIER_SQL} AS tier, {DIVISION_SQL} AS division,
+                      (LOWER(REPLACE(COALESCE(m.round, ''), '-', ' ')) LIKE '%grand final%') AS is_final
                FROM league_log l
                JOIN etf2l_season_match m ON m.match_id = l.etf2l_match_id
                JOIN etf2l_competition c ON c.competition_id = m.competition_id
                WHERE m.default_win = 0)
-             WHERE tier IS NOT NULL AND division IS NOT NULL AND division != ''"
+             WHERE division IS NOT NULL AND division != ''"
         ))
         .fetch_all(self.pool())
         .await?;
@@ -118,6 +131,7 @@ impl Db {
                 duration_s: r.get("duration_s"),
                 tier: r.get("tier"),
                 division: r.get("division"),
+                is_final: r.get::<i64, _>("is_final") != 0,
             })
             .collect())
     }
@@ -139,10 +153,10 @@ impl Db {
     pub async fn league_json_todo(&self, limit: i64, include_stand_ins: bool, max_attempts: i64) -> Result<Vec<i64>> {
         let sql = if include_stand_ins {
             "SELECT log_id FROM league_log WHERE picked = 1 AND (json_source IS NULL OR json_source = 'more.tf')
-               AND json_attempts < ?2 ORDER BY json_source IS NOT NULL, played_at DESC LIMIT ?1"
+               AND json_attempts < ?2 ORDER BY json_source IS NOT NULL, (etf2l_match_id IN (SELECT match_id FROM etf2l_season_match WHERE LOWER(REPLACE(COALESCE(round, ''), '-', ' ')) LIKE '%grand final%')) DESC, played_at DESC LIMIT ?1"
         } else {
             "SELECT log_id FROM league_log WHERE picked = 1 AND json_source IS NULL
-               AND json_attempts < ?2 ORDER BY played_at DESC LIMIT ?1"
+               AND json_attempts < ?2 ORDER BY (etf2l_match_id IN (SELECT match_id FROM etf2l_season_match WHERE LOWER(REPLACE(COALESCE(round, ''), '-', ' ')) LIKE '%grand final%')) DESC, played_at DESC LIMIT ?1"
         };
         Ok(sqlx::query_scalar(sql).bind(limit).bind(max_attempts).fetch_all(self.pool()).await?)
     }
@@ -173,7 +187,7 @@ impl Db {
     pub async fn league_raw_todo(&self, limit: i64) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar(
             "SELECT log_id FROM league_log WHERE picked = 1 AND json_source IS NOT NULL AND raw_state IS NULL
-             ORDER BY played_at DESC LIMIT ?1",
+             ORDER BY (etf2l_match_id IN (SELECT match_id FROM etf2l_season_match WHERE LOWER(REPLACE(COALESCE(round, ''), '-', ' ')) LIKE '%grand final%')) DESC, played_at DESC LIMIT ?1",
         )
         .bind(limit)
         .fetch_all(self.pool())
@@ -352,6 +366,17 @@ impl Db {
             .into_iter()
             .map(|r| (r.get("log_id"), r.get::<i64, _>("account_id") as u32, r.get::<i64, _>("won") != 0, r.get("played_at"), r.get("division")))
             .collect())
+    }
+
+    /// Per ETF2L match: logs listed for it, with JSON, with a server log.
+    pub async fn league_logs_by_match(&self) -> Result<std::collections::HashMap<i64, (i64, i64, i64)>> {
+        let rows = sqlx::query(
+            "SELECT etf2l_match_id, COUNT(*) AS n, SUM(json_source IS NOT NULL) AS j, SUM(raw_state = 'ok') AS r
+             FROM league_log GROUP BY etf2l_match_id",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.get("etf2l_match_id"), (r.get("n"), r.get::<Option<i64>, _>("j").unwrap_or(0), r.get::<Option<i64>, _>("r").unwrap_or(0)))).collect())
     }
 
     /// One sample log's JSON and, if it was downloaded, its raw server log.

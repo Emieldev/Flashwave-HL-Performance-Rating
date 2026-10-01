@@ -55,9 +55,10 @@ const KEY_WINDOW: &str = "league_sample_window";
 /// Changes when discovery must run again at once: a wider window, or a
 /// name parser that reads competitions it skipped before (2: the unnumbered
 /// seasons 28-31 and the preseason cups; 3: AFA 2025, between 34 and 35;
-/// 4: the other Highlander tournaments).
+/// 4: the other Highlander tournaments; 5: every Grand Final, finals played
+/// as a round of the season and divisions named only in their playoffs).
 fn window() -> String {
-    format!("{SEASONS_BACK}/{MAX_YEARS}/4")
+    format!("{SEASONS_BACK}/{MAX_YEARS}/5")
 }
 
 pub async fn enabled(db: &Db) -> Result<bool> {
@@ -152,8 +153,18 @@ pub async fn select(db: &Db) -> Result<(usize, usize)> {
     let candidates = db.league_candidates().await?;
     // tier -> match -> (played_at, logs, maps)
     let mut by_tier: BTreeMap<i64, HashMap<i64, (i64, Vec<i64>, HashSet<String>)>> = BTreeMap::new();
+    // Grand Finals always, whatever the caps below: they are what the gold
+    // medals and the MVPs are read from (Flashy: "check all the grand
+    // finals and download any that are missing").
+    let mut finals: Vec<i64> = Vec::new();
     for c in candidates.iter().filter(|c| played_map(&c.map) && c.duration_s >= MIN_DURATION_S && c.played_at >= t - MAX_YEARS * YEAR_S) {
-        let tier = crate::leagues::canonical_tier(&c.division).unwrap_or(c.tier);
+        // Today's ladder by the division's name first: "Division 2" is
+        // High, "Freshest" Fresh Meat, though no regular division of that
+        // season shares the name to borrow a tier from.
+        let Some(tier) = crate::leagues::canonical_tier(&c.division).or(c.tier) else { continue };
+        if c.is_final {
+            finals.push(c.log_id);
+        }
         let e = by_tier.entry(tier).or_default().entry(c.match_id).or_insert_with(|| (c.played_at, Vec::new(), HashSet::new()));
         e.0 = e.0.max(c.played_at);
         e.1.push(c.log_id);
@@ -206,6 +217,11 @@ pub async fn select(db: &Db) -> Result<(usize, usize)> {
         picked_matches += chosen.len();
         for id in &chosen {
             picked_logs.extend(&matches[id].1);
+        }
+    }
+    for id in finals {
+        if !picked_logs.contains(&id) {
+            picked_logs.push(id);
         }
     }
     db.set_league_picked(&picked_logs).await?;

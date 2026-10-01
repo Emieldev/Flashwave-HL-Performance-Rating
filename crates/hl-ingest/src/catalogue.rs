@@ -431,6 +431,15 @@ impl Catalogue {
         out
     }
 
+    /// Every league Grand Final played (not forfeited): `(season, division,
+    /// match)`, newest first. What the MVPs and gold medals are read from.
+    pub fn finals(&self) -> Vec<(i64, String, &CatMatch)> {
+        let mut v: Vec<(i64, String, &CatMatch)> =
+            self.matches.values().filter(|m| Self::played(m) && Self::is_final(m)).map(|m| (m.season, self.medal_division(m), m)).collect();
+        v.sort_by_key(|(s, d, _)| (std::cmp::Reverse(season_order(*s)), d.clone()));
+        v
+    }
+
     /// A season's own name, not a tournament's kept with it.
     fn season_name(&self, s: i64) -> String {
         let of = |m: &&CatMatch| m.season == s;

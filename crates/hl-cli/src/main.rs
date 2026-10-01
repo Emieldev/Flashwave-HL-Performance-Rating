@@ -1166,6 +1166,11 @@ async fn main() -> Result<()> {
                 }
             };
             match rest {
+                ["select"] => {
+                    // Choose the sample again from what is listed, no requests.
+                    let (m, l) = hl_ingest::league_sample::select(&db).await?;
+                    println!("picked {m} matches ({l} logs)");
+                }
                 ["discover"] => {
                     let d = hl_ingest::league_sample::discover(&db, &sources, |what| eprintln!("{what}")).await?;
                     println!("{} competitions, {} results, {} logs listed; picked {} matches ({} logs)", d.competitions, d.results, d.logs_listed, d.picked_matches, d.picked_logs);
@@ -1273,6 +1278,27 @@ async fn main() -> Result<()> {
                 let names: Vec<String> = list.iter().map(|(p, t, how)| format!("{p}: {} [{how}]", teams.get(t).map_or("?", |x| x.0.as_str()))).collect();
                 println!("S{season} {division}: {}", names.join(" | "));
             }
+            Ok(())
+        }
+
+        ["finals"] => {
+            // Every league Grand Final and whether its logs are held.
+            let db = Db::connect(&db_path).await?;
+            let teams = db.etf2l_teams().await?;
+            let cat = hl_ingest::catalogue::Catalogue::load(&db).await?;
+            let held = db.league_logs_by_match().await?;
+            let (mut ok, mut missing) = (0, 0);
+            for (season, division, m) in cat.finals() {
+                let (logs, json, raw) = held.get(&m.match_id).copied().unwrap_or((0, 0, 0));
+                if json > 0 { ok += 1 } else { missing += 1 }
+                let name = |t: i64| teams.get(&t).map_or("?".to_string(), |x| x.0.chars().take(22).collect());
+                println!(
+                    "{} S{:<4} {:<12} {:>7} {:<22} vs {:<22} logs {:>2} json {:>2} raw {:>2}",
+                    if json > 0 { "  " } else { "!!" },
+                    season, division, m.match_id, name(m.clan1), name(m.clan2), logs, json, raw
+                );
+            }
+            println!("{ok} finals with logs, {missing} without");
             Ok(())
         }
 
