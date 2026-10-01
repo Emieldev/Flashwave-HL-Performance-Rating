@@ -138,6 +138,14 @@ impl Db {
     }
 
     /// The stored `(mean, sd)`, or `None` before the first full rating pass.
+    /// How many performances the stored scale was measured over.
+    pub async fn rating_scale_size(&self, version: &str) -> Result<Option<i64>> {
+        Ok(sqlx::query_scalar("SELECT n FROM rating_scale WHERE model_version = ?1")
+            .bind(version)
+            .fetch_optional(self.pool())
+            .await?)
+    }
+
     pub async fn rating_scale(&self, version: &str) -> Result<Option<(f64, f64)>> {
         Ok(sqlx::query_as("SELECT mean, sd FROM rating_scale WHERE model_version = ?1")
             .bind(version)

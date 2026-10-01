@@ -127,14 +127,14 @@ impl Db {
         .await?;
         Ok(rows
             .into_iter()
-            .filter_map(|(log_id, at, map, resolved)| {
+            .map(|(log_id, at, map, resolved)| {
                 let maps: Vec<String> = match resolved {
                     Some(r) if !r.is_empty() => r.split(',').map(str::to_string).collect(),
                     _ => map.filter(|m| !m.is_empty()).into_iter().collect(),
                 };
                 // A log with no map at all still goes: demos.tf can find its
                 // demo by time alone, and the demo names the map (Q30).
-                Some((log_id, at, maps))
+                (log_id, at, maps)
             })
             .collect())
     }

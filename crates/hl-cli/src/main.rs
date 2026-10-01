@@ -93,6 +93,11 @@ COMMANDS:
     maps --export-geometry <PATH> [--min N]
                            Write this database's map shapes, the file shipped
                            as maps/geometry.json (maps with N+ positions)
+    snapshot [--out PATH]  Write the league snapshot the app ships (default
+                           league/snapshot.sqlite3.gz) from this database,
+                           rated for the current model. Run it on a copy.
+    snapshot --check       What the built-in snapshot holds; fails when it is
+                           for another rating model than this build's
     etf2l [--offline]      Fetch ETF2L officials and classify every match (official/scrim/pug)
     teammates [--all] [--json]
                            Your teams and regular teammates (officials and scrims unless --all)
@@ -135,7 +140,10 @@ async fn main() -> Result<()> {
 
     let command: Vec<&str> = args.iter().map(String::as_str).collect();
     // Help and the like never open the database, so they never wait for it.
-    if !matches!(command.first().copied(), None | Some("help") | Some("--help") | Some("-h")) {
+    // `snapshot --check` reads only the snapshot built into this binary.
+    let touches_db = !matches!(command.first().copied(), None | Some("help") | Some("--help") | Some("-h"))
+        && !(command.first() == Some(&"snapshot") && command.contains(&"--check"));
+    if touches_db {
         hl_ingest::lock::require_free(&db_path, forced)?;
     }
     match command.as_slice() {
@@ -370,6 +378,40 @@ async fn main() -> Result<()> {
         ["rate"] => {
             let db = Db::connect(&db_path).await?;
             rate(&db, &db_path).await
+        }
+
+        ["snapshot", rest @ ..] => {
+            if rest.contains(&"--check") {
+                let m = hl_ingest::snapshot::built_in_meta().await?;
+                println!(
+                    "built-in league snapshot: model {}, {} officials rated, pool {}, newest official {}, made {}",
+                    m.model, m.logs, m.pool, m.newest, m.made_at
+                );
+                if m.model != hl_rating::MODEL_VERSION {
+                    bail!(
+                        "the snapshot is for model {} and this build rates with {}: run `hl snapshot` on a rated copy of the database before releasing",
+                        m.model,
+                        hl_rating::MODEL_VERSION
+                    );
+                }
+                return Ok(());
+            }
+            let out = flag_value::<String>(rest, "--out")?.unwrap_or_else(|| "league/snapshot.sqlite3.gz".into());
+            let db = Db::connect(&db_path).await?;
+            let (w, _) = hl_rating::Weights::load(&db_path.with_file_name("weights.toml"));
+            // On a worker thread: the export is too deep for the main
+            // thread's stack on Windows (1 MB).
+            let (src, dest) = (db_path.clone(), std::path::PathBuf::from(&out));
+            let m = tokio::spawn(async move { hl_ingest::snapshot::export(&db, &src, &w, &dest).await }).await??;
+            let size = std::fs::metadata(&out).map(|f| f.len()).unwrap_or(0);
+            println!(
+                "{out}: model {}, {} officials rated, pool {}, {:.1} MB",
+                m.model,
+                m.logs,
+                m.pool,
+                size as f64 / 1e6
+            );
+            Ok(())
         }
 
         ["demos"] => {

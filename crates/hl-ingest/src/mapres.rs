@@ -4,22 +4,22 @@
 //! Pure. Each round takes the first source that answers:
 //!
 //! 1. `log`: the log names one real map, so every round is on it.
-//! 1b. `manual`: the player said which map these rounds were on.
-//! 2. `demo`: a linked demo names its map in its header, and a round inside
+//! 2. `manual`: the player said which map these rounds were on.
+//! 3. `demo`: a linked demo names its map in its header, and a round inside
 //!    its recording, on the real clock, is on that map. Measured on this
 //!    account: it agrees with `log` on all 77 rounds both answer, and where
 //!    it disagreed with `meta` (2 of 5) the demo was right both times -- a
 //!    map line lands a second either side of the round it belongs to. What
 //!    answers when logs.tf leaves the map field blank and the parts cannot
 //!    be fetched.
-//! 3. `meta`: the raw log's own `meta_data (map ...)` line before the round.
-//! 4. `part`: a part the log was combined from has a round starting at the
+//! 4. `meta`: the raw log's own `meta_data (map ...)` line before the round.
+//! 5. `part`: a part the log was combined from has a round starting at the
 //!    same second (logs.tf copies rounds verbatim when combining).
-//! 5. `window`: the round falls in exactly one part's upload window on the
+//! 6. `window`: the round falls in exactly one part's upload window on the
 //!    real clock. Never wrong where checked, but windows leave gaps.
-//! 6. Demos with no clock to place them: a log whose demos all name one map,
+//! 7. Demos with no clock to place them: a log whose demos all name one map,
 //!    and that nothing else says was on another, is on it.
-//! 7. `geometry`: the round's kill positions scored against every map's
+//! 8. `geometry`: the round's kill positions scored against every map's
 //!    outline (see [`Geometry`]), the app's shipped shapes plus this install's
 //!    own logs. On 310 held-out single-map rounds it picks
 //!    the right map 97% of the time from 18 maps, and 99.7% from three. On

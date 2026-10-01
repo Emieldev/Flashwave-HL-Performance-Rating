@@ -28,6 +28,7 @@ mod players;
 mod ratings;
 mod rawlog;
 mod roundmap;
+mod snapshot;
 mod timeline;
 
 pub use context::{
@@ -46,6 +47,7 @@ pub use timeline::{TimelineRow, TimelineTotals};
 pub use leagues::{Competition, CompetitionRow, SeasonMap, SeasonMatch, SeasonMatchRow};
 pub use catalogue::{CatMatch, Etf2lPlayer, RatedGame, RosterRow};
 pub use league_sample::{Candidate, LeagueLogRow, TierProgress};
+pub use snapshot::TableCopy;
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
 pub use matches::{
     FailedLog, IndexInfo, IndexStats, LogsTfIndexRow, MatchFilter, MatchPage, MatchSummary, PartSummary, MyLine,

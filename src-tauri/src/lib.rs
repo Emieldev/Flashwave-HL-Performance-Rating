@@ -152,6 +152,22 @@ pub fn run() {
                             }
                         }
                     }
+                    // The league snapshot this version ships (Q43): the officials'
+                    // results, rosters and ratings, so the player lookup works
+                    // before the league has been downloaded. Once per snapshot.
+                    match hl_ingest::snapshot::apply_built_in(&db).await {
+                        Ok(a) if a.rescore => {
+                            // Its scale replaced the one measured here: rate
+                            // this install's own games on it.
+                            let (weights, _) = hl_rating::Weights::load(&weights_path);
+                            match hl_ingest::rate_all(&db, cfg.steamid, &weights, |_| {}).await {
+                                Ok(s) => tracing::info!(rated = s.rated, "rated on the league snapshot's scale"),
+                                Err(e) => tracing::warn!(error = %format!("{e:#}"), "rating on the snapshot's scale failed"),
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(error = %format!("{e:#}"), "league snapshot not imported"),
+                    }
                     // A new rating model has no ratings until something rates:
                     // do it now rather than leave the profile empty until a sync.
                     if db.rating_count(hl_rating::MODEL_VERSION).await.unwrap_or(1) == 0 {

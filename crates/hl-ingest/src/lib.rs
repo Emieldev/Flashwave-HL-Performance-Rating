@@ -53,6 +53,7 @@ pub mod cart;
 pub mod demo_import;
 pub mod leagues;
 pub mod callouts;
+pub mod snapshot;
 pub mod mapsettings;
 pub mod moretf;
 pub mod league_sample;

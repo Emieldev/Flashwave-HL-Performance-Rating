@@ -120,6 +120,12 @@ included; if yours is elsewhere, pick it in Settings. Your data lives in
 
 Linux is new: tell us in Issues or on Discord if something looks wrong there.
 
+**The league comes with it.** Every ETF2L Highlander official's results,
+rosters, medals and league ratings are built into each release as a snapshot,
+so looking a player up works from the first start. The match logs behind
+them are not included; the app fetches newer officials itself when the
+league download is on (Settings).
+
 ## Working on it safely
 
 The app holds its database while its window is open, and every command line

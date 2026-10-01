@@ -1916,6 +1916,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "chrono",
+ "flate2",
  "hl-core",
  "hl-db",
  "hl-demos",

@@ -55,6 +55,22 @@ updater's `latest.json`.
    (`hl guide --json > ui/src/api/fixtures/rating_guide.json`); the app's
    own page reads the live model and needs nothing.
 
+2b. **Make the league snapshot.** The app ships every official's results,
+   rosters and league ratings (`league/snapshot.sqlite3.gz`, PLAN Q43), so the
+   player lookup works on a new install. It is made from your database, rated
+   for this release's model -- on a copy, never the live file:
+
+   ```powershell
+   cargo run --release -p hl-cli -- copy "$env:TEMP\hl-snapshot-src.sqlite3"
+   cargo run --release -p hl-cli -- --db "$env:TEMP\hl-snapshot-src.sqlite3" rate
+   cargo run --release -p hl-cli -- --db "$env:TEMP\hl-snapshot-src.sqlite3" snapshot
+   ```
+
+   (`hl copy` needs the app closed. With it open, copy the newest file in
+   `backups` instead; it is a closed, consistent copy.) Commit the new
+   `league/snapshot.sqlite3.gz`. `npm run release` refuses to build when the
+   snapshot is for another rating model than the build.
+
 3. **Build it signed:**
 
    ```bash

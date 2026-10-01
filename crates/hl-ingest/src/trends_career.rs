@@ -139,7 +139,7 @@ pub fn parse(html: &str) -> Career {
             time_s: duration(row.last().map_or("", String::as_str)),
         });
     }
-    c.classes.sort_by(|a, b| b.time_s.cmp(&a.time_s));
+    c.classes.sort_by_key(|c| std::cmp::Reverse(c.time_s));
     for row in table_after(html, "<h3>Aliases</h3>") {
         if let (Some(name), Some(n)) = (row.first(), row.get(1).and_then(|n| n.parse().ok())) {
             c.aliases.push((name.clone(), n));
