@@ -86,7 +86,8 @@ and model v9 changes most classes' numbers a little.
 **SHA-256**
 
 ```
-HASHES
+16AA8326D1580E7A3B0F6A11057CF147AE349ED63944A40EE05B673107AF8097  Flashwave.tf_0.8.0_x64-setup.exe
+7FE4EA20D793D1D127C7B479F68E11196AA39FFFDA2C9335E56EE8715265C9CA  Flashwave.tf_0.8.0_x64_en-US.msi
 ```
 
 The Linux files are built on GitHub; their hashes are on the release page
