@@ -181,7 +181,7 @@ const realApi = {
   /** Null when the match has no STV timeline to read (Q27). */
   getSpychecks: (logId: number) => invoke<SpyReport | null>("get_spychecks", { logId }),
   /** Null for a match with no cart to read (Q11). */
-  getCart: (logId: number) => invoke<CartView | null>("get_cart", { logId }),
+  getCart: (logId: number, map?: string) => invoke<CartView | null>("get_cart", { logId, map: map ?? null }),
   /** Q29: one season's division tables; the newest when no season is given. */
   getLeagues: (season?: number) => invoke<LeagueView>("get_leagues", { season: season ?? null }),
   getTeam: (teamId: number) => invoke<TeamView | null>("get_team", { teamId }),

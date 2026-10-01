@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type CartFight, type MatchDetail } from "../../api/types";
+import { errorMessage, type CartFight, type CartHold, type CartRound, type MatchDetail, type RoundFight } from "../../api/types";
 import { clock } from "../../lib/format";
 import { copy } from "../../lib/toast";
 import { t, tx } from "../../lib/i18n";
@@ -12,7 +12,7 @@ import { t, tx } from "../../lib/i18n";
  * Payload only, and only where an STV was read.
  */
 export function CartPanel({ d }: { d: MatchDetail }) {
-  const q = useQuery({ queryKey: ["cart", d.logId], queryFn: () => api.getCart(d.logId) });
+  const q = useQuery({ queryKey: ["cart", d.logId], queryFn: () => api.getCart(d.logId, d.map ?? undefined) });
   if (q.isError) {
     return (
       <section className="panel cart-panel">
@@ -105,6 +105,52 @@ export function CartPanel({ d }: { d: MatchDetail }) {
         </>
       )}
 
+      {(v.holds?.length ?? 0) + (v.allFights?.length ?? 0) > 0 && (
+        <>
+          <h3>{t("Momentum")}</h3>
+          <p className="hint">
+            {t("How far BLU pushed the cart through each round. A flat stretch with fights in it is a hold; dots are fights, blue where BLU won it and red where the defence did.")}
+          </p>
+          {v.rounds.map((r, i) => (
+            <Momentum key={i} n={i} r={r} fights={v.allFights.filter((f) => f.round === i)} holds={v.holds.filter((h) => h.round === i)} />
+          ))}
+          {v.holds.length > 0 && (
+            <div className="table-wrap">
+              <table className="match-table cart-table">
+                <thead>
+                  <tr>
+                    <th>{t("Round")}</th>
+                    <th className="num">{t("At")}</th>
+                    <th className="num">{t("Held for")}</th>
+                    <th>{t("Where")}</th>
+                    <th className="num" title={t("Fights in the hold that BLU did not win")}>{t("Pushes turned back")}</th>
+                    <th className="num" title={t("Players each side lost in the hold: BLU – RED")}>{t("Lost")}</th>
+                    <th>{t("Then")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {v.holds.map((h, i) => (
+                    <tr key={i} className="spy-row" title={t("Copy demo_gototick {tick}", { tick: h.jumpTick })} onClick={() => jump(h.jumpTick, t("Hold at {0}", { "0": clock(h.fromS) }))}>
+                      <td>{h.round + 1}</td>
+                      <td className="num">{clock(h.fromS)}</td>
+                      <td className="num">{h.seconds}s</td>
+                      <td>{h.zone ?? <span className="muted">–</span>}</td>
+                      <td className="num">
+                        {h.pushesFailed} <span className="muted">/ {h.fights}</span>
+                      </td>
+                      <td className="num">
+                        {h.lostAttackers}–{h.lostDefenders}
+                      </td>
+                      <td>{h.broke ? t("broke") : t("held to the end")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
       {v.fights.length > 0 && (
         <>
           <h3>{tx("After a won fight: seconds of the next {0} the cart moved", { "0": v.afterS })}</h3>
@@ -116,6 +162,47 @@ export function CartPanel({ d }: { d: MatchDetail }) {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Q12 (Flashy: "when the cart gets stuck and you start killing or dying a
+ * lot at one spot"): the cart's progress through one round, the holds
+ * shaded, each fight a dot on the line.
+ */
+function Momentum({ n, r, fights, holds }: { n: number; r: CartRound; fights: RoundFight[]; holds: CartHold[] }) {
+  const p = r.progress ?? [];
+  if (p.length < 2) return null;
+  const W = 600;
+  const H = 70;
+  const span = Math.max(1, (p.length - 1) * 2);
+  const top = Math.max(1, ...p);
+  const x = (s: number) => (Math.min(s, span) / span) * W;
+  const y = (s: number) => H - 4 - (p[Math.min(p.length - 1, Math.floor(s / 2))] / top) * (H - 10);
+  const line = p.map((v, i) => `${((i * 2) / span) * W},${H - 4 - (v / top) * (H - 10)}`).join(" ");
+  return (
+    <figure className="momentum">
+      <figcaption className="hint">{t("Round {0}", { "0": n + 1 })}</figcaption>
+      <div className="mom-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={t("Cart progress, round {0}", { "0": n + 1 })}>
+        {holds.map((h, i) => (
+          <rect key={i} className="mom-hold" x={x(h.fromS)} y={0} width={Math.max(2, x(h.fromS + h.seconds) - x(h.fromS))} height={H}>
+            <title>{t("Held {0}s{1}: {2} of {3} pushes turned back", { "0": h.seconds, "1": h.zone ? ` · ${h.zone}` : "", "2": h.pushesFailed, "3": h.fights })}</title>
+          </rect>
+        ))}
+        <polyline className="mom-line" points={line} vectorEffect="non-scaling-stroke" />
+      </svg>
+      {/* Dots over the stretched chart, so they stay round. */}
+      {fights.map((f, i) => (
+        <span
+          key={i}
+          className={f.lostDefenders > f.lostAttackers ? "mom-dot mom-blu" : "mom-dot mom-red"}
+          style={{ left: `${(x(f.toS) / W) * 100}%`, top: `${y(f.toS)}px` }}
+          title={t("{0}: BLU lost {1}, RED lost {2}", { "0": clock(f.toS), "1": f.lostAttackers, "2": f.lostDefenders })}
+        />
+      ))}
+      </div>
+    </figure>
   );
 }
 

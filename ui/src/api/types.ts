@@ -1507,6 +1507,33 @@ export interface CartView {
   rounds: CartRound[];
   stalls: CartStall[];
   fights: CartFight[];
+  /** Q12: every fight of every round, whoever won it. */
+  allFights: RoundFight[];
+  /** Q12: the cart still ten seconds or more with fights in it. */
+  holds: CartHold[];
+}
+
+export interface RoundFight {
+  round: number;
+  fromS: number;
+  toS: number;
+  lostAttackers: number;
+  lostDefenders: number;
+}
+
+export interface CartHold {
+  demoId: number;
+  round: number;
+  /** Seconds into the round. */
+  fromS: number;
+  seconds: number;
+  fights: number;
+  pushesFailed: number;
+  lostAttackers: number;
+  lostDefenders: number;
+  broke: boolean;
+  zone: string | null;
+  jumpTick: number;
 }
 
 export interface CartRound {
@@ -1518,6 +1545,8 @@ export interface CartRound {
   /** Of the still seconds, those with no attacker near the cart; the rest
    *  had one there and a defender blocking. */
   upStillEmptyS: number;
+  /** Q12: units the cart had come, every two seconds from setup's end. */
+  progress: number[];
 }
 
 export interface CartStall {

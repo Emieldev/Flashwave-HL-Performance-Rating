@@ -29,6 +29,9 @@ const FIGHT_GAP_S: f64 = 10.0;
 pub const AFTER_S: u32 = 30;
 /// Jumps land this long before the moment, as the round timeline's do.
 const LEAD_S: u32 = 5;
+/// A still cart this long, with a fight in it, is a hold (Q12): the
+/// defence stopping the push, rather than a breath between two.
+pub const HOLD_S: u32 = 10;
 /// An attacker this close to the cart, across the ground, is pushing it or
 /// could be: pushers were measured standing up to ~180 units from the
 /// cart's origin on upward, and the push trigger is wider than the model.
@@ -51,6 +54,50 @@ pub struct CartRound {
     /// Of those still seconds, how many had no attacker near the cart --
     /// nobody walking to it, rather than a defender blocking.
     pub up_still_empty_s: u32,
+    /// Q12: how far the cart had come, second by second from setup's end,
+    /// in units along the ground: pushed forward adds, rolled back with
+    /// nobody near it takes away.
+    pub progress: Vec<u32>,
+}
+
+/// A fight in a round, whoever won it (Q12).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fight {
+    pub round: usize,
+    /// Seconds into the round, first kill to last.
+    pub from_s: u32,
+    pub to_s: u32,
+    /// Kills each side lost: `(attackers, defenders)`.
+    pub lost: (u32, u32),
+}
+
+impl Fight {
+    /// The attackers came out ahead.
+    pub fn attackers_won(&self) -> bool {
+        self.lost.1 > self.lost.0
+    }
+}
+
+/// A hold (Q12, Flashy: "when the cart gets stuck and you start killing or
+/// dying a lot at one spot"): the cart still for [`HOLD_S`] or more with a
+/// fight in it. How many pushes the defence turned back, and whether it
+/// broke or held until the round ended.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hold {
+    pub round: usize,
+    /// Seconds into the round.
+    pub from_s: u32,
+    pub seconds: u32,
+    /// Fights in it the attackers did not win: pushes turned back.
+    pub pushes_failed: u32,
+    pub fights: u32,
+    /// Kills each side lost in it: `(attackers, defenders)`.
+    pub lost: (u32, u32),
+    /// The cart rolled on before the round ended.
+    pub broke: bool,
+    /// Where the cart stood, across the ground.
+    pub pos: [f64; 2],
+    pub jump_tick: u32,
 }
 
 /// A stretch of seconds the attackers were up [`UP`] or more and the cart
@@ -87,6 +134,9 @@ pub struct CartReport {
     pub rounds: Vec<CartRound>,
     pub stalls: Vec<Stall>,
     pub conversions: Vec<Conversion>,
+    /// Q12: every fight of every round, and the holds.
+    pub fights: Vec<Fight>,
+    pub holds: Vec<Hold>,
 }
 
 impl CartReport {
@@ -123,6 +173,48 @@ fn flat(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// A round's holds: runs of [`HOLD_S`] or more still seconds with a fight
+/// in them. `moved` and `wheres` are per second of the round; `jump` turns a
+/// second into the tick to jump to.
+fn holds(round: usize, moved: &[bool], wheres: &[[f64; 3]], fights: &[Fight], jump: impl Fn(u32) -> u32) -> Vec<Hold> {
+    let mut out = Vec::new();
+    let mut s = 0;
+    while s < moved.len() {
+        if moved[s] {
+            s += 1;
+            continue;
+        }
+        let start = s;
+        while s < moved.len() && !moved[s] {
+            s += 1;
+        }
+        let (from, to) = (start as u32, s as u32);
+        if to - from < HOLD_S {
+            continue;
+        }
+        // A fight belongs to the hold if it ended in it, or within a few
+        // seconds of its end: the fight that breaks a hold ends as the
+        // cart starts to roll.
+        let inside: Vec<&Fight> = fights.iter().filter(|f| f.to_s >= from && f.to_s <= to + 3).collect();
+        if inside.is_empty() {
+            continue;
+        }
+        let at = wheres.get(start).copied().unwrap_or([0.0; 3]);
+        out.push(Hold {
+            round,
+            from_s: from,
+            seconds: to - from,
+            pushes_failed: inside.iter().filter(|f| !f.attackers_won()).count() as u32,
+            fights: inside.len() as u32,
+            lost: inside.iter().fold((0, 0), |a, f| (a.0 + f.lost.0, a.1 + f.lost.1)),
+            broke: s < moved.len(),
+            pos: [at[0], at[1]],
+            jump_tick: jump(from),
+        });
+    }
+    out
 }
 
 /// `None` for a demo with no cart in it: not payload, or not an STV.
@@ -184,9 +276,39 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
 
     let mut out = CartReport::default();
     for (round, &(from, to)) in spans.iter().enumerate() {
+        // A map can have more than one cart entity (Swiftwater's STV has
+        // three): this round's is the one with the most seconds of cart-like
+        // movement in it -- over MOVING_UNITS and under a teleport's 400 in a
+        // second. Mixing their rows read a jump from one to another as the
+        // cart moving; their total travel picks a prop that jiggles, and
+        // their reach one that teleports.
+        let ids: std::collections::BTreeSet<u32> = carts.iter().filter(|o| o.kind == "cart" && o.t >= from && o.t <= to).map(|o| o.entity).collect();
+        let Some(this) = ids
+            .into_iter()
+            .max_by_key(|id| {
+                let rows: Vec<&ObjectRow> = carts.iter().copied().filter(|o| o.entity == *id).collect();
+                let mut n = 0u32;
+                let mut s = 0;
+                while from + ticks(s + 1) <= to {
+                    if let (Some(a), Some(b)) = (cart_at(&rows, from + ticks(s)), cart_at(&rows, from + ticks(s + 1))) {
+                        let d = dist(a, b);
+                        n += u32::from(d > MOVING_UNITS && d < 400.0);
+                    }
+                    s += 1;
+                }
+                n
+            })
+        else {
+            continue;
+        };
+        let carts: Vec<&ObjectRow> = carts.iter().copied().filter(|o| o.entity == this).collect();
         let mut r = CartRound { from_s: secs(from), to_s: secs(to), from_tick: tl.tick_of(from), ..Default::default() };
         // Per second: moving, and the advantage, kept for the fights below.
         let mut moved: Vec<bool> = Vec::new();
+        // Per counted second: where the cart was, and whether it was pushed
+        // forward (Q12's holds and progress).
+        let mut wheres: Vec<[f64; 3]> = Vec::new();
+        let mut pushed: Vec<bool> = Vec::new();
         let mut stall: Option<Stall> = None;
         let mut s = 0;
         loop {
@@ -196,6 +318,9 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
             }
             let (Some(pa), Some(pb)) = (cart_at(&carts, a), cart_at(&carts, b)) else {
                 moved.push(false);
+                pushed.push(false);
+                wheres.push(wheres.last().copied().unwrap_or([0.0; 3]));
+                r.progress.push(r.progress.last().copied().unwrap_or(0));
                 s += 1;
                 continue;
             };
@@ -203,6 +328,15 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
             let d = dist(pa, pb);
             let moving = d > MOVING_UNITS && d < 400.0;
             moved.push(moving);
+            // Q12: pushed, not rolled back. A cart moving with an attacker
+            // near it is being pushed; one moving with nobody near it is
+            // rolling back, and that takes ground away.
+            let pushing = moving && attacker_near(a, pa);
+            pushed.push(pushing);
+            let before = r.progress.last().copied().unwrap_or(0);
+            let step = flat(pa, pb).round() as u32;
+            r.progress.push(if pushing { before + step } else if moving { before.saturating_sub(step) } else { before });
+            wheres.push(pa);
             r.seconds += 1;
             r.moving_s += u32::from(moving);
             let up = up_at(a);
@@ -249,6 +383,7 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
             }
         }
         let gap = ticks(FIGHT_GAP_S as u32);
+        let mut round_fights: Vec<Fight> = Vec::new();
         let mut nth = 0;
         let mut i = 0;
         while i < kills.len() {
@@ -259,6 +394,12 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
             let fight = &kills[i..j];
             let lost_a = fight.iter().filter(|k| k.1 == ATTACKERS).count() as u32;
             let lost_d = fight.iter().filter(|k| k.1 == DEFENDERS).count() as u32;
+            round_fights.push(Fight {
+                round,
+                from_s: ((fight[0].0 - from) as f64 / second) as u32,
+                to_s: ((fight[fight.len() - 1].0 - from) as f64 / second) as u32,
+                lost: (lost_a, lost_d),
+            });
             if lost_d > lost_a {
                 nth += 1;
                 let end = fight[fight.len() - 1].0;
@@ -277,6 +418,8 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
             }
             i = j;
         }
+        out.holds.extend(holds(round, &pushed, &wheres, &round_fights, |s| tl.tick_of((from + ticks(s)).saturating_sub(ticks(LEAD_S)))));
+        out.fights.extend(round_fights);
         out.rounds.push(r);
     }
     Some(out)
@@ -285,6 +428,32 @@ pub fn cart(tl: &Timeline) -> Option<CartReport> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hold_is_a_still_cart_with_fights_in_it_and_breaks_when_it_rolls() {
+        // 40 s: rolls 5, still 20 (two pushes turned back, one won), rolls
+        // 5, still 10 with no fight in it.
+        let mut moved = vec![true; 5];
+        moved.extend(vec![false; 20]);
+        moved.extend(vec![true; 5]);
+        moved.extend(vec![false; 10]);
+        let wheres = vec![[100.0, 200.0, 0.0]; moved.len()];
+        let f = |from_s, to_s, a, d| Fight { round: 0, from_s, to_s, lost: (a, d) };
+        let fights = [f(8, 10, 2, 1), f(15, 17, 3, 0), f(22, 25, 0, 3)];
+        let h = holds(0, &moved, &wheres, &fights, |s| s * 10);
+        assert_eq!(h.len(), 1, "the second still stretch had no fight: not a hold");
+        let h = h[0];
+        assert_eq!((h.from_s, h.seconds), (5, 20));
+        assert_eq!((h.fights, h.pushes_failed), (3, 2));
+        assert_eq!(h.lost, (5, 4));
+        assert!(h.broke);
+        assert_eq!(h.pos, [100.0, 200.0]);
+        assert_eq!(h.jump_tick, 50);
+        // Still to the end with a fight: held, not broken.
+        let moved = vec![false; 15];
+        let h = holds(0, &moved, &vec![[0.0; 3]; 15], &[f(4, 6, 2, 0)], |s| s);
+        assert!(!h[0].broke);
+    }
     use crate::timeline::{Change, Field, Person, Sample, Track};
     use std::borrow::Cow;
     use tf_demo_parser::demo::gameevent_gen::{TeamPlayRoundWinEvent, TeamPlaySetupFinishedEvent};

@@ -1551,3 +1551,14 @@
 .demo-drop-icon { font-size: 1.6rem; color: var(--accent); line-height: 1; }
 .demo-drop .hint { max-width: 360px; margin: 0; }
 .demo-drop-ok { margin: 4px 0 0; font-size: 0.85rem; color: var(--ok); }
+
+/* Q12: momentum, the cart's progress through a round. */
+.momentum { margin: 6px 0 10px; }
+.momentum figcaption { margin-bottom: 2px; }
+.momentum svg { width: 100%; height: 70px; display: block; background: var(--panel-2); border-radius: 6px; }
+.mom-line { fill: none; stroke: var(--blu); stroke-width: 2; }
+.mom-hold { fill: rgba(var(--red-deep-rgb), 0.18); }
+.mom-chart { position: relative; }
+.mom-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; box-shadow: 0 0 0 1px var(--panel); cursor: default; }
+.mom-blu { background: var(--blu); }
+.mom-red { background: var(--red); }

@@ -983,6 +983,37 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["momentum", log_id, rest @ ..] => {
+            // Q12: the holds of a payload match, from its STV timelines.
+            let db = Db::connect(&db_path).await?;
+            let log_id: i64 = log_id.parse()?;
+            let data = db_path.parent().context("no data folder")?.to_path_buf();
+            let json: serde_json::Value = serde_json::from_str(&db.raw_log(log_id).await?.context("no such match")?)?;
+            let map = json.pointer("/info/map").and_then(|m| m.as_str()).unwrap_or_default().to_string();
+            let Some(v) = hl_ingest::cart::for_log(&db, log_id, Some((data.as_path(), map.as_str()))).await? else {
+                println!("{map}: no STV timeline with a cart");
+                return Ok(());
+            };
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&v)?);
+                return Ok(());
+            }
+            for (i, r) in v.rounds.iter().enumerate() {
+                let fights: Vec<_> = v.all_fights.iter().filter(|f| f.round == i).collect();
+                let won = fights.iter().filter(|f| f.lost_defenders > f.lost_attackers).count();
+                println!("round {}: {}s live, cart {} units, {} fights ({} won by BLU)", i + 1, r.seconds, r.progress.last().copied().unwrap_or(0), fights.len(), won);
+                for h in v.holds.iter().filter(|h| h.round == i) {
+                    println!(
+                        "  hold at {:>3}s for {:>3}s{}: {} pushes turned back of {}, lost {}-{}, {}  (demo_gototick {})",
+                        h.from_s, h.seconds, h.zone.as_deref().map(|z| format!(" at {z}")).unwrap_or_default(),
+                        h.pushes_failed, h.fights, h.lost_attackers, h.lost_defenders,
+                        if h.broke { "broke" } else { "held" }, h.jump_tick
+                    );
+                }
+            }
+            Ok(())
+        }
+
         ["cart", path] => {
             // Q11: the cart in a numbers advantage, from one demo. A file only.
             let file = std::path::Path::new(path);

@@ -10,6 +10,7 @@ import match4114301 from "./fixtures/match_4114301.json";
 import match4111116 from "./fixtures/match_4111116.json";
 // `hl guide --json`: the live models, as the built app serves them.
 import ratingGuide from "./fixtures/rating_guide.json";
+import cart4109131 from "./fixtures/cart_4109131.json";
 import match3863290 from "./fixtures/match_3863290.json";
 import analysis3863290 from "./fixtures/analysis_3863290.json";
 import mapviewAshville from "./fixtures/mapview_ashville.json";
@@ -886,31 +887,11 @@ export const mockApi: Api = {
     return delay<SpyReport | null>({ demos: 1, players: rows, checks, fading: 31, blinking: 22, marked: 6, cooldown: 14 });
   },
 
-  // From `hl cart` on the pl_upward STV, so the panel has real shapes.
+  // From `hl momentum 4109131 --json` on the pl_upward STV: the real view.
   getCart: (logId: number) => {
     const m = FIXTURES.find((f) => f.logId === logId) ?? FIXTURES[0];
     if (!/^pl_/.test(String(m.map ?? ""))) return delay<CartView | null>(null);
-    return delay<CartView | null>({
-      up: 3,
-      afterS: 30,
-      rounds: [
-        { demoId: 1, seconds: 565, movingS: 253, upS: 82, upStillS: 41, upStillEmptyS: 35 },
-        { demoId: 1, seconds: 416, movingS: 280, upS: 71, upStillS: 23, upStillEmptyS: 19 },
-      ],
-      stalls: [
-        { demoId: 1, round: 0, atS: 454, seconds: 6, mostUp: 3, emptyS: 6, jumpTick: 29936 },
-        { demoId: 1, round: 0, atS: 593, seconds: 11, mostUp: 5, emptyS: 11, jumpTick: 39202 },
-        { demoId: 1, round: 0, atS: 607, seconds: 10, mostUp: 4, emptyS: 10, jumpTick: 40136 },
-        { demoId: 1, round: 1, atS: 1119, seconds: 7, mostUp: 3, emptyS: 5, jumpTick: 74322 },
-      ],
-      fights: [
-        { demoId: 1, round: 0, nth: 1, atS: 150, lostAttackers: 1, lostDefenders: 4, windowS: 30, movingS: 28, jumpTick: 9700 },
-        { demoId: 1, round: 0, nth: 2, atS: 340, lostAttackers: 2, lostDefenders: 3, windowS: 30, movingS: 19, jumpTick: 22400 },
-        { demoId: 1, round: 1, nth: 1, atS: 820, lostAttackers: 0, lostDefenders: 3, windowS: 30, movingS: 28, jumpTick: 54500 },
-        { demoId: 1, round: 1, nth: 2, atS: 900, lostAttackers: 1, lostDefenders: 2, windowS: 23, movingS: 23, jumpTick: 59900 },
-        { demoId: 1, round: 1, nth: 3, atS: 980, lostAttackers: 2, lostDefenders: 3, windowS: 1, movingS: 1, jumpTick: 65200 },
-      ],
-    });
+    return delay<CartView | null>(cart4109131 as CartView);
   },
 
   importDemo: (path: string) =>
