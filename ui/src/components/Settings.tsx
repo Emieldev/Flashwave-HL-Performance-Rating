@@ -114,7 +114,7 @@ function UpdatesPanel({ version }: { version: string }) {
         {u.state === "available" && (
           <>
             <p>{tr("Version {version} is available.", { version: u.version })}</p>
-            <button className="primary" style={{ marginTop: 8 }} onClick={() => void installUpdate()}>{tr("Download and install")}</button>
+            <button className="primary" style={{ marginTop: 8 }} onClick={() => void installUpdate()}>{u.manual ? tr("Open the download page") : tr("Download and install")}</button>
           </>
         )}
         {u.state === "downloading" && (

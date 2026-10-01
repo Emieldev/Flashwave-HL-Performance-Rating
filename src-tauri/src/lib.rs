@@ -192,6 +192,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
             commands::get_config,
+            commands::update_kind,
             commands::set_steamid,
             commands::inspect_tf_path,
             commands::detect_tf_path,

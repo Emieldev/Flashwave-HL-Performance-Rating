@@ -508,6 +508,7 @@ function simulateSync(kind: "sync" | "reprocess") {
 }
 
 export const mockApi: Api = {
+  updateKind: () => delay("self" as const),
   appStatus: (): Promise<AppStatus> =>
     delay({
       version: "0.1.0-mock",

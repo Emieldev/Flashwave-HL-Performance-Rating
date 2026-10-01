@@ -92,6 +92,8 @@ export interface SyncHandlers {
 const realApi = {
   appStatus: () => invoke<AppStatus>("app_status"),
   getConfig: () => invoke<AppConfig>("get_config"),
+  /** "self": the updater installs it. "manual": a Linux package, updated from the download page. */
+  updateKind: () => invoke<"self" | "manual">("update_kind"),
   setSteamId: (input: string) => invoke<AppConfig>("set_steamid", { input }),
   detectTfPath: () => invoke<TfPathInfo | null>("detect_tf_path"),
   inspectTfPath: (path: string) => invoke<TfPathInfo>("inspect_tf_path", { path }),

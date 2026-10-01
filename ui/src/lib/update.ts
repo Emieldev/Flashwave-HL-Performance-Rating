@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { inTauri } from "../api/client";
+import { api, inTauri } from "../api/client";
 import { noteError } from "./problems";
 
 /**
@@ -23,13 +23,17 @@ import { noteError } from "./problems";
  * release *is* publishing the update.
  */
 
+const RELEASES = "https://github.com/bartflk/Flashwave-HL-Performance-Rating/releases";
+
 export type UpdateState =
   | { state: "idle" }
   | { state: "checking" }
   /** A check you asked for found nothing newer. The startup check stays
    *  "idle" instead, so it never puts up a card to say nothing happened. */
   | { state: "current" }
-  | { state: "available"; version: string; notes: string; update: Update }
+  /** `manual`: a Linux package, which the app cannot replace; the button
+   *  opens the release page instead. */
+  | { state: "available"; version: string; notes: string; update: Update; manual: boolean }
   | { state: "downloading"; version: string; got: number; total: number | null }
   | { state: "ready"; version: string }
   | { state: "failed"; message: string };
@@ -61,14 +65,22 @@ export async function checkForUpdate(manual = false) {
       set(manual ? { state: "current" } : { state: "idle" });
       return;
     }
+    const kind = await api.updateKind().catch(() => "self" as const);
     set({
       state: "available",
       version: update.version,
       notes: update.body ?? "",
       update,
+      manual: kind === "manual",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // A release with no build for this platform yet (a Linux build still
+    // being made, say) is not a fault worth a line in Problems.
+    if (/platform .* was not found/i.test(message)) {
+      set(manual ? { state: "current" } : { state: "idle" });
+      return;
+    }
     noteError({ what: "checking for an update", message });
     set(manual ? { state: "failed", message } : { state: "idle" });
   }
@@ -78,6 +90,12 @@ export async function checkForUpdate(manual = false) {
 export async function installUpdate() {
   if (status.state !== "available") return;
   const { update, version } = status;
+  if (status.manual) {
+    // A Linux package: the system owns its files, so the download is the
+    // person's to install, the way they installed this one.
+    await api.openExternal(`${RELEASES}/tag/v${version}`);
+    return;
+  }
   set({ state: "downloading", version, got: 0, total: null });
   try {
     let got = 0;

@@ -1,11 +1,21 @@
-# Builds the Windows installers and attaches them to a draft release.
+# The Linux build: an AppImage and a .deb, attached to the release.
 #
-# Trigger: push a tag like v0.4.0 (bump the version in src-tauri/tauri.conf.json
-# and the root Cargo.toml first), or run it by hand from the Actions tab.
-# The installers' own version stays numeric (MSI allows nothing else); the
-# "alpha" lives in the release name, not in the version the installers carry.
-# The release is created as a draft pre-release: review it, then publish.
-name: Release
+# Windows releases are built and signed on the maintainer's PC
+# (`npm run release`, docs/releasing.md), which is where the update key
+# lives. Linux cannot be built there, so this builds it on GitHub once the
+# release exists, and attaches it to the same release:
+#
+#   1. Publish the Windows release as usual (`gh release create v<version> ...`).
+#      Creating the tag starts this workflow.
+#   2. Wait ~15 minutes. The AppImage and the .deb appear on the release.
+#   3. With the TAURI_SIGNING_PRIVATE_KEY secret set, the AppImage is signed
+#      and a `linux-x86_64` entry is added to the release's latest.json, so
+#      AppImage installs update themselves. Without it the files are still
+#      attached, and Linux users update by downloading.
+#
+# Run it by hand from the Actions tab to rebuild the Linux files for the
+# version in src-tauri/tauri.conf.json.
+name: Linux release
 
 on:
   push:
@@ -16,10 +26,20 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  linux:
+    # The oldest supported runner: an AppImage runs on systems at least as
+    # new as the one it was built on, so older is wider.
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: System libraries for the window
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev libsoup-3.0-dev file
 
       - uses: actions/setup-node@v4
         with:
@@ -38,24 +58,53 @@ jobs:
           npm ci
           npm ci --prefix ui
 
-      - name: Build and upload the installers
-        uses: tauri-apps/tauri-action@v0
+      - name: Version
+        run: echo "VERSION=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_ENV"
+
+      # Without the key the build cannot sign updater files, and asking for
+      # them anyway fails the whole build (it did on every Windows run of
+      # this workflow from 0.4.1 to 0.7.0). So they are asked for only when
+      # the key is there.
+      - name: Build the AppImage and the .deb
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: v__VERSION__
-          releaseName: Flashwave.tf __VERSION__
-          releaseBody: |
-            Windows only. Download the `-setup.exe` below and run it.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          if [ "$HAS_KEY" = "true" ]; then
+            npx tauri build --bundles appimage,deb
+          else
+            npx tauri build --bundles appimage,deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
-            Windows may say "Windows protected your PC" because the installer is not code-signed: click **More info, then Run anyway**.
+      # The tag can arrive a moment before the release it belongs to.
+      - name: Wait for the release
+        run: |
+          for i in $(seq 1 60); do
+            gh release view "v$VERSION" >/dev/null 2>&1 && exit 0
+            sleep 30
+          done
+          echo "No release v$VERSION after 30 minutes. Publish it, then run this workflow by hand." >&2
+          exit 1
 
-            **Updating from an earlier version keeps your data.** Install over the top; your logs, demos index and ratings stay where they are. The app also keeps the newest five copies of its database in a `backups` folder beside it.
+      - name: Attach the Linux files
+        run: |
+          shopt -s nullglob
+          files=(target/release/bundle/appimage/*.AppImage target/release/bundle/appimage/*.AppImage.sig target/release/bundle/deb/*.deb)
+          printf '%s\n' "${files[@]}"
+          gh release upload "v$VERSION" "${files[@]}" --clobber
 
-            **Uninstalling can remove it.** The uninstaller offers a "Delete the application data" checkbox; leave it unticked unless you mean it, and note that it removes those backups too.
-
-            **Going back to an older version does not work** once this one has opened your database: the older build does not know the new tables. Restore a backup if you need to.
-
-            See the README for first-run steps. Feedback is welcome in Issues.
-          releaseDraft: true
-          prerelease: true
+      # Merge, never replace: latest.json already holds the Windows entry
+      # written by `npm run release`.
+      - name: Add Linux to latest.json
+        if: env.HAS_KEY == 'true'
+        run: |
+          appimage=$(ls target/release/bundle/appimage/*.AppImage | head -n 1)
+          name=$(basename "$appimage")
+          sig=$(cat "$appimage.sig")
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v$VERSION/$name"
+          gh release download "v$VERSION" --pattern latest.json --dir manifest
+          jq --arg sig "$sig" --arg url "$url" \
+            '.platforms["linux-x86_64"] = { signature: $sig, url: $url }' \
+            manifest/latest.json > latest.json
+          cat latest.json
+          gh release upload "v$VERSION" latest.json --clobber
