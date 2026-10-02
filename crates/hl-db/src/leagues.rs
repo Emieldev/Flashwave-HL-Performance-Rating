@@ -295,6 +295,26 @@ impl Db {
             .collect())
     }
 
+    /// What each player played for this team in its officials: `(account,
+    /// class, seconds)`, from the logs of its ETF2L matches, most time first
+    /// per account (Flashy: the class must be the one played for the team,
+    /// not the one played most in the owner's pugs).
+    pub async fn team_classes(&self, team: i64) -> Result<Vec<(u32, String, i64)>> {
+        let rows = sqlx::query(
+            "SELECT sp.account_id, p.class, SUM(p.seconds) AS s
+             FROM etf2l_season_player sp
+             JOIN league_log l ON l.etf2l_match_id = sp.match_id
+             JOIN league_log_player p ON p.log_id = l.log_id AND p.account_id = sp.account_id
+             WHERE sp.team_id = ?1 AND p.class IS NOT NULL
+             GROUP BY sp.account_id, p.class
+             ORDER BY sp.account_id, s DESC",
+        )
+        .bind(team)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.get::<i64, _>("account_id") as u32, r.get("class"), r.get("s"))).collect())
+    }
+
     /// Ratings the pool holds for these accounts: `(account, class, games,
     /// average score)`, most played first per account.
     pub async fn pool_ratings(&self, accounts: &[u32], model_version: &str) -> Result<Vec<(u32, String, i64, f64)>> {

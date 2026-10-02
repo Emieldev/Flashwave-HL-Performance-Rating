@@ -23,7 +23,12 @@ export function DivTag({ divisions, accountId }: { divisions: MatchDivisions | u
   return (
     <span
       className={`div-badge div-t${Math.min(p.tier, 4)} div-small${p.exact ? "" : " div-near"}`}
-      title={p.exact ? t("{0} in Season {1}, when this was played", { "0": p.division, "1": p.season }) : t("{0} in Season {1}: the nearest season they played, not the one this was in", { "0": p.division, "1": p.season })}
+      title={(() => {
+        // "Season 34 (Summer 2025)", or a season between two numbered ones
+        // by its name alone ("AFA 2025", kept as 134 inside).
+        const when = p.season >= 100 ? (p.seasonName ?? "AFA") : p.seasonName ? `${t("Season {0}", { "0": p.season })} (${p.seasonName})` : t("Season {0}", { "0": p.season });
+        return p.exact ? t("{0} in {1}, when this was played", { "0": p.division, "1": when }) : t("{0} in {1}: the nearest season they played, not the one this was in", { "0": p.division, "1": when });
+      })()}
     >
       {short(p.division)}
     </span>

@@ -293,6 +293,18 @@ impl Catalogue {
         crate::leagues::canonical_tier(&name).and_then(|t| crate::leagues::TIER_NAMES.get(t as usize)).map_or(name, |n| n.to_string())
     }
 
+    /// The tier of the division one above a match's, on its season's own
+    /// ladder: "Division 2" -> Division 1, "Division 1" -> Premiership, a
+    /// named division one tier up today. `None` above the top.
+    fn division_above(&self, m: &CatMatch) -> Option<i64> {
+        let name = self.medal_division(m);
+        match Self::numbered(&name) {
+            Some(1) => Some(0),
+            Some(n) => crate::leagues::canonical_tier(&format!("Division {}", n - 1)),
+            None => crate::leagues::canonical_tier(&name).or_else(|| self.division_of(m).1).filter(|t| *t > 0).map(|t| t - 1),
+        }
+    }
+
     /// "Division 2A" -> "Division 2", "Open B" -> "Open", "Premiership
     /// Division" -> "Premiership": one division's groups, one name.
     fn ungrouped(name: &str) -> String {
@@ -949,14 +961,21 @@ impl Catalogue {
             }
             let (division, Some(tier)) = self.division_of(m) else { continue };
             names.entry((m.season, tier)).or_insert_with(|| division.clone());
+            // A Grand Final's finalists count one division up -- up that
+            // season's own ladder: AFA 2025's Division 2 finalists are
+            // Division 1 (High), not Premiership, which AFA ran on its own
+            // above Division 1.
             let grand_final = Self::is_final(m);
+            let promoted = grand_final.then(|| self.division_above(m)).flatten();
             for (a, team, _) in roster {
                 let Some(team) = team else { continue };
                 let e = count.entry((*a, m.season)).or_default().entry(tier).or_default();
                 e.0 += 1;
                 *e.1.entry(*team).or_default() += 1;
                 if grand_final {
-                    finals.entry((*a, m.season)).or_default().push((tier, *team));
+                    if let Some(up) = promoted {
+                        finals.entry((*a, m.season)).or_default().push((up, *team));
+                    }
                 }
             }
         }
@@ -975,7 +994,7 @@ impl Catalogue {
                 .filter(|(_, (n, _))| *n as usize >= MIN_FOR_DIVISION)
                 .map(|(t, (_, teams))| (*t, *teams.iter().max_by_key(|(_, n)| **n).map(|(team, _)| team).unwrap_or(&0)));
             // ...or its Grand Final, one division below.
-            let by_final = finals.get(&key).into_iter().flatten().filter(|(t, _)| *t > 0).map(|(t, team)| (t - 1, *team));
+            let by_final = finals.get(&key).into_iter().flatten().map(|(t, team)| (*t, *team));
             if let Some((tier, team)) = by_officials.chain(by_final).min_by_key(|(t, _)| *t) {
                 out.insert(key, (tier, name(key.1, tier), team));
             }
@@ -1215,6 +1234,8 @@ pub struct PlayerDivision {
     pub tier: i64,
     pub division: String,
     pub season: i64,
+    /// "Summer 2025", "AFA 2025": the season as people know it.
+    pub season_name: String,
     /// The match was inside that season; false when it was between seasons
     /// or in one the player did not play, and the nearest was used.
     pub exact: bool,
@@ -1280,7 +1301,8 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
     let mut players = HashMap::new();
     for a in accounts {
         if let Some((tier, division, season, exact)) = division_at(&windows, &divisions, a, played_at) {
-            players.insert(a, PlayerDivision { tier, division, season, exact });
+            let season_name = windows.iter().find(|w| w.0 == season).map(|w| w.1.clone()).unwrap_or_default();
+            players.insert(a, PlayerDivision { tier, division, season, season_name, exact });
         }
     }
     // Every tier by today's name: "High", not the older "Division 1".
@@ -1334,6 +1356,23 @@ mod tests {
         assert_eq!((event.account_id, event.class.as_str(), event.won), (211, "medic", true));
         assert!(!v.iter().any(|x| x.account_id == 311), "more than half the final to be a candidate");
         assert_eq!(event.final_maps, 2);
+    }
+
+    #[test]
+    fn a_finalist_steps_up_their_own_seasons_ladder() {
+        // AFA 2025: Premiership, then Division 1 to 4. A Division 2 finalist
+        // is Division 1 -- High -- not Premiership.
+        let c = cat(vec![
+            m(1, 134, "regular", Some("Division 2"), "Top Tiers", Some("Grand Final"), 10, 11, 6, 0),
+            m(2, 134, "regular", Some("Division 1"), "Top Tiers", Some("Grand Final"), 12, 13, 6, 0),
+            m(3, 34, "Playoffs", None, "Mid", Some("Grand Final"), 14, 15, 6, 0),
+            m(4, 34, "Playoffs", None, "Premiership", Some("Grand Final"), 16, 17, 6, 0),
+        ]);
+        let up = |id: i64| c.division_above(&c.matches[&id]);
+        assert_eq!(up(1), Some(1), "Division 2 -> Division 1, High");
+        assert_eq!(up(2), Some(0), "Division 1 -> Premiership");
+        assert_eq!(up(3), Some(1), "Mid -> High");
+        assert_eq!(up(4), None, "nothing above Premiership");
     }
 
     #[test]
