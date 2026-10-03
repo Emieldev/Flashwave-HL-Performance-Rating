@@ -9,6 +9,7 @@
 
 use crate::sources::Sources;
 use anyhow::Result;
+use hl_core::maps::map_name;
 use hl_core::SteamId;
 use hl_db::{CompetitionRow, Db, SeasonMatchRow};
 use serde::Serialize;
@@ -624,22 +625,24 @@ pub async fn team(db: &Db, team_id: i64) -> Result<Option<TeamView>> {
                 Some(rows) if !m.default_win => {
                     // A stopwatch map is played as two halves, each its own
                     // row: one map is their sum, won or lost once.
-                    let mut per_map: BTreeMap<&str, (i64, i64)> = BTreeMap::new();
+                    // Versions of one map are one map: pl_upward_f10 and _f12
+                    // are counted together as pl_upward.
+                    let mut per_map: BTreeMap<String, (i64, i64)> = BTreeMap::new();
                     for r in rows {
                         let (f, g) = if first { (r.clan1, r.clan2) } else { (r.clan2, r.clan1) };
-                        let e = per_map.entry(r.map.as_str()).or_default();
+                        let e = per_map.entry(map_name(&r.map)).or_default();
                         e.0 += f;
                         e.1 += g;
                     }
                     for (map, (f, g)) in per_map {
-                        let e = maps.entry(map.to_string()).or_insert_with(|| MapRecord { map: map.to_string(), record: Record::default(), rounds_for: 0, rounds_against: 0, in_pool: false });
+                        let e = maps.entry(map.clone()).or_insert_with(|| MapRecord { map: map.clone(), record: Record::default(), rounds_for: 0, rounds_against: 0, in_pool: false });
                         e.record.add(f, g);
                         e.rounds_for += f;
                         e.rounds_against += g;
                     }
                 }
                 _ if !m.default_win => {
-                    if let Some(map) = m.maps.first() {
+                    if let Some(map) = m.maps.first().map(|m| map_name(m)) {
                         let e = maps.entry(map.clone()).or_insert_with(|| MapRecord { map: map.clone(), record: Record::default(), rounds_for: 0, rounds_against: 0, in_pool: false });
                         e.record.add(a, b);
                     }
@@ -659,12 +662,12 @@ pub async fn team(db: &Db, team_id: i64) -> Result<Option<TeamView>> {
             score_for: us,
             score_against: them,
             default_win: m.default_win,
-            maps: m.maps.clone(),
+            maps: m.maps.iter().map(|m| map_name(m)).collect(),
         });
     }
     let mut maps: Vec<MapRecord> = maps.into_values().collect();
     for m in &mut maps {
-        m.in_pool = pool.iter().any(|p| p.eq_ignore_ascii_case(&m.map));
+        m.in_pool = pool.iter().any(|p| map_name(p) == m.map);
     }
     maps.sort_by(|a, b| b.in_pool.cmp(&a.in_pool).then(b.record.played.cmp(&a.record.played)));
 
