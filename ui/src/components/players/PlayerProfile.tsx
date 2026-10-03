@@ -248,7 +248,7 @@ export function seasonShort(season: number, name?: string): string {
 
 /** "Season 34 (Summer 2025)", or just "AFA 2025". */
 export function seasonLong(season: number, name: string): string {
-  return season >= 100 ? name : `${tx("Season {0}", { "0": season })} (${name})`;
+  return season >= 100 ? name : `${t("Season {0}", { "0": season })} (${name})`;
 }
 
 function shortDivision(d: string): string {
