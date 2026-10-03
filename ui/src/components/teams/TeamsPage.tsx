@@ -80,8 +80,9 @@ function seasonTitle(s: { season: number; seasonName: string }): string {
   return s.seasonName && !s.seasonName.startsWith("Season") ? t("Season {0} · {1}", { "0": s.season, "1": s.seasonName }) : t("Season {0}", { "0": s.season });
 }
 
-function useBanner(s: { season: number; seasonName: string }) {
-  return useQuery({ queryKey: ["season_banner", s.season], queryFn: () => api.getSeasonBanner(s.season, s.seasonName), staleTime: Infinity }).data ?? null;
+/** The season's banner, shrunk once by the app: small for a tile, large for the header. */
+function useBanner(s: { season: number; seasonName: string }, large = false) {
+  return useQuery({ queryKey: ["season_banner", s.season, large], queryFn: () => api.getSeasonBanner(s.season, s.seasonName, large), staleTime: Infinity }).data ?? null;
 }
 
 /** RED for even seasons, BLU for odd: the cards without a banner alternate. */
@@ -157,7 +158,7 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
   const tile = tiles.data?.find((s) => s.season === season);
   const tables = useQuery({ queryKey: ["leagues", season], queryFn: () => api.getLeagues(season), placeholderData: keepPreviousData });
   const podiums = useQuery({ queryKey: ["season_podiums", season], queryFn: () => api.getSeasonPodiums(season), staleTime: 5 * 60_000 });
-  const banner = useBanner(tile ?? { season, seasonName: "" });
+  const banner = useBanner(tile ?? { season, seasonName: "" }, true);
   const v = tables.data;
   return (
     <>

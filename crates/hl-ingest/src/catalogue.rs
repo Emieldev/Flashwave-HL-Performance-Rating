@@ -1545,6 +1545,41 @@ pub async fn season_banner(db: &Db, sources: &Sources, season: i64, season_name:
     Ok(found)
 }
 
+/// A season's banner as a small JPEG, made once from ETF2L's picture and
+/// kept: 640 px wide for a tile, 1280 for the season's own header. ETF2L's
+/// banners are up to 1.9 MB of PNG each; a grid of them made the page slow.
+/// When the picture cannot be read, its link is returned as it is.
+pub async fn season_banner_image(db: &Db, sources: &Sources, season: i64, season_name: &str, large: bool) -> Result<Option<String>> {
+    let width = if large { 1280 } else { 640 };
+    let key = format!("season_banner_img:{season}:{width}");
+    if let Some(v) = db.get_setting(&key).await? {
+        return Ok(Some(v));
+    }
+    let Some(url) = season_banner(db, sources, season, season_name).await? else { return Ok(None) };
+    let Some(bytes) = sources.fetch_bytes(&url).await? else { return Ok(Some(url)) };
+    match tokio::task::spawn_blocking(move || shrink_to_jpeg(&bytes, width)).await? {
+        Ok(jpeg) => {
+            use base64::Engine;
+            let data = format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(jpeg));
+            db.set_setting(&key, &data).await?;
+            Ok(Some(data))
+        }
+        Err(e) => {
+            tracing::warn!("season {season} banner kept at full size: {e:#}");
+            Ok(Some(url))
+        }
+    }
+}
+
+/// A picture no wider than `width`, as a JPEG at quality 80.
+fn shrink_to_jpeg(bytes: &[u8], width: u32) -> Result<Vec<u8>> {
+    let img = image::load_from_memory(bytes).context("reading the picture")?;
+    let img = if img.width() > width { img.resize(width, u32::MAX, image::imageops::FilterType::Triangle) } else { img };
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80).encode_image(&img.to_rgb8())?;
+    Ok(out)
+}
+
 /// The first picture in a post about this Highlander season: its title says
 /// "Highlander" and "Season 34" (not 340) or the season's name.
 fn banner_in(body: &str, number: Option<i64>, name: &str) -> Option<String> {
@@ -1707,6 +1742,21 @@ fn html_text(fragment: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_banner_is_shrunk_to_a_small_jpeg() {
+        // A 2048 x 1152 PNG, as big as ETF2L's largest.
+        let img = image::RgbImage::from_fn(2048, 1152, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, 90]));
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        let jpeg = super::shrink_to_jpeg(&png, 640).unwrap();
+        assert!(jpeg.starts_with(&[0xFF, 0xD8, 0xFF]), "a JPEG");
+        let back = image::load_from_memory(&jpeg).unwrap();
+        assert_eq!((back.width(), back.height()), (640, 360), "aspect kept");
+        // A small picture is not blown up.
+        let small = super::shrink_to_jpeg(&jpeg, 1280).unwrap();
+        assert_eq!(image::load_from_memory(&small).unwrap().width(), 640);
+    }
+
     use super::*;
 
     #[test]

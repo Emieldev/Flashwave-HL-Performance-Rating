@@ -195,7 +195,7 @@ const realApi = {
   getLeagues: (season?: number) => invoke<LeagueView>("get_leagues", { season: season ?? null }),
   getTeam: (teamId: number) => invoke<TeamView | null>("get_team", { teamId }),
   getSeasonsOverview: () => invoke<SeasonTile[]>("get_seasons_overview"),
-  getSeasonBanner: (season: number, seasonName: string) => invoke<string | null>("get_season_banner", { season, seasonName }),
+  getSeasonBanner: (season: number, seasonName: string, large = false) => invoke<string | null>("get_season_banner", { season, seasonName, large }),
   getSeasonPodiums: (season: number) => invoke<Podium[]>("get_season_podiums", { season }),
   getTeamHonours: (teamId: number) => invoke<TeamHonours>("get_team_honours", { teamId }),
   getTeamEtf2l: (teamId: number) => invoke<TeamEtf2l>("get_team_etf2l", { teamId }),
