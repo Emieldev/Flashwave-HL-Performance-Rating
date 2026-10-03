@@ -13,7 +13,7 @@ use hl_core::SteamId;
 use hl_db::{CompetitionRow, Db, SeasonMatchRow};
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Seasons kept besides the current one: two before it is about a year.
 pub const SEASONS_BACK: i64 = 2;
@@ -561,7 +561,8 @@ pub struct RosterRow {
     pub name: String,
     pub matches: i64,
     pub last_played: i64,
-    /// Their most played class in the pool, games on it, and average rating.
+    /// The class they played most for this team in its officials, the
+    /// officials rated on it, and their average rating there.
     pub class: Option<String>,
     pub games: i64,
     pub rating: Option<f64>,
@@ -656,24 +657,32 @@ pub async fn team(db: &Db, team_id: i64) -> Result<Option<TeamView>> {
     }
     maps.sort_by(|a, b| b.in_pool.cmp(&a.in_pool).then(b.record.played.cmp(&a.record.played)));
 
+    // Each player's class and rating for this team: what they played in its
+    // officials, not their most played class anywhere -- a player's pugs
+    // and their other teams say nothing about their role here.
     let players = db.season_players(team_id).await?;
-    let accounts: Vec<u32> = players.iter().map(|p| p.0).collect();
-    let rated = db.pool_ratings(&accounts, hl_rating::MODEL_VERSION).await?;
-    let roster = players
-        .into_iter()
-        .map(|(account_id, name, matches, last_played)| {
-            let best = rated.iter().find(|r| r.0 == account_id);
-            RosterRow {
-                account_id,
-                name,
-                matches,
-                last_played,
-                class: best.map(|r| r.1.clone()),
-                games: best.map_or(0, |r| r.2),
-                rating: best.map(|r| r.3),
+    let classes = db.team_classes(team_id).await?;
+    let ours: HashSet<i64> = matches.iter().map(|m| m.match_id).collect();
+    let mut roster = Vec::new();
+    for (account_id, name, matches, last_played) in players {
+        // Most time first per account.
+        let class = classes.iter().find(|c| c.0 == account_id).map(|c| c.1.clone());
+        let (mut games, mut rating) = (0, None);
+        if let Some(class) = &class {
+            let rated: Vec<hl_db::RatedGame> = db
+                .rated_games(hl_rating::MODEL_VERSION, Some(account_id))
+                .await?
+                .into_iter()
+                .filter(|g| g.class == *class && g.etf2l_match_id.is_some_and(|id| ours.contains(&id)))
+                .collect();
+            let officials: HashSet<i64> = rated.iter().filter_map(|g| g.etf2l_match_id).collect();
+            games = officials.len() as i64;
+            if !rated.is_empty() {
+                rating = Some(rated.iter().map(|g| g.score).sum::<f64>() / rated.len() as f64);
             }
-        })
-        .collect();
+        }
+        roster.push(RosterRow { account_id, name, matches, last_played, class, games, rating });
+    }
 
     Ok(Some(TeamView { team_id, name, country, avatar, seasons, record, maps, results, roster }))
 }

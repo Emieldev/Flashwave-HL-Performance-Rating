@@ -385,6 +385,11 @@ function Teams({ p }: { p: Profile }) {
               <span className="pp-team">
                 <TeamAvatar src={s.team.avatar} />
                 {s.team.name}
+                {s.merc && (
+                  <span className="muted" title={t("Played for them as a merc, not on their roster: no medal of theirs")}>
+                    {" "}· {t("merc")}
+                  </span>
+                )}
               </span>
             </td>
             <td>{s.tier !== null ? <DivisionBadge d={{ name: s.division, tier: s.tier }} /> : s.division}</td>

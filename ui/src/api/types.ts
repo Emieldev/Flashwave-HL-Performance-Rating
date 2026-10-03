@@ -249,6 +249,8 @@ export interface PlayerSeason {
   won: number;
   lost: number;
   place: number | null;
+  /** Only ever a merc for this team that season. */
+  merc?: boolean;
 }
 
 export interface Medal {
@@ -380,7 +382,7 @@ export interface Rankings {
 
 /** Every player's ETF2L division at the time of a match (Q38). */
 export interface MatchDivisions {
-  players: Record<number, { tier: number; division: string; season: number; exact: boolean }>;
+  players: Record<number, { tier: number; division: string; season: number; seasonName?: string; exact: boolean }>;
   tierNames: Record<number, string>;
 }
 

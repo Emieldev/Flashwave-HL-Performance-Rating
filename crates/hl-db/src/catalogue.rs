@@ -150,6 +150,15 @@ impl Db {
             .collect())
     }
 
+    /// The mercs of every match: `(match, account)` for each player ETF2L
+    /// lists with no team -- someone playing for a team they are not on.
+    pub async fn catalogue_mercs(&self) -> Result<Vec<(i64, u32)>> {
+        let rows: Vec<(i64, i64)> = sqlx::query_as("SELECT match_id, account_id FROM etf2l_season_player WHERE team_id IS NULL")
+            .fetch_all(self.pool())
+            .await?;
+        Ok(rows.into_iter().map(|(m, a)| (m, a as u32)).collect())
+    }
+
     /// A match's date and everyone in it, for their divisions (Q38).
     pub async fn match_accounts(&self, log_id: i64) -> Result<Option<(i64, Vec<u32>)>> {
         let Some(played_at) = sqlx::query_scalar::<_, Option<i64>>("SELECT played_at FROM match WHERE log_id = ?1")

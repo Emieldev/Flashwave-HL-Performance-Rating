@@ -177,8 +177,8 @@ function Team({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
           <h2>{t("Players")}</h2>
           <p className="hint">
             {rated.length > 0
-              ? t("Ratings are from your match pool: the games of theirs you have played in or against.")
-              : t("None of them is in your match pool yet, so there are no ratings to show.")}
+              ? t("Class: what they played for this team in its officials. Rating: their average on it in those officials.")
+              : t("None of this team's officials have been downloaded yet, so there are no classes or ratings to show.")}
           </p>
           <div className="table-wrap">
             <table className="match-table">
@@ -196,7 +196,7 @@ function Team({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
                     <td className="nowrap">{r.name}</td>
                     <td className="num">{r.matches}</td>
                     <td>{r.class ? capitalize(r.class) : <span className="muted">–</span>}</td>
-                    <td className="num" title={r.rating !== null ? t("{0} rated games", { "0": r.games }) : undefined}>
+                    <td className="num" title={r.rating !== null ? t("{0} rated officials", { "0": r.games }) : undefined}>
                       {r.rating !== null ? rating(r.rating) : <span className="muted">–</span>}
                     </td>
                   </tr>
