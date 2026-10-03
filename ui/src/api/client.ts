@@ -46,6 +46,9 @@ import type {
   MapTendencies,
   LeagueView,
   TeamView,
+  SeasonTile,
+  Podium,
+  TeamHonours,
   DemoImported,
   DemoLinked,
   CartView,
@@ -190,6 +193,10 @@ const realApi = {
   /** Q29: one season's division tables; the newest when no season is given. */
   getLeagues: (season?: number) => invoke<LeagueView>("get_leagues", { season: season ?? null }),
   getTeam: (teamId: number) => invoke<TeamView | null>("get_team", { teamId }),
+  getSeasonsOverview: () => invoke<SeasonTile[]>("get_seasons_overview"),
+  getSeasonBanner: (season: number, seasonName: string) => invoke<string | null>("get_season_banner", { season, seasonName }),
+  getSeasonPodiums: (season: number) => invoke<Podium[]>("get_season_podiums", { season }),
+  getTeamHonours: (teamId: number) => invoke<TeamHonours>("get_team_honours", { teamId }),
   /** Q28: a map's callouts; the owner's copy wins over the built-in one. */
   getCallouts: (map: string) => invoke<CalloutFile>("get_callouts", { map }),
   saveCallouts: (map: string, file: CalloutFile) => invoke<CalloutFile>("save_callouts", { map, file }),

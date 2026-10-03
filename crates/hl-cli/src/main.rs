@@ -1370,6 +1370,29 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["season-tiles", rest @ ..] => {
+            // The Teams tab's season tiles; --banners looks for each banner.
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            for s in hl_ingest::catalogue::seasons_overview(&db).await? {
+                let banner = if rest.contains(&"--banners") { hl_ingest::catalogue::season_banner(&db, &sources, s.season, &s.season_name).await? } else { None };
+                println!(
+                    "S{:<4} {:<14} {} divisions, {} teams, {} matches; champion {} ({}); you {}{}",
+                    s.season,
+                    s.season_name,
+                    s.divisions.len(),
+                    s.teams,
+                    s.matches,
+                    s.champion.as_ref().map_or("-", |t| t.name.as_str()),
+                    s.champion_division.as_deref().unwrap_or("-"),
+                    s.you.as_ref().map_or("-".to_string(), |y| format!("{} {} {:?}", y.team.name, y.division, y.place)),
+                    banner.map(|b| format!("
+      {b}")).unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+
         ["finals"] => {
             // Every league Grand Final and whether its logs are held.
             let db = Db::connect(&db_path).await?;

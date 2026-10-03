@@ -191,7 +191,12 @@ pub fn run() {
             // The league sample, when it is switched on (Settings).
             let busy = Arc::new(AtomicBool::new(false));
             let league_activity = league::SharedActivity::default();
-            league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
+            // The mass log downloader is the developer's (Flashy): it runs in
+            // a dev build only. A release never starts it, whatever the
+            // database's setting says.
+            if cfg!(debug_assertions) {
+                league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
+            }
 
             app.manage(AppState {
                 db,
@@ -230,6 +235,10 @@ pub fn run() {
             sync_commands::search_catalogue,
             sync_commands::get_player_profile,
             sync_commands::get_trends_career,
+            sync_commands::get_seasons_overview,
+            sync_commands::get_season_banner,
+            sync_commands::get_season_podiums,
+            sync_commands::get_team_honours,
             sync_commands::get_player_stats,
             sync_commands::get_rankings,
             sync_commands::get_match_divisions,

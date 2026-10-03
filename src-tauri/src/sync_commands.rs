@@ -268,6 +268,10 @@ pub async fn get_league_activity(state: State<'_, AppState>) -> CmdResult<crate:
 /// Switch the league sample's background download on or off.
 #[tauri::command]
 pub async fn set_league_sample(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
+    // Dev builds only, like the downloader itself.
+    if !cfg!(debug_assertions) {
+        return Ok(());
+    }
     Ok(hl_ingest::league_sample::set_enabled(&state.db, on).await?)
 }
 
@@ -1293,6 +1297,30 @@ pub async fn search_catalogue(state: State<'_, AppState>, query: String) -> CmdR
 #[tauri::command]
 pub async fn get_player_profile(state: State<'_, AppState>, account_id: u32) -> CmdResult<hl_ingest::catalogue::Profile> {
     Ok(hl_ingest::catalogue::profile(&state.db, &state.sources, account_id).await?)
+}
+
+/// Every league season as a tile (the Teams tab's first screen).
+#[tauri::command]
+pub async fn get_seasons_overview(state: State<'_, AppState>) -> CmdResult<Vec<hl_ingest::catalogue::SeasonTile>> {
+    Ok(hl_ingest::catalogue::seasons_overview(&state.db).await?)
+}
+
+/// A season's banner from ETF2L's news, looked for once and kept.
+#[tauri::command]
+pub async fn get_season_banner(state: State<'_, AppState>, season: i64, season_name: String) -> CmdResult<Option<String>> {
+    Ok(hl_ingest::catalogue::season_banner(&state.db, &state.sources, season, &season_name).await?)
+}
+
+/// A season's podiums, each division's medals and MVP.
+#[tauri::command]
+pub async fn get_season_podiums(state: State<'_, AppState>, season: i64) -> CmdResult<Vec<hl_ingest::catalogue::Podium>> {
+    Ok(hl_ingest::catalogue::season_podiums(&state.db, season).await?)
+}
+
+/// A team's medals and its seasons.
+#[tauri::command]
+pub async fn get_team_honours(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamHonours> {
+    Ok(hl_ingest::catalogue::team_honours(&state.db, team_id).await?)
 }
 
 /// A player's career on trends.tf, read once a day (Q37).

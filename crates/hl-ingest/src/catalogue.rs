@@ -1323,6 +1323,243 @@ pub async fn match_divisions(db: &Db, log_id: i64) -> Result<MatchDivisions> {
     Ok(MatchDivisions { players, tier_names })
 }
 
+// ---- Seasons and teams, for the Teams tab (Flashy's UX pass) ----------
+
+/// One season's tile: what it was, when, who won it, and how the owner did.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeasonTile {
+    pub season: i64,
+    pub season_name: String,
+    /// Unix seconds: its first and last official.
+    pub from: i64,
+    pub to: i64,
+    /// Top tier first.
+    pub divisions: Vec<Division>,
+    pub teams: usize,
+    pub matches: usize,
+    /// The top division's winner, once there is one.
+    pub champion: Option<Team>,
+    pub champion_division: Option<String>,
+    /// The owner's team that season, its division and its medal.
+    pub you: Option<PlayerSeason>,
+}
+
+/// One division's podium in a season, and its MVP.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Podium {
+    pub division: String,
+    pub tier: Option<i64>,
+    pub medals: Vec<PodiumPlace>,
+    pub mvp: Option<Mvp>,
+    pub mvp_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodiumPlace {
+    pub place: u8,
+    pub team: Team,
+    pub how: String,
+}
+
+/// A team's honours: its medals, and each season's division and record.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamHonours {
+    pub medals: Vec<Medal>,
+    /// Newest first.
+    pub seasons: Vec<TeamSeason>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamSeason {
+    pub season: i64,
+    pub season_name: String,
+    pub division: String,
+    pub tier: Option<i64>,
+    pub played: u32,
+    pub won: u32,
+    pub lost: u32,
+    pub place: Option<u8>,
+}
+
+impl Catalogue {
+    /// A tier for a medal division's name.
+    fn tier_of_name(&self, season: i64, name: &str) -> Option<i64> {
+        crate::leagues::canonical_tier(name).or_else(|| self.tiers.get(&(season, name.to_string())).copied()).or_else(|| self.tier_by_name.get(name).copied())
+    }
+}
+
+/// Every league season, newest first, as tiles.
+pub async fn seasons_overview(db: &Db) -> Result<Vec<SeasonTile>> {
+    let cat = Catalogue::load(db).await?;
+    let medals = cat.medals();
+    let windows = cat.season_windows();
+    let me = db.get_me().await?.map(|s| s.account_id());
+    let mine: Vec<PlayerSeason> = match me {
+        Some(a) => cat.player(a, &medals).0,
+        None => Vec::new(),
+    };
+    let mut out = Vec::new();
+    for (season, name, from, to) in windows {
+        let mut teams: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut divisions: BTreeMap<(i64, String), ()> = BTreeMap::new();
+        let mut matches = 0;
+        for m in cat.matches.values().filter(|m| m.season == season && m.stage != "Cup" && Catalogue::played(m)) {
+            matches += 1;
+            teams.insert(m.clan1);
+            teams.insert(m.clan2);
+            let d = cat.medal_division(m);
+            if let Some(t) = cat.tier_of_name(season, &d) {
+                if !d.is_empty() {
+                    divisions.insert((t, d), ());
+                }
+            }
+        }
+        let champion = medals
+            .iter()
+            .filter(|((s, _), _)| *s == season)
+            .filter_map(|((_, d), list)| Some((cat.tier_of_name(season, d)?, d, list.iter().find(|(p, _, _)| *p == 1)?.1)))
+            .min_by_key(|(t, _, _)| *t);
+        // Their own team; a merc's where they were on no roster that season.
+        let here: Vec<&PlayerSeason> = mine.iter().filter(|p| p.season == season).collect();
+        let you = here.iter().filter(|p| !p.merc).max_by_key(|p| p.played).or_else(|| here.iter().max_by_key(|p| p.played)).map(|p| (*p).clone());
+        out.push(SeasonTile {
+            season,
+            season_name: name,
+            from: from + 3 * 24 * 3600,
+            to: to - 3 * 24 * 3600,
+            divisions: divisions.into_keys().map(|(tier, name)| Division { name, tier }).collect(),
+            teams: teams.len(),
+            matches,
+            champion: champion.map(|(_, _, t)| cat.team(t)),
+            champion_division: champion.map(|(_, d, _)| d.clone()),
+            you,
+        });
+    }
+    Ok(out)
+}
+
+
+/// One season's podiums, top tier first, each with its event MVP.
+pub async fn season_podiums(db: &Db, season: i64) -> Result<Vec<Podium>> {
+    let cat = Catalogue::load(db).await?;
+    let rated = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
+    let mvps = cat.mvps(&rated);
+    let mut out: Vec<Podium> = cat
+        .medals()
+        .into_iter()
+        .filter(|((s, _), _)| *s == season)
+        .map(|((_, division), list)| {
+            let mut medals: Vec<PodiumPlace> = list.into_iter().map(|(place, team, how)| PodiumPlace { place, team: cat.team(team), how }).collect();
+            medals.sort_by_key(|p| p.place);
+            let mvp = mvps.iter().find(|m| m.event && m.season == season && m.division == division).cloned();
+            Podium { tier: cat.tier_of_name(season, &division), mvp_name: mvp.as_ref().map(|m| cat.name_of(m.account_id)), division, medals, mvp }
+        })
+        .collect();
+    out.sort_by_key(|p| (p.tier.unwrap_or(99), p.division.clone()));
+    Ok(out)
+}
+
+/// A team's medals and its seasons, newest first.
+pub async fn team_honours(db: &Db, team: i64) -> Result<TeamHonours> {
+    let cat = Catalogue::load(db).await?;
+    let all = cat.medals();
+    let mut medals: Vec<Medal> = Vec::new();
+    for ((season, division), list) in &all {
+        for (place, t, how) in list {
+            if *t == team {
+                medals.push(Medal {
+                    season: *season,
+                    season_name: cat.season_name(*season),
+                    division: division.clone(),
+                    tier: cat.tier_of_name(*season, division),
+                    place: *place,
+                    team: cat.team(team),
+                    how: how.clone(),
+                });
+            }
+        }
+    }
+    medals.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(a.place.cmp(&b.place)));
+    // Each season: the division it played most, and its record.
+    let mut by: BTreeMap<i64, (HashMap<(String, Option<i64>), u32>, u32, u32, u32)> = BTreeMap::new();
+    for m in cat.matches.values().filter(|m| Catalogue::played(m) && m.stage != "Cup" && (m.clan1 == team || m.clan2 == team)) {
+        let e = by.entry(m.season).or_default();
+        let d = cat.medal_division(m);
+        let t = cat.tier_of_name(m.season, &d);
+        *e.0.entry((d, t)).or_default() += 1;
+        let (_, _, won) = Catalogue::result_for(m, team);
+        e.1 += 1;
+        e.2 += u32::from(won == Some(true));
+        e.3 += u32::from(won == Some(false));
+    }
+    let mut seasons: Vec<TeamSeason> = by
+        .into_iter()
+        .map(|(season, (divs, played, won, lost))| {
+            let ((division, tier), _) = divs.into_iter().max_by_key(|(_, n)| *n).unwrap_or(((String::new(), None), 0));
+            let place = medals.iter().filter(|m| m.season == season).map(|m| m.place).min();
+            TeamSeason { season, season_name: cat.season_name(season), division, tier, played, won, lost, place }
+        })
+        .collect();
+    seasons.sort_by_key(|s| std::cmp::Reverse(season_order(s.season)));
+    Ok(TeamHonours { medals, seasons })
+}
+
+/// The season's banner from ETF2L's news, where one of its posts has one:
+/// looked for once and kept ("-" when there is none, asked again after a
+/// week). Season tiles show it.
+pub async fn season_banner(db: &Db, sources: &Sources, season: i64, season_name: &str) -> Result<Option<String>> {
+    let key = format!("season_banner:{season}");
+    if let Some(v) = db.get_setting(&key).await? {
+        let (url, at) = v.split_once('|').unwrap_or((v.as_str(), "0"));
+        let fresh = now() - at.parse::<i64>().unwrap_or(0) < 7 * 24 * 3600;
+        if url != "-" || fresh {
+            return Ok((url != "-").then(|| url.to_string()));
+        }
+    }
+    // "Highlander Season 34"; by name for the seasons without a number
+    // (Winter 2023 to Winter 2024, AFA 2025).
+    let wanted = if season < crate::leagues::OFF_SEASON && !(28..=31).contains(&season) {
+        format!("Highlander Season {season}")
+    } else {
+        format!("Highlander {season_name}")
+    };
+    let url = format!("https://etf2l.org/wp-json/wp/v2/posts?search={}&per_page=20&_fields=title,content", wanted.replace(' ', "%20"));
+    let found = match sources.fetch_text(&url).await {
+        Ok(Some(body)) => banner_in(&body, &wanted),
+        _ => None,
+    };
+    db.set_setting(&key, &format!("{}|{}", found.as_deref().unwrap_or("-"), now())).await?;
+    Ok(found)
+}
+
+/// The first season banner among the posts whose title names the season.
+fn banner_in(body: &str, wanted: &str) -> Option<String> {
+    let posts: Vec<Value> = serde_json::from_str(body).ok()?;
+    let wanted = wanted.to_ascii_lowercase();
+    for p in posts {
+        let title = p.pointer("/title/rendered").and_then(Value::as_str).unwrap_or("").to_ascii_lowercase();
+        // "Highlander Season 3" must not take Season 34's post.
+        let fits = title.find(&wanted).is_some_and(|i| !title[i + wanted.len()..].starts_with(|c: char| c.is_ascii_digit()));
+        if !fits {
+            continue;
+        }
+        let content = p.pointer("/content/rendered").and_then(Value::as_str).unwrap_or("");
+        for part in content.split("<img").skip(1) {
+            let Some(src) = part.split("src=\"").nth(1).and_then(|s| s.split('"').next()) else { continue };
+            let lower = src.to_ascii_lowercase();
+            if lower.contains("/wp-content/uploads/") && !lower.contains("placeholder") && (lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") || lower.ends_with(".webp")) {
+                return Some(src.replace("&amp;", "&"));
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1404,6 +1641,17 @@ mod tests {
         let (_, won, officials) = c.player(500, &medals);
         assert!(won.is_empty(), "no medal for a merc appearance");
         assert_eq!(officials.len(), 1, "but the official is theirs");
+    }
+
+    #[test]
+    fn a_season_banner_is_taken_from_a_post_naming_that_season_only() {
+        let body = r#"[
+            {"title":{"rendered":"Highlander Season 34 (Summer 2025): Playoffs"},"content":{"rendered":"<p><img src=\"https://etf2l.org/wp-content/uploads/2025/HL34.jpg\"></p>"}},
+            {"title":{"rendered":"Highlander Season 3 recap"},"content":{"rendered":"<img src=\"https://etf2l.org/wp-content/uploads/placeholderbanner.jpg\"><img src=\"/images/flags/European.gif\"><img src=\"https://etf2l.org/wp-content/uploads/2014/HL3.png\">"}}
+        ]"#;
+        assert_eq!(banner_in(body, "Highlander Season 3").as_deref(), Some("https://etf2l.org/wp-content/uploads/2014/HL3.png"), "not Season 34's, not the placeholder, not a flag");
+        assert_eq!(banner_in(body, "Highlander Season 34").as_deref(), Some("https://etf2l.org/wp-content/uploads/2025/HL34.jpg"));
+        assert_eq!(banner_in(body, "Highlander Season 35"), None);
     }
 
     #[test]

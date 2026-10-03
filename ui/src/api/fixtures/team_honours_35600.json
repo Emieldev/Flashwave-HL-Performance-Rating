@@ -1,0 +1,108 @@
+{
+  "medals": [
+    {
+      "season": 34,
+      "seasonName": "Summer 2025",
+      "division": "Mid",
+      "tier": 2,
+      "place": 3,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "how": "joint 3rd: semi-final 3-6"
+    },
+    {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Low",
+      "tier": 3,
+      "place": 1,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "how": "Grand Final 6-3"
+    },
+    {
+      "season": 31,
+      "seasonName": "Winter 2024",
+      "division": "Low",
+      "tier": 3,
+      "place": 1,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "how": "Grand Final 4-2"
+    },
+    {
+      "season": 30,
+      "seasonName": "Autumn 2023",
+      "division": "Open",
+      "tier": 4,
+      "place": 1,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "how": "Grand Final 5-1"
+    }
+  ],
+  "seasons": [
+    {
+      "season": 134,
+      "seasonName": "AFA 2025",
+      "division": "Division 3",
+      "tier": 2,
+      "played": 4,
+      "won": 0,
+      "lost": 4,
+      "place": null
+    },
+    {
+      "season": 34,
+      "seasonName": "Summer 2025",
+      "division": "Mid",
+      "tier": 2,
+      "played": 6,
+      "won": 4,
+      "lost": 2,
+      "place": 3
+    },
+    {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Low",
+      "tier": 3,
+      "played": 9,
+      "won": 7,
+      "lost": 2,
+      "place": 1
+    },
+    {
+      "season": 31,
+      "seasonName": "Winter 2024",
+      "division": "Low",
+      "tier": 3,
+      "played": 7,
+      "won": 5,
+      "lost": 1,
+      "place": 1
+    },
+    {
+      "season": 30,
+      "seasonName": "Autumn 2023",
+      "division": "Open",
+      "tier": 4,
+      "played": 6,
+      "won": 6,
+      "lost": 0,
+      "place": 1
+    }
+  ]
+}
