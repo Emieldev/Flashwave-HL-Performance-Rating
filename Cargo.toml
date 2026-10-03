@@ -37,6 +37,12 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Dependencies are built without debug info in dev builds: they are never
+# stepped through, and their debug info was most of a 30+ GB target folder.
+# The workspace's own crates keep theirs.
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 opt-level = "s"
 lto = true
