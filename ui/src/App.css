@@ -1070,6 +1070,25 @@ th.num {
   line-height: 1.35;
 }
 
+/* Stops a running sync. Quiet until hovered: it is not the main thing. */
+.dl-cancel {
+  align-self: flex-end;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.dl-cancel:hover:not(:disabled) {
+  background: rgba(var(--bad-rgb), 0.12);
+  border-color: rgba(var(--bad-rgb), 0.5);
+  color: var(--bad);
+}
+
 /* Step 8's match: "Official vs Kebab · pl_upward · 14 Sept". */
 .dl-match {
   color: var(--text);

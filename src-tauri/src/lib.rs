@@ -29,6 +29,8 @@ pub struct AppState {
     pub sources: Arc<Sources>,
     /// Set while a sync or reprocess is running; a second one is refused.
     pub busy: Arc<AtomicBool>,
+    /// Stops the running sync (Flashy): taken and fired by `sync_cancel`.
+    pub sync_cancel: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
     /// What the league sample's background job is doing, for Settings.
     pub league_activity: league::SharedActivity,
     /// Demo downloads waiting their turn, and the one permit they take in
@@ -205,6 +207,7 @@ pub fn run() {
                 _lock: lock,
                 sources,
                 busy,
+                sync_cancel: Arc::default(),
                 league_activity,
                 demo_queue: Arc::new(sync_commands::DemoQueue::default()),
                 demo_turn: Arc::new(tokio::sync::Semaphore::new(1)),
@@ -228,6 +231,7 @@ pub fn run() {
             sync_commands::sync_start,
             sync_commands::reprocess_start,
             sync_commands::sync_busy,
+            sync_commands::sync_cancel,
             sync_commands::newest_log,
             sync_commands::get_rating_guide,
             sync_commands::get_league_sample,

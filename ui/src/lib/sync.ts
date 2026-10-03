@@ -20,7 +20,9 @@ export type SyncState =
   | { state: "idle" }
   | { state: "running"; progress: Progress | null; failures: number; notes: string[] }
   | { state: "done"; result: SyncDone; notes: string[] }
-  | { state: "error"; message: string };
+  | { state: "error"; message: string }
+  /** Stopped with Cancel: what landed before is kept. */
+  | { state: "cancelled" };
 
 /** How often the match list may refresh while logs are arriving. Newest are
  *  fetched first, so last night's game shows up within seconds — but a
@@ -117,6 +119,11 @@ export function watchSync(qc: QueryClient) {
       void loadEtf2lNames();
     },
     onError: (e) => {
+      if (e.kind === "cancelled") {
+        set({ state: "cancelled" });
+        invalidateAll(qc);
+        return;
+      }
       noteError({ what: "the sync", message: explain(e.message), detail: e.message });
       set({ state: "error", message: e.message });
     },
@@ -159,6 +166,15 @@ export function explain(raw: string): string {
 
 /** Ask for a sync, and show it as running from the click rather than from the
  *  first event — indexing takes a few seconds before anything is reported. */
+/** Stop the running sync (Flashy). The card says so when the backend has. */
+export async function cancelSync() {
+  try {
+    await api.syncCancel();
+  } catch (e) {
+    noteError({ what: "cancelling the sync", message: errorMessage(e) });
+  }
+}
+
 export async function startSync(full = false) {
   set({ state: "running", progress: null, failures: 0, notes: [] });
   try {
@@ -179,7 +195,7 @@ export async function startRebuild() {
 }
 
 export function dismissSync() {
-  if (status.state === "done" || status.state === "error") set({ state: "idle" });
+  if (status.state === "done" || status.state === "error" || status.state === "cancelled") set({ state: "idle" });
 }
 
 export function useSyncStatus(): SyncState {

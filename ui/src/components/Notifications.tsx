@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
-import { dismissSync, fractionOf, labelOf, matchOf, phaseOf, useSyncStatus } from "../lib/sync";
+import { cancelSync, dismissSync, fractionOf, labelOf, matchOf, phaseOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
 import { dismissNewLogs, useNewLogs } from "../lib/newlogs";
 import { formatDate } from "../lib/format";
@@ -164,6 +164,8 @@ function SyncCard() {
 
   const done = sync.state === "done";
   const failed = sync.state === "error";
+  const cancelled = sync.state === "cancelled";
+  const rebuilding = sync.state === "running" && sync.progress?.kind === "reprocessing";
   const fraction = sync.state === "running" ? fractionOf(sync.progress) : null;
   const phase = sync.state === "running" ? phaseOf(sync.progress) : null;
 
@@ -177,6 +179,7 @@ function SyncCard() {
             (sync.progress?.kind === "reprocessing" ? t("Rebuilding") : t("Syncing"))}
           {done && (sync.result.kind === "reprocess" ? t("Rebuilt") : t("Sync finished"))}
           {failed && t("Sync failed")}
+          {cancelled && t("Sync cancelled")}
         </span>
         {/* A running sync has no close button: stopping it is not something
             this card can do, and a card that hides itself would only make
@@ -199,6 +202,12 @@ function SyncCard() {
           )}
           <p className="dl-label">{labelOf(sync.progress)}</p>
           {matchOf(sync.progress) && <p className="dl-sub dl-match">{matchOf(sync.progress)}</p>}
+          {/* A rebuild rewrites every table and has to finish; a sync can stop. */}
+          {!rebuilding && (
+            <button className="dl-cancel" onClick={() => void cancelSync()}>
+              {t("Cancel")}
+            </button>
+          )}
           <div className="dl-bar" aria-hidden>
             <span
               className={fraction === null ? "dl-fill dl-unknown" : "dl-fill"}
@@ -208,6 +217,8 @@ function SyncCard() {
           {sync.failures > 0 && <p className="dl-sub dl-error">{tx("{failures} failed", { failures: sync.failures })}</p>}
         </>
       )}
+
+      {cancelled && <p className="dl-sub">{t("Stopped. The matches downloaded so far are kept; the next sync carries on from there.")}</p>}
 
       {done && (
         <p className="dl-sub">

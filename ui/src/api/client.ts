@@ -305,6 +305,7 @@ const realApi = {
     listen<NewDemo>("demos://new", (e) => h(e.payload)),
 
   /** Subscribe to sync events. Returns a function that unsubscribes all three. */
+  syncCancel: () => invoke<boolean>("sync_cancel"),
   onSync: async (h: SyncHandlers): Promise<UnlistenFn> => {
     const offs = await Promise.all([
       listen<Progress>("sync://progress", (e) => h.onProgress(e.payload)),

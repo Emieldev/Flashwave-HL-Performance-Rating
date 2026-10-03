@@ -63,12 +63,19 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
     let sources = state.sources.clone();
     let db_path = state.db_path.clone();
     let weights_path = state.db_path.with_file_name("weights.toml");
+    // Cancel (Flashy): the button fires this, and the work below is dropped
+    // at its next await. A log is stored in one transaction, so a match
+    // half-written rolls back; what landed before stays, and the next sync
+    // carries on from there.
+    let (cancel, mut cancelled) = tokio::sync::oneshot::channel::<()>();
+    *state.sync_cancel.lock().unwrap() = Some(cancel);
+    let cancel_slot = state.sync_cancel.clone();
 
     tauri::async_runtime::spawn(async move {
         let _guard = guard;
         let emitter = app.clone();
         let opts = SyncOptions { full, max_fetch: None };
-        let result = async {
+        let work = async {
             // A copy first: a sync rewrites derived tables, and the file is
             // the only thing here that cannot be fetched again.
             if let Err(e) = hl_ingest::backup::run(&db, &db_path, false).await {
@@ -174,8 +181,17 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
             })
             .await?;
             anyhow::Ok(summary)
-        }
-        .await;
+        };
+        let result = tokio::select! {
+            r = work => r,
+            Ok(()) = &mut cancelled => {
+                tracing::info!("sync cancelled");
+                *cancel_slot.lock().unwrap() = None;
+                let _ = app.emit(EV_ERROR, CmdError::new("cancelled", "Sync cancelled."));
+                return;
+            }
+        };
+        *cancel_slot.lock().unwrap() = None;
 
         match result {
             Ok(SyncSummary { fetched, failed, stats }) => {
@@ -326,6 +342,13 @@ pub async fn newest_log(state: State<'_, AppState>) -> CmdResult<Option<NewestLo
         .ok_or_else(|| CmdError::new("missing_config", "Set your SteamID before syncing."))?;
     let Some((log_id, source)) = state.sources.newest_log(&me.to_steamid64()).await? else { return Ok(None) };
     Ok(Some(NewestLog { log_id, source, known: state.db.is_indexed(log_id).await? }))
+}
+
+/// Stop the running sync. `false` when there is none to stop (a rebuild is
+/// not stopped this way: it rewrites every table and must finish).
+#[tauri::command]
+pub async fn sync_cancel(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(state.sync_cancel.lock().unwrap().take().is_some_and(|tx| tx.send(()).is_ok()))
 }
 
 #[tauri::command]

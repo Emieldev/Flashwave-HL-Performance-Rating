@@ -490,6 +490,8 @@ let busy = false;
 let pending = 24;
 
 /** Walks through every progress stage the real sync emits, quickly. */
+let syncTimers: number[] = [];
+
 function simulateSync(kind: "sync" | "reprocess") {
   busy = true;
   const steps: Array<() => void> = [];
@@ -549,7 +551,7 @@ function simulateSync(kind: "sync" | "reprocess") {
     handlers?.onDone({ kind, fetched, failed: 0, stats: fakeStats(pending) });
   });
   // Slow enough to read each step on the card.
-  steps.forEach((step, i) => setTimeout(step, 450 * (i + 1)));
+  syncTimers = steps.map((step, i) => window.setTimeout(step, 450 * (i + 1)));
 }
 
 export const mockApi: Api = {
@@ -1369,6 +1371,15 @@ export const mockApi: Api = {
   },
   // The browser build: a new log turns up on the third look.
   newestLog: () => delay({ logId: 4200000, source: "logs.tf", known: ++newestLooks < 3 }),
+
+  syncCancel: () => {
+    if (!busy) return delay(false);
+    for (const id of syncTimers) window.clearTimeout(id);
+    syncTimers = [];
+    busy = false;
+    window.setTimeout(() => handlers?.onError({ kind: "cancelled", message: "Sync cancelled." }), 100);
+    return delay(true);
+  },
 
   syncStart: () => {
     if (busy) return Promise.reject({ kind: "busy", message: "A sync is already running." });
