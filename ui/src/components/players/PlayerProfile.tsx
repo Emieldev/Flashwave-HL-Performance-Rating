@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type CatDivision, type Medal, type Mvp, type PlayerProfile as Profile } from "../../api/types";
-import { formatDate } from "../../lib/format";
+import { formatDate, formatMonth, formatStay } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
 import { t, tx } from "../../lib/i18n";
@@ -48,7 +48,12 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
           ))}
         </nav>
         {tab === "overview" && <Overview p={p} />}
-        {tab === "teams" && <Teams p={p} />}
+        {tab === "teams" && (
+          <>
+            <TeamStays accountId={p.accountId} />
+            <Teams p={p} />
+          </>
+        )}
         {tab === "achievements" && <Achievements medals={p.medals} mvps={p.mvps ?? []} />}
         {tab === "yours" && yours}
       </div>
@@ -362,6 +367,40 @@ function TrendsCareer({ accountId }: { accountId: number }) {
   );
 }
 
+/** Their teams with the dates they were on them, from ETF2L's transfers (Q48). */
+function TeamStays({ accountId }: { accountId: number }) {
+  const q = useQuery({ queryKey: ["player_teams", accountId], queryFn: () => api.getPlayerTeams(accountId), staleTime: 60 * 60_000 });
+  const [all, setAll] = useState(false);
+  if (!q.data || q.data.length === 0) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const shown = all ? q.data : q.data.slice(0, 8);
+  return (
+    <section className="pp-stays">
+      <h3>{t("Team history")}</h3>
+      <ul>
+        {shown.map((s, i) => (
+          <li key={`${s.teamId}-${s.from ?? i}`} className={s.to === null ? "on" : undefined}>
+            <span className="pp-stay-team">
+              <strong>{s.teamName}</strong>
+              {s.teamType && <span className="pp-stay-type">{s.teamType.replace("Highlander", "HL")}</span>}
+            </span>
+            <span className="muted">
+              {s.from !== null ? formatMonth(s.from) : t("before the records")} – {s.to !== null ? formatMonth(s.to) : t("now")}
+            </span>
+            <span className="pp-stay-length">{formatStay((s.to ?? now) - (s.from ?? s.to ?? now))}</span>
+          </li>
+        ))}
+      </ul>
+      {q.data.length > shown.length && (
+        <button className="linkish" onClick={() => setAll(true)}>
+          {tx("Show all {0}", { "0": q.data.length })}
+        </button>
+      )}
+      <p className="hint">{t("From ETF2L's transfers: every team, Highlander or not.")}</p>
+    </section>
+  );
+}
+
 function Teams({ p }: { p: Profile }) {
   if (p.seasons.length === 0) return <p className="hint">{t("No ETF2L official in the seasons read.")}</p>;
   return (
@@ -388,6 +427,11 @@ function Teams({ p }: { p: Profile }) {
                 {s.merc && (
                   <span className="muted" title={t("Played for them as a merc, not on their roster: no medal of theirs")}>
                     {" "}· {t("merc")}
+                  </span>
+                )}
+                {s.leftEarly && (
+                  <span className="muted" title={t("Left the team before its last match of the season, by ETF2L's transfers: the team's medal is not theirs")}>
+                    {" "}· {t("left early")}
                   </span>
                 )}
               </span>

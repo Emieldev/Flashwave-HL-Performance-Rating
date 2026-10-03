@@ -62,6 +62,9 @@ pub struct PlayerSeason {
     pub place: Option<u8>,
     /// Only ever a merc for this team that season: not on its roster.
     pub merc: bool,
+    /// On the roster, but ETF2L has them leaving before the team's last
+    /// match of the season: the team's medal is not theirs (Q48).
+    pub left_early: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -191,6 +194,11 @@ pub struct Catalogue {
     newest_season: i64,
     /// `(match, account)`: played as a merc, for a team they were not on.
     mercs: std::collections::HashSet<(i64, u32)>,
+    /// `(team, account)` -> their joins (true) and leaves, oldest first,
+    /// from ETF2L's transfers (Q48).
+    transfers: HashMap<(i64, u32), Vec<(i64, bool)>>,
+    /// `(season, team)` -> the time of the team's last decided match.
+    season_end: HashMap<(i64, i64), i64>,
 }
 
 /// The rounds a medal is read from.
@@ -230,7 +238,51 @@ impl Catalogue {
         // The newest numbered season: 134 (AFA 2025) is older than 35.
         let newest_season = matches.values().map(|m| m.season).filter(|s| *s < crate::leagues::OFF_SEASON).max().unwrap_or(0);
         let mercs = db.catalogue_mercs().await?.into_iter().collect();
-        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season, mercs })
+        let mut transfers: HashMap<(i64, u32), Vec<(i64, bool)>> = HashMap::new();
+        for (team, account, time, joined) in db.catalogue_transfers().await? {
+            transfers.entry((team, account)).or_default().push((time, joined));
+        }
+        let season_end = Self::season_ends(&matches);
+        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season, mercs, transfers, season_end })
+    }
+
+    /// Each team's last decided match of each season.
+    fn season_ends(matches: &HashMap<i64, CatMatch>) -> HashMap<(i64, i64), i64> {
+        let mut out: HashMap<(i64, i64), i64> = HashMap::new();
+        for m in matches.values().filter(|m| Self::played(m) || m.default_win) {
+            let Some(time) = m.time else { continue };
+            for team in [m.clan1, m.clan2] {
+                let e = out.entry((m.season, team)).or_insert(time);
+                *e = (*e).max(time);
+            }
+        }
+        out
+    }
+
+    /// Whether a player was still on a team's roster at its last match of
+    /// the season, by ETF2L's transfers. Without transfers for them and
+    /// that team, or with none from before then, they are taken to be.
+    fn on_roster_at_end(&self, account: u32, season: i64, team: i64) -> bool {
+        let (Some(events), Some(end)) = (self.transfers.get(&(team, account)), self.season_end.get(&(season, team))) else { return true };
+        events.iter().rev().find(|(at, _)| at <= end).is_none_or(|(_, joined)| *joined)
+    }
+
+    /// Medals withheld because the player had left first:
+    /// `(season, team, account, name)`, for checking (`hl transfers medals`).
+    pub fn withheld_medals(&self) -> Vec<(i64, i64, u32, String)> {
+        let medal_teams: std::collections::HashSet<(i64, i64)> =
+            self.medals().into_iter().flat_map(|((season, _), list)| list.into_iter().map(move |(_, team, _)| (season, team))).collect();
+        let mut out: std::collections::BTreeSet<(i64, i64, u32, String)> = Default::default();
+        for (match_id, roster) in &self.rosters {
+            let Some(m) = self.matches.get(match_id).filter(|m| Self::played(m)) else { continue };
+            for (account, team, name) in roster {
+                let Some(team) = *team else { continue };
+                if medal_teams.contains(&(m.season, team)) && !self.mercs.contains(&(*match_id, *account)) && !self.on_roster_at_end(*account, m.season, team) {
+                    out.insert((m.season, team, *account, name.clone()));
+                }
+            }
+        }
+        out.into_iter().collect()
     }
 
     fn team(&self, id: i64) -> Team {
@@ -642,7 +694,8 @@ impl Catalogue {
             .map(|((season, team), (divs, played, won, lost))| {
                 // The division they played most for this team that season.
                 let ((division, tier), _) = divs.into_iter().max_by_key(|(_, n)| *n).unwrap_or(((String::new(), None), 0));
-                let place = medals.iter().filter(|((s, _), _)| *s == season && rostered.contains(&(season, team))).find_map(|((_, d), list)| {
+                let left_early = rostered.contains(&(season, team)) && !self.on_roster_at_end(account, season, team);
+                let place = medals.iter().filter(|((s, _), _)| *s == season && rostered.contains(&(season, team)) && !left_early).find_map(|((_, d), list)| {
                     list.iter().find(|(_, t, _)| *t == team).map(|(p, _, how)| (*p, d.clone(), how.clone()))
                 });
                 if let Some((p, d, how)) = &place {
@@ -657,7 +710,7 @@ impl Catalogue {
                     });
                 }
                 let merc = !rostered.contains(&(season, team));
-                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0), merc }
+                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0), merc, left_early }
             })
             .collect();
         out.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(b.played.cmp(&a.played)));
@@ -1839,6 +1892,29 @@ mod tests {
     }
 
     #[test]
+    fn a_player_who_left_before_the_final_does_not_take_its_medal() {
+        // Team 11 wins the final (match 3, at time 3). Account 11 played week
+        // 1 on the roster and left at time 2; account 600 played week 1 too
+        // and stayed.
+        let mut c = cat(vec![
+            m(1, 33, "regular", Some("Open"), "Open", Some("Week 1"), 11, 12, 6, 0),
+            m(3, 33, "Playoffs", None, "Open", Some("Grand Final"), 11, 13, 6, 0),
+        ]);
+        c.rosters.get_mut(&1).unwrap().push((600, Some(11), "stayed".into()));
+        c.season_end = Catalogue::season_ends(&c.matches);
+        c.transfers.insert((11, 11), vec![(0, true), (2, false)]);
+        c.transfers.insert((11, 600), vec![(0, true), (5, false)]);
+        let medals = c.medals();
+        let (seasons, won, _) = c.player(11, &medals);
+        assert!(won.is_empty(), "left before the final");
+        assert!(seasons[0].left_early && seasons[0].place.is_none());
+        let (seasons, won, _) = c.player(600, &medals);
+        assert_eq!(won.len(), 1, "left after it: still theirs");
+        assert!(!seasons[0].left_early);
+        assert_eq!(c.withheld_medals(), vec![(33, 11, 11, "p11".to_string())]);
+    }
+
+    #[test]
     fn a_season_banner_is_taken_from_a_post_naming_that_season_only() {
         let body = r#"[
             {"title":{"rendered":"Highlander Season 34 (Summer 2025): Wrap-Up"},"content":{"rendered":"<p><img src=\"https://etf2l.org/wp-content/uploads/2025/HL34.png\"></p>"}},
@@ -1934,7 +2010,7 @@ mod tests {
             }
         }
         let tiers = matches.iter().filter_map(|x| Some(((x.season, x.division.clone()?), x.tier?))).collect();
-        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new(), mercs: Default::default() }
+        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new(), mercs: Default::default(), transfers: HashMap::new(), season_end: HashMap::new() }
     }
 
     #[test]

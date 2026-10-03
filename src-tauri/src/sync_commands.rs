@@ -1324,6 +1324,18 @@ pub async fn get_team_etf2l(state: State<'_, AppState>, team_id: i64) -> CmdResu
     Ok(hl_ingest::catalogue::team_etf2l(&state.db, &state.sources, team_id).await?)
 }
 
+/// A team's roster history from ETF2L's transfers (Q48), read when due.
+#[tauri::command]
+pub async fn get_team_transfers(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::transfers::TeamTransfers> {
+    Ok(hl_ingest::transfers::team_transfers(&state.db, &state.sources, team_id).await?)
+}
+
+/// A player's teams with the dates they were on them (Q48), read when due.
+#[tauri::command]
+pub async fn get_player_teams(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::transfers::Stay>> {
+    Ok(hl_ingest::transfers::player_teams(&state.db, &state.sources, account_id).await?)
+}
+
 /// A team's medals and its seasons.
 #[tauri::command]
 pub async fn get_team_honours(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamHonours> {

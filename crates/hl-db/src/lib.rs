@@ -30,6 +30,7 @@ mod rawlog;
 mod roundmap;
 mod snapshot;
 mod timeline;
+mod transfers;
 
 pub use context::{
     ContextCounts, ContextGameRow, ContextRow, Etf2lMatchRow, MatchContext, MateRow, OfficialInfo,
@@ -46,6 +47,7 @@ pub use ratings::{HistoryDbRow, RatingRow, VsTotals};
 pub use timeline::{TimelineRow, TimelineTotals};
 pub use leagues::{Competition, CompetitionRow, SeasonMap, SeasonMatch, SeasonMatchRow};
 pub use catalogue::{CatMatch, Etf2lPlayer, RatedGame, RosterRow};
+pub use transfers::Transfer;
 pub use league_sample::{Candidate, LeagueLogRow, TierProgress};
 pub use snapshot::TableCopy;
 pub use players::{PlayerClass, PlayerHit, PlayerSummary};
@@ -386,6 +388,7 @@ mod frozen_migrations {
         ("0034_player_catalogue.sql", 0xd034c4bcfbebec48),
         ("0035_league_rating.sql", 0xd109c7e71d4b431f),
         ("0036_trends_career.sql", 0xc71d916bad5afbbd),
+        ("0037_etf2l_transfers.sql", 0x0aea2736b8e226a0),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {

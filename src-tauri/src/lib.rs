@@ -196,6 +196,7 @@ pub fn run() {
             // database's setting says.
             if cfg!(debug_assertions) {
                 league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
+                league::spawn_transfers(db.clone(), sources.clone());
             }
 
             app.manage(AppState {
@@ -240,6 +241,8 @@ pub fn run() {
             sync_commands::get_season_podiums,
             sync_commands::get_team_honours,
             sync_commands::get_team_etf2l,
+            sync_commands::get_team_transfers,
+            sync_commands::get_player_teams,
             sync_commands::get_player_stats,
             sync_commands::get_rankings,
             sync_commands::get_match_divisions,

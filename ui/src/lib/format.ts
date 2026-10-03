@@ -21,6 +21,23 @@ export function formatDate(unix: number | null, withYear = false): string {
   });
 }
 
+/** A month and year: `Jul 2023`. */
+export function formatMonth(unix: number | null): string {
+  if (unix === null) return "—";
+  return new Date(unix * 1000).toLocaleDateString(locale(), { month: "short", year: "numeric" });
+}
+
+/** How long a stay lasted, coarsely: `12 days`, `5 mo`, `2 yr 3 mo`. */
+export function formatStay(seconds: number): string {
+  const days = Math.max(0, Math.round(seconds / 86400));
+  if (days < 31) return t("{0} days", { "0": days });
+  const months = Math.round(days / 30.44);
+  if (months < 12) return t("{0} mo", { "0": months });
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  return rest === 0 ? t("{0} yr", { "0": years }) : t("{0} yr {1} mo", { "0": years, "1": rest });
+}
+
 /** 288 -> `4:48`. */
 export function clock(seconds: number | null): string {
   if (seconds === null || seconds < 0) return "—";

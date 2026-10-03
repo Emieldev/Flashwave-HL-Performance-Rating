@@ -112,6 +112,33 @@
   .ts-card:hover .ts-art-img, .ts-card:focus-visible .ts-art-img { transform: none; }
 }
 
+/* ---- roster history (Q48) ---- */
+.ts-history { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 960px) { .ts-history { grid-template-columns: 1fr; } }
+.ts-history h3 { margin: 4px 0 8px; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.95rem; color: var(--muted); }
+.ts-history h3:not(:first-child) { margin-top: 22px; }
+.ts-stays { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ts-stay {
+  display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 11em) minmax(0, 1fr) 5.5em; gap: 10px; align-items: center;
+  padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.16); border-left: 3px solid var(--border); font-size: 0.86rem;
+}
+.ts-stay.on { border-left-color: var(--tf2-tan); background: linear-gradient(90deg, color-mix(in srgb, var(--tf2-tan) 12%, transparent), rgba(0, 0, 0, 0.16) 60%); }
+.ts-stay-name { font-weight: 600; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-stay-dates { white-space: nowrap; font-size: 0.8rem; }
+.ts-stay-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.ts-stay-bar > span { display: block; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--tf2-tan) 55%, var(--muted)); }
+.ts-stay.on .ts-stay-bar > span { background: var(--tf2-tan); }
+.ts-stay-length { text-align: right; font: 600 0.8rem var(--font-display); letter-spacing: 0.03em; white-space: nowrap; }
+.ts-moves { display: flex; flex-direction: column; gap: 14px; max-height: 720px; overflow-y: auto; padding-right: 6px; }
+.ts-moves-year h4 { margin: 0 0 6px; font: 700 0.85rem var(--font-display); letter-spacing: 0.08em; color: var(--tf2-tan); }
+.ts-moves-year ul { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+.ts-move { display: grid; grid-template-columns: 1.4em 6.5em minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 0.85rem; }
+.ts-move-mark { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; font-weight: 800; line-height: 1; }
+.ts-move.in .ts-move-mark { background: color-mix(in srgb, #6fae4a 25%, transparent); color: #8fcf68; }
+.ts-move.out .ts-move-mark { background: color-mix(in srgb, var(--tf2-red) 25%, transparent); color: #e07a7c; }
+.ts-move-date { font-size: 0.78rem; white-space: nowrap; }
+.ts-move-who { min-width: 0; }
+
 /* ---- 2. a season ---- */
 .ts-hero {
   position: relative; min-height: 210px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border);

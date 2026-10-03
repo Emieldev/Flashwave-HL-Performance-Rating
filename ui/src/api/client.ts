@@ -50,6 +50,8 @@ import type {
   Podium,
   TeamHonours,
   TeamEtf2l,
+  TeamTransfers,
+  Stay,
   DemoImported,
   DemoLinked,
   CartView,
@@ -199,6 +201,8 @@ const realApi = {
   getSeasonPodiums: (season: number) => invoke<Podium[]>("get_season_podiums", { season }),
   getTeamHonours: (teamId: number) => invoke<TeamHonours>("get_team_honours", { teamId }),
   getTeamEtf2l: (teamId: number) => invoke<TeamEtf2l>("get_team_etf2l", { teamId }),
+  getTeamTransfers: (teamId: number) => invoke<TeamTransfers>("get_team_transfers", { teamId }),
+  getPlayerTeams: (accountId: number) => invoke<Stay[]>("get_player_teams", { accountId }),
   /** Q28: a map's callouts; the owner's copy wins over the built-in one. */
   getCallouts: (map: string) => invoke<CalloutFile>("get_callouts", { map }),
   saveCallouts: (map: string, file: CalloutFile) => invoke<CalloutFile>("save_callouts", { map, file }),

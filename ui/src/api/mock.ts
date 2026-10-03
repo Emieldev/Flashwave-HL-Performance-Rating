@@ -13,6 +13,8 @@ import ratingGuide from "./fixtures/rating_guide.json";
 import seasonsOverview from "./fixtures/seasons_overview.json";
 import seasonPodiums33 from "./fixtures/season_podiums_33.json";
 import teamHonours35600 from "./fixtures/team_honours_35600.json";
+import teamTransfers35600 from "./fixtures/team_transfers_35600.json";
+import playerTeams139131191 from "./fixtures/player_teams_139131191.json";
 import cart4109131 from "./fixtures/cart_4109131.json";
 import match3863290 from "./fixtures/match_3863290.json";
 import analysis3863290 from "./fixtures/analysis_3863290.json";
@@ -963,6 +965,9 @@ export const mockApi: Api = {
     ),
   getSeasonPodiums: () => delay(seasonPodiums33 as unknown as Podium[]),
   getTeamHonours: () => delay(teamHonours35600 as unknown as TeamHonours),
+  // SBQRRA's transfers and Flashy's teams from ETF2L, 3 October 2026.
+  getTeamTransfers: () => delay(teamTransfers35600 as unknown as TeamTransfers),
+  getPlayerTeams: () => delay(playerTeams139131191 as unknown as Stay[]),
   // SBQRRA's ETF2L page, 3 October 2026.
   getTeamEtf2l: () =>
     delay<TeamEtf2l>({

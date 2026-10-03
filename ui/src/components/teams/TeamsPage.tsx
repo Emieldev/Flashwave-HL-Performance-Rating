@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type TeamEtf2l, type TeamHonours, type TeamView } from "../../api/types";
-import { formatDate, rating } from "../../lib/format";
+import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamTransfers, type TeamView } from "../../api/types";
+import { formatDate, formatMonth, formatStay, rating } from "../../lib/format";
 import { openPlayer } from "../../lib/goto";
 import { t, tx } from "../../lib/i18n";
 import { ClassIcon } from "../ClassIcon";
@@ -284,7 +284,7 @@ function PodiumCard({ p, onTeam }: { p: Podium; onTeam: (id: number) => void }) 
 
 // ---- 3. One team, like a player's profile ------------------------------
 
-type TeamTab = "overview" | "lineup" | "seasons" | "results";
+type TeamTab = "overview" | "lineup" | "seasons" | "history" | "results";
 
 function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onBack: () => void; onTeam: (id: number) => void; backLabel: string }) {
   const q = useQuery({ queryKey: ["team", teamId], queryFn: () => api.getTeam(teamId) });
@@ -307,6 +307,7 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
                   ["overview", t("Overview")],
                   ["lineup", tx("Lineup ({0})", { "0": q.data.roster.length })],
                   ["seasons", t("Seasons")],
+                  ["history", t("Roster history")],
                   ["results", tx("Results ({0})", { "0": q.data.results.length })],
                 ] as [TeamTab, React.ReactNode][]
               ).map(([id, label]) => (
@@ -318,6 +319,7 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
             {tab === "overview" && <TeamOverview v={q.data} etf2l={e.data} onTeam={onTeam} onLineup={() => setTab("lineup")} onResults={() => setTab("results")} />}
             {tab === "lineup" && <Lineup v={q.data} />}
             {tab === "seasons" && <Seasons honours={h.data} etf2l={e.data} />}
+            {tab === "history" && <RosterHistory teamId={teamId} etf2lUrl={e.data?.url} />}
             {tab === "results" && <Results v={q.data} onTeam={onTeam} />}
           </div>
         </>
@@ -606,6 +608,122 @@ function Lineup({ v }: { v: TeamView }) {
       <p className="hint">{t("Maps won and lost in officials. Maps of the current pool first.")}</p>
       <MapBars maps={[...v.maps.filter((m) => m.inPool), ...v.maps.filter((m) => !m.inPool)]} />
     </>
+  );
+}
+
+// ---- Roster history, from ETF2L's transfers (Q48) ------------------------
+
+function stayLength(s: Stay, now: number): number {
+  return (s.to ?? now) - (s.from ?? s.to ?? now);
+}
+
+function RosterHistory({ teamId, etf2lUrl }: { teamId: number; etf2lUrl: string | undefined }) {
+  const q = useQuery({ queryKey: ["team_transfers", teamId], queryFn: () => api.getTeamTransfers(teamId), staleTime: 60 * 60_000 });
+  if (q.isPending) return <p className="hint">{t("Reading the team's transfers from ETF2L…")}</p>;
+  if (q.isError) return <p className="error">{errorMessage(q.error)}</p>;
+  const v: TeamTransfers = q.data;
+  if (v.rows.length === 0) return <p className="hint">{t("ETF2L lists no transfers for this team.")}</p>;
+  return <RosterHistoryView v={v} etf2lUrl={etf2lUrl} />;
+}
+
+function RosterHistoryView({ v, etf2lUrl }: { v: TeamTransfers; etf2lUrl: string | undefined }) {
+  const now = Math.floor(Date.now() / 1000);
+  const [showAll, setShowAll] = useState(false);
+  const current = v.stays.filter((s) => s.to === null);
+  const past = v.stays.filter((s) => s.to !== null);
+  const longest = Math.max(1, ...v.stays.map((s) => stayLength(s, now)));
+  const shownPast = showAll ? past : past.slice(0, 12);
+  // Joins and leaves by year, newest first.
+  const years = useMemo(() => {
+    const out: [number, TeamTransfers["rows"]][] = [];
+    for (const r of v.rows) {
+      const y = new Date(r.time * 1000).getFullYear();
+      const last = out[out.length - 1];
+      if (last && last[0] === y) last[1].push(r);
+      else out.push([y, [r]]);
+    }
+    return out;
+  }, [v.rows]);
+  const stayRow = (s: Stay, i: number) => (
+    <li key={`${s.accountId ?? s.name}-${s.from ?? i}`} className={s.to === null ? "ts-stay on" : "ts-stay"}>
+      {s.accountId !== null ? (
+        <button className="linkish ts-stay-name" onClick={() => openPlayer(s.accountId!)}>
+          {s.name}
+        </button>
+      ) : (
+        <span className="ts-stay-name">{s.name}</span>
+      )}
+      <span className="ts-stay-dates muted">
+        {s.from !== null ? formatMonth(s.from) : t("before the records")} – {s.to !== null ? formatMonth(s.to) : t("now")}
+      </span>
+      <span className="ts-stay-bar" aria-hidden>
+        <span style={{ width: `${Math.max(3, (stayLength(s, now) / longest) * 100)}%` }} />
+      </span>
+      <span className="ts-stay-length">{formatStay(stayLength(s, now))}</span>
+    </li>
+  );
+  return (
+    <div className="ts-history">
+      <section>
+        <h3>{tx("On the roster now ({0})", { "0": current.length })}</h3>
+        <ul className="ts-stays">{current.map(stayRow)}</ul>
+        {past.length > 0 && (
+          <>
+            <h3>{tx("Who came and went ({0})", { "0": past.length })}</h3>
+            <p className="hint">{t("Longest stay first.")}</p>
+            <ul className="ts-stays">{shownPast.map(stayRow)}</ul>
+            {past.length > shownPast.length && (
+              <button className="ts-more" onClick={() => setShowAll(true)}>
+                {tx("Show all {0}", { "0": past.length })} ›
+              </button>
+            )}
+          </>
+        )}
+      </section>
+      <section>
+        <h3>{tx("Joins and leaves ({0})", { "0": v.rows.length })}</h3>
+        <div className="ts-moves">
+          {years.map(([year, rows]) => (
+            <div key={year} className="ts-moves-year">
+              <h4>{year}</h4>
+              <ul>
+                {rows.map((r, i) => (
+                  <li key={`${r.time}-${i}`} className={r.joined ? "ts-move in" : "ts-move out"}>
+                    <span className="ts-move-mark" aria-label={r.joined ? t("joined the team") : t("left the team")}>
+                      {r.joined ? "+" : "−"}
+                    </span>
+                    <span className="ts-move-date muted">{formatDate(r.time, true)}</span>
+                    <span className="ts-move-who">
+                      {r.accountId !== null ? (
+                        <button className="linkish" onClick={() => openPlayer(r.accountId!)}>
+                          {r.name}
+                        </button>
+                      ) : (
+                        r.name
+                      )}{" "}
+                      <span className="muted">{r.joined ? t("joined the team") : t("left the team")}</span>
+                      {r.by && <span className="muted"> · {r.joined ? tx("added by {0}", { "0": r.by }) : tx("removed by {0}", { "0": r.by })}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="hint">
+          {t("From ETF2L's transfer list.")}
+          {v.fetchedAt !== null && <> {tx("Read {0}", { "0": formatDate(v.fetchedAt, true) })}.</>}
+          {etf2lUrl && (
+            <>
+              {" "}
+              <a href={etf2lUrl} target="_blank" rel="noreferrer">
+                {t("ETF2L ↗")}
+              </a>
+            </>
+          )}
+        </p>
+      </section>
+    </div>
   );
 }
 
