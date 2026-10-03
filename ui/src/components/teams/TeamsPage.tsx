@@ -93,7 +93,8 @@ function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen:
   const banner = useBanner(s);
   return (
     <button className={`ts-card ${banner ? "" : teamTint(s.season)}`} onClick={onOpen} aria-label={t("Open {0}", { "0": seasonTitle(s) })}>
-      <span className="ts-art" style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
+      <span className="ts-art">
+        <span className="ts-art-img" style={banner ? { backgroundImage: `url("${banner}")` } : undefined} aria-hidden />
         {!banner && <span className="ts-art-label">{s.season >= 100 ? s.seasonName : `S${s.season}`}</span>}
         <span className="ts-chips">
           <span className="ts-chip">{s.season >= 100 ? t("Off-season") : `S${s.season}`}</span>
@@ -102,16 +103,12 @@ function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen:
       </span>
       <span className="ts-body">
         <span className="ts-title">{seasonTitle(s)}</span>
-        <span className="ts-meta">
+        <span className="ts-dates">
           {formatDate(s.from)} – {formatDate(s.to)}
-          <span className="ts-dot" aria-hidden>
-            •
-          </span>
-          {tx("{0} teams", { "0": s.teams })}
-          <span className="ts-dot" aria-hidden>
-            •
-          </span>
-          {tx("{0} officials", { "0": s.matches })}
+        </span>
+        <span className="ts-stats">
+          <span className="ts-stat">{tx("{0} teams", { "0": s.teams })}</span>
+          <span className="ts-stat">{tx("{0} officials", { "0": s.matches })}</span>
         </span>
         <span className="ts-divs">
           {s.divisions.map((d) => (
@@ -119,7 +116,7 @@ function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen:
           ))}
         </span>
         <span className="ts-rows">
-          <span className="ts-row">
+          <span className="ts-row ts-row-champ">
             <span className="ts-row-label">{t("Champion")}</span>
             {s.champion ? (
               <span className="ts-row-value">
@@ -132,7 +129,7 @@ function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen:
             )}
           </span>
           {s.you && (
-            <span className="ts-row">
+            <span className="ts-row ts-row-you">
               <span className="ts-row-label">{t("You")}</span>
               <span className="ts-row-value">
                 {s.you.team.name} <DivisionBadge d={{ name: s.you.division, tier: s.you.tier ?? 4 }} />
@@ -142,7 +139,12 @@ function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen:
             </span>
           )}
         </span>
-        <span className="ts-open">{t("Open season")} ›</span>
+        <span className="ts-open">
+          {t("Open season")}
+          <span className="ts-open-arrow" aria-hidden>
+            ›
+          </span>
+        </span>
       </span>
     </button>
   );

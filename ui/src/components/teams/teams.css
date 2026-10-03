@@ -41,29 +41,76 @@
 .ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
 .ts-card {
   position: relative; display: flex; flex-direction: column; padding: 0; overflow: hidden; cursor: pointer; text-align: left;
-  border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: inherit; font: inherit;
+  border: 1px solid var(--border); border-top: 3px solid var(--border); border-radius: 12px; color: inherit; font: inherit;
+  /* Painted the same on hover: the global button:hover repaint is what
+     showed a line under the picture. */
+  background: linear-gradient(180deg, var(--panel-2), var(--panel) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.ts-card:hover, .ts-card:focus-visible { transform: translateY(-3px); border-color: var(--tf2-tan); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--tf2-tan); }
-/* The art takes the top of the card and fades into it, no hard divider:
-   the body starts half way over the bottom of the picture. */
-.ts-art { position: relative; display: block; aspect-ratio: 16 / 9; max-width: 100%; background-color: var(--panel-2); background-size: cover; background-position: center 30%; }
-.ts-art::after { content: ""; position: absolute; inset: 45% 0 0 0; background: linear-gradient(to bottom, transparent, var(--panel) 92%); }
-.ts-art-label { position: absolute; inset: 0 0 25% 0; display: grid; place-items: center; font: 800 2.6rem var(--font-display); letter-spacing: 0.05em; color: var(--tf2-cream); text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
-.ts-tint-red .ts-art, .ts-hero.ts-tint-red { background-image: linear-gradient(135deg, color-mix(in srgb, var(--tf2-red) 75%, #000) 0%, color-mix(in srgb, var(--tf2-tan) 45%, var(--panel-2)) 100%); }
-.ts-tint-blu .ts-art, .ts-hero.ts-tint-blu { background-image: linear-gradient(135deg, color-mix(in srgb, var(--tf2-blu) 75%, #000) 0%, color-mix(in srgb, var(--tf2-tan) 35%, var(--panel-2)) 100%); }
-.ts-chips { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 6px; z-index: 1; }
-.ts-chip { padding: 3px 9px; border-radius: 6px; background: rgba(20, 14, 10, 0.72); color: var(--tf2-cream); font: 700 0.75rem var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
-.ts-live { background: var(--tf2-tan); color: #1d140d; margin-left: auto; }
-.ts-body { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 9px; padding: 0 16px 16px; margin-top: -42px; flex: 1; }
-.ts-title { font: 700 1.2rem var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6); }
+.ts-card.ts-tint-red { border-top-color: var(--tf2-red); }
+.ts-card.ts-tint-blu { border-top-color: var(--tf2-blu); }
+.ts-card:hover:not(:disabled), .ts-card:focus-visible {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel) 60%);
+  transform: translateY(-3px); border-color: var(--tf2-tan);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--tf2-tan);
+}
+
+/* The art fades out through a mask, into whatever the card is painted
+   with: no colour to match, so no line where it ends. */
+.ts-art { position: relative; display: block; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; }
+.ts-art-img {
+  position: absolute; inset: 0; background-color: var(--panel-2); background-size: cover; background-position: center 30%;
+  -webkit-mask-image: linear-gradient(to bottom, #000 50%, rgba(0, 0, 0, 0.55) 74%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 50%, rgba(0, 0, 0, 0.55) 74%, transparent 100%);
+  filter: saturate(0.92);
+  transition: transform 0.4s ease, filter 0.2s ease;
+}
+.ts-card:hover .ts-art-img, .ts-card:focus-visible .ts-art-img { transform: scale(1.04); filter: saturate(1.1); }
+.ts-art-label { position: absolute; inset: 0 0 28% 0; display: grid; place-items: center; font: 800 2.6rem var(--font-display); letter-spacing: 0.05em; color: var(--tf2-cream); text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+.ts-tint-red .ts-art-img, .ts-hero.ts-tint-red { background-image: linear-gradient(135deg, color-mix(in srgb, var(--tf2-red) 75%, #000) 0%, color-mix(in srgb, var(--tf2-tan) 45%, var(--panel-2)) 100%); }
+.ts-tint-blu .ts-art-img, .ts-hero.ts-tint-blu { background-image: linear-gradient(135deg, color-mix(in srgb, var(--tf2-blu) 75%, #000) 0%, color-mix(in srgb, var(--tf2-tan) 35%, var(--panel-2)) 100%); }
+/* Top right: ETF2L banners carry their own season mark top left. */
+.ts-chips { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: flex-end; gap: 6px; z-index: 1; }
+.ts-chip { padding: 3px 9px; border-radius: 6px; background: rgba(20, 14, 10, 0.75); border: 1px solid rgba(235, 227, 203, 0.16); color: var(--tf2-cream); font: 700 0.75rem var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+.ts-live { background: var(--tf2-tan); border-color: var(--tf2-tan); color: #1d140d; order: -1; }
+
+.ts-body { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; margin-top: -46px; flex: 1; }
+.ts-title { font: 700 1.3rem var(--font-display); letter-spacing: 0.03em; text-transform: uppercase; color: var(--tf2-cream); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); line-height: 1.1; }
+.ts-dates { margin-top: -6px; font: 600 0.78rem var(--font-display); letter-spacing: 0.07em; text-transform: uppercase; color: var(--tf2-tan); }
+.ts-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ts-stat {
+  padding: 5px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--border);
+  font: 600 0.78rem var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ts-divs { display: flex; flex-wrap: wrap; gap: 4px; }
-.ts-rows { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
-.ts-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; font-size: 0.86rem; }
+.ts-rows { display: flex; flex-direction: column; gap: 6px; }
+.ts-row {
+  display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; min-height: 34px; font-size: 0.86rem;
+  padding: 5px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.2); border-left: 3px solid var(--border);
+}
+.ts-row-champ { border-left-color: #d4a73a; background: linear-gradient(90deg, rgba(212, 167, 58, 0.16), rgba(0, 0, 0, 0.2) 70%); }
+.ts-row-champ strong { color: var(--tf2-cream); }
+.ts-row-you { border-left-color: var(--tf2-tan); background: linear-gradient(90deg, color-mix(in srgb, var(--tf2-tan) 14%, transparent), rgba(0, 0, 0, 0.2) 70%); }
 .ts-row-label { font: 600 0.72rem var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .ts-row-value { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.ts-open { margin-top: auto; padding-top: 6px; align-self: flex-end; font: 700 0.78rem var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--tf2-tan); opacity: 0.75; }
-.ts-card:hover .ts-open { opacity: 1; }
+
+/* The call to action: an outlined button that fills in on hover. */
+.ts-open {
+  margin-top: auto; align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--tf2-tan) 55%, transparent);
+  background: color-mix(in srgb, var(--tf2-tan) 10%, transparent);
+  font: 700 0.8rem var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tf2-tan);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.ts-open-arrow { font-size: 1.15rem; line-height: 1; transition: transform 0.15s ease; }
+.ts-card:hover .ts-open, .ts-card:focus-visible .ts-open { background: var(--tf2-tan); border-color: var(--tf2-tan); color: #1d140d; }
+.ts-card:hover .ts-open-arrow, .ts-card:focus-visible .ts-open-arrow { transform: translateX(4px); }
+@media (prefers-reduced-motion: reduce) {
+  .ts-card, .ts-art-img, .ts-open-arrow { transition: none; }
+  .ts-card:hover .ts-art-img, .ts-card:focus-visible .ts-art-img { transform: none; }
+}
 
 /* ---- 2. a season ---- */
 .ts-hero {
