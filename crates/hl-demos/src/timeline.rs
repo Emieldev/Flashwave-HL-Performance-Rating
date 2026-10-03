@@ -17,7 +17,11 @@
 //!   Medic charge, medigun and heal target, Spy cloak and disguise. State that
 //!   changes rarely costs nothing between changes, and nothing is sampled away.
 //! - **Objects**, on change: the payload cart's position and every building's
-//!   level, health, state and place.
+//!   level, health, state and place; and every reflect (v2): who sent which
+//!   projectile back, from where, which way it had been flying, and where it
+//!   ended.
+//! - **Ping** (v2), per player on change: the scoreboard's, about once a
+//!   second.
 //! - **Events**: every game event the demo carried (hurts, deaths, captures,
 //!   spawns, charges), exactly as the parser decoded them.
 //!
@@ -42,7 +46,9 @@ pub use tf_demo_parser::demo::gamevent::GameEvent;
 
 /// Bump when what is recorded, or how, changes: stored timelines below it
 /// are recorded again the next time their demo is read.
-pub const TIMELINE_VERSION: i64 = 1;
+///
+/// 2: ping per player, and reflects (Q44, Q45).
+pub const TIMELINE_VERSION: i64 = 2;
 
 /// Ticks between samples: every one. Measured on three demos (PLAN §14b):
 /// recomputing "a second before" from a timeline matched the demo to 0.05°
@@ -95,7 +101,12 @@ pub enum Field {
     Cloak(u8),
     DisguiseClass(u8),
     DisguiseTeam(u8),
+    /// Milliseconds, as the scoreboard shows it (v2).
+    Ping(u16),
 }
+
+/// Kinds of [`Field`]: the size of the recorder's "last value" table.
+const FIELD_KINDS: usize = 14;
 
 impl Field {
     fn kind(&self) -> u8 {
@@ -113,6 +124,7 @@ impl Field {
             Field::Cloak(_) => 10,
             Field::DisguiseClass(_) => 11,
             Field::DisguiseTeam(_) => 12,
+            Field::Ping(_) => 13,
         }
     }
 }
@@ -152,6 +164,15 @@ pub struct ObjectRow {
     pub building: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sapped: bool,
+    /// A reflect's player, by slot ("reflect" rows).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<u16>,
+    /// What was reflected: "rocket", "pipe", "sticky", "flare"...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub what: Option<Cow<'static, str>>,
+    /// Units a second, the way it was flying before it was reflected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vel: Option<[i32; 3]>,
 }
 
 impl ObjectRow {
@@ -166,6 +187,9 @@ impl ObjectRow {
             && self.health == other.health
             && self.building == other.building
             && self.sapped == other.sapped
+            && self.by == other.by
+            && self.what == other.what
+            && self.vel == other.vel
     }
 }
 
@@ -338,7 +362,7 @@ impl ChangeWriter {
         self.t = ch.t;
         c.push(ch.field.kind());
         match ch.field {
-            Field::Health(v) | Field::MaxHealth(v) => put_var(c, u64::from(v)),
+            Field::Health(v) | Field::MaxHealth(v) | Field::Ping(v) => put_var(c, u64::from(v)),
             Field::Class(v)
             | Field::Team(v)
             | Field::Charge(v)
@@ -382,7 +406,10 @@ pub struct Recorder {
     samples: Vec<SampleWriter>,
     changes: Vec<ChangeWriter>,
     /// The last value of each field kind per slot, to record only changes.
-    last: Vec<[Option<Field>; 13]>,
+    last: Vec<[Option<Field>; FIELD_KINDS]>,
+    /// Reflects and their ends already written, from the analyser's lists.
+    reflects_done: usize,
+    ends_done: usize,
     events_done: usize,
     /// Events as JSON lines, written straight from the parser's copy: no
     /// clone of each event is kept.
@@ -422,6 +449,8 @@ impl Recorder {
             objects: Vec::new(),
             object_count: 0,
             object_last: HashMap::new(),
+            reflects_done: 0,
+            ends_done: 0,
             rows: Vec::new(),
             by_entity: HashMap::new(),
             seen: Vec::new(),
@@ -445,7 +474,7 @@ impl Recorder {
                 self.slots.insert(steamid.to_string(), s);
                 self.samples.push(SampleWriter::default());
                 self.changes.push(ChangeWriter::default());
-                self.last.push([None; 13]);
+                self.last.push([None; FIELD_KINDS]);
                 s
             }
         };
@@ -508,6 +537,11 @@ impl Recorder {
             let alive = p.state == PlayerState::Alive;
             self.set(slot, Field::Here(here));
             self.set(slot, Field::Alive(alive));
+            // The scoreboard reaches every client: true for anyone, carried
+            // or not, and 0 for nobody real.
+            if p.ping > 0 {
+                self.set(slot, Field::Ping(p.ping));
+            }
             if !here {
                 // Whatever the demo says about someone it is not carrying is
                 // stale; recording it would only record the staleness.
@@ -558,6 +592,53 @@ impl Recorder {
         }
         self.events_done = state.events.len();
 
+        // Reflects, written as they happen whatever the sampling stride: a
+        // handful a match, and each one counts.
+        for r in &a.reflects[self.reflects_done..] {
+            let row = ObjectRow {
+                t: self.t,
+                entity: r.entity,
+                kind: Cow::Borrowed("reflect"),
+                pos: round3(r.pos),
+                builder: None,
+                team: Some(r.team),
+                level: None,
+                health: None,
+                building: false,
+                sapped: false,
+                by: r.by_entity.and_then(|e| self.by_entity.get(&e).copied()),
+                what: Some(Cow::Borrowed(r.what)),
+                vel: r.before.map(round3),
+            };
+            if serde_json::to_writer(&mut self.objects, &row).is_ok() {
+                self.objects.push(b'\n');
+                self.object_count += 1;
+            }
+        }
+        self.reflects_done = a.reflects.len();
+        for e in &a.reflect_ends[self.ends_done..] {
+            let row = ObjectRow {
+                t: self.t,
+                entity: e.entity,
+                kind: Cow::Borrowed(if e.seen { "reflect_end" } else { "reflect_lost" }),
+                pos: round3(e.pos),
+                builder: None,
+                team: None,
+                level: None,
+                health: None,
+                building: false,
+                sapped: false,
+                by: None,
+                what: None,
+                vel: None,
+            };
+            if serde_json::to_writer(&mut self.objects, &row).is_ok() {
+                self.objects.push(b'\n');
+                self.object_count += 1;
+            }
+        }
+        self.ends_done = a.reflect_ends.len();
+
         if sample_now {
             self.seen.clear();
             for (entity, objective) in &state.objectives {
@@ -574,6 +655,9 @@ impl Recorder {
                     health: None,
                     building: false,
                     sapped: false,
+                    by: None,
+                    what: None,
+                    vel: None,
                 };
                 self.seen.push(row.entity);
                 self.object(row);
@@ -660,6 +744,9 @@ fn building_row(t: u32, entity: u32, b: &Building) -> Option<ObjectRow> {
         health: Some(health),
         building,
         sapped,
+        by: None,
+        what: None,
+        vel: None,
     })
 }
 
@@ -682,6 +769,8 @@ pub struct Now {
     pub cloak: u8,
     pub disguise_class: u8,
     pub disguise_team: u8,
+    /// Milliseconds; 0 where the timeline has none (before v2).
+    pub ping: u16,
 }
 
 impl Now {
@@ -700,6 +789,7 @@ impl Now {
             Field::Cloak(v) => self.cloak = v,
             Field::DisguiseClass(v) => self.disguise_class = v,
             Field::DisguiseTeam(v) => self.disguise_team = v,
+            Field::Ping(v) => self.ping = v,
         }
     }
 
@@ -970,6 +1060,7 @@ impl Timeline {
                     10 => Field::Cloak(cur.byte()?),
                     11 => Field::DisguiseClass(cur.byte()?),
                     12 => Field::DisguiseTeam(cur.byte()?),
+                    13 => Field::Ping(cur.var()? as u16),
                     k => bail!("timeline has a change of unknown kind {k}"),
                 };
                 track.changes.push(Change { t, field });
@@ -1057,6 +1148,9 @@ mod tests {
                 health: None,
                 building: false,
                 sapped: false,
+                by: None,
+                what: None,
+                vel: None,
             }],
             events: vec![],
         };

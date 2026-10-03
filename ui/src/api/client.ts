@@ -40,6 +40,7 @@ import type {
   SeasonsView,
   AimResponse,
   SpyReport,
+  MatchDemoStats,
   CalloutFile,
   PositionsView,
   MapTendencies,
@@ -182,6 +183,8 @@ const realApi = {
   getAim: (logId: number, player?: number) => invoke<AimResponse>("get_aim", { logId, player }),
   /** Null when the match has no STV timeline to read (Q27). */
   getSpychecks: (logId: number) => invoke<SpyReport | null>("get_spychecks", { logId }),
+  /** Q44, Q45: ping and reflects; null when no demo of the match has a timeline. */
+  getDemoStats: (logId: number) => invoke<MatchDemoStats | null>("get_demo_stats", { logId }),
   /** Null for a match with no cart to read (Q11). */
   getCart: (logId: number, map?: string) => invoke<CartView | null>("get_cart", { logId, map: map ?? null }),
   /** Q29: one season's division tables; the newest when no season is given. */

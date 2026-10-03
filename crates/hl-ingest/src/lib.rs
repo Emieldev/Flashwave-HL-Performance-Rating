@@ -48,6 +48,7 @@ pub mod teammates;
 pub mod demos;
 pub mod demostf;
 pub mod spy;
+pub mod demostats;
 pub mod spawns;
 pub mod cart;
 pub mod demo_import;

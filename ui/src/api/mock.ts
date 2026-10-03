@@ -26,6 +26,7 @@ import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
   SpyReport,
+  MatchDemoStats,
   DemoLinked,
   CalloutFile,
   PositionsView,
@@ -864,6 +865,31 @@ export const mockApi: Api = {
     delay({ path: "D:/backups/" + suggested, bytes: 183_900_000, madeAt: Math.floor(Date.now() / 1000) }),
 
   // Spies found now and then, by whoever is not a Spy on the other team.
+  getDemoStats: (logId: number) => {
+    const m = FIXTURES.find((f) => f.logId === logId) ?? FIXTURES[0];
+    const ps = m.players as Array<{ accountId: number; name: string; team: string; mainClass: string | null }>;
+    const pyro = ps.find((p) => p.mainClass === "pyro") ?? ps[0];
+    const enemy = ps.find((p) => p.team !== pyro.team && p.mainClass === "soldier") ?? ps.find((p) => p.team !== pyro.team) ?? ps[1];
+    const line = (i: number) => {
+      const base = 15 + ((i * 37) % 70);
+      const points: Array<[number, number]> = Array.from({ length: 40 }, (_, k) => [k * 45, base + ((k * 7 + i) % 9) - 4 + (i === 3 && k > 20 && k < 24 ? 55 : 0)]);
+      return { accountId: ps[i].accountId, name: ps[i].name, avg: base, median: base, min: base - 4, max: i === 3 ? base + 59 : base + 4, spikes: i === 3 ? ([[900, 1080, base + 59]] as Array<[number, number, number]>) : [], points };
+    };
+    const reflects = [
+      { demoId: 1, atS: 312, jumpTick: 20400, by: pyro.accountId, what: "rocket", outcome: "hit" as const, victims: [enemy.accountId], damage: 84, killed: false, threat: true },
+      { demoId: 1, atS: 655, jumpTick: 43100, by: pyro.accountId, what: "pipe", outcome: "miss" as const, victims: [], damage: 0, killed: false, threat: false },
+      { demoId: 1, atS: 902, jumpTick: 59400, by: pyro.accountId, what: "rocket", outcome: "hit" as const, victims: [enemy.accountId], damage: 120, killed: true, threat: true },
+      { demoId: 1, atS: 1210, jumpTick: 79700, by: pyro.accountId, what: "sticky", outcome: "unknown" as const, victims: [], damage: 0, killed: false, threat: null },
+    ];
+    return delay<MatchDemoStats>({
+      demos: 1,
+      stv: true,
+      tooOld: 0,
+      pings: ps.map((_, i) => line(i)).sort((a, b) => b.avg - a.avg),
+      pyros: [{ accountId: pyro.accountId, name: pyro.name, reflects: 4, hits: 2, misses: 1, sentBack: 0, unknown: 1, kills: 1, damage: 204, threats: 2, judged: 3 }],
+      reflects,
+    });
+  },
   getSpychecks: (logId: number) => {
     const m = FIXTURES.find((f) => f.logId === logId) ?? FIXTURES[0];
     const players = m.players as Array<{ accountId: number; name: string; team: string; mainClass: string | null }>;

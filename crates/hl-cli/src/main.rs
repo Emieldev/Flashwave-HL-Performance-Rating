@@ -93,6 +93,8 @@ COMMANDS:
     maps --export-geometry <PATH> [--min N]
                            Write this database's map shapes, the file shipped
                            as maps/geometry.json (maps with N+ positions)
+    demostats <DEMO> [--owner STEAMID3]
+                           Every player's ping and every reflect in one demo
     snapshot [--out PATH]  Write the league snapshot the app ships (default
                            league/snapshot.sqlite3.gz) from this database,
                            rated for the current model. Run it on a copy.
@@ -1052,6 +1054,51 @@ async fn main() -> Result<()> {
                         if h.broke { "broke" } else { "held" }, h.jump_tick
                     );
                 }
+            }
+            Ok(())
+        }
+
+        ["demostats", path, rest @ ..] => {
+            // Q44 and Q45: every player's ping and every reflect in one demo,
+            // each reflect with its demo tick to check in game. A file only.
+            let owner = flag_value::<String>(rest, "--owner")?.unwrap_or_default();
+            let file = std::path::Path::new(path);
+            let header = hl_demos::DemoHeader::parse(&std::fs::read(file)?)?;
+            let rate = header.tick_rate().unwrap_or(66.67);
+            // On a thread of its own: a debug build's walk needs more stack
+            // than the main thread has on Windows.
+            let (f, o) = (file.to_path_buf(), owner.clone());
+            let (_, stored) = std::thread::Builder::new()
+                .stack_size(256 << 20)
+                .spawn(move || hl_demos::aim::pass_recording(&f, &o, rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {}))?
+                .join()
+                .map_err(|_| anyhow::anyhow!("reading the demo panicked"))??;
+            let tl = hl_demos::timeline::Timeline::decode(&stored.context("no timeline")?)?;
+            let name = |s: Option<usize>| s.and_then(|s| tl.people.get(s)).map_or("?".to_string(), |p| p.name.clone());
+            let clock = |s: f64| format!("{}:{:02}", (s as u32) / 60, (s as u32) % 60);
+            println!("{} · {}", header.map, clock(tl.seconds(tl.end())));
+            println!("
+{:<24} {:>5} {:>6} {:>5} {:>5}  spikes", "ping", "avg", "median", "min", "max");
+            for p in hl_demos::demostats::pings(&tl) {
+                let spikes: Vec<String> = p.spikes.iter().map(|(a, b, peak)| format!("{}-{} {peak}ms", clock(*a), clock(*b))).collect();
+                println!("{:<24} {:>5.0} {:>6} {:>5} {:>5}  {}", name(Some(p.slot)), p.avg, p.median, p.min, p.max, spikes.join(", "));
+            }
+            let reflects = hl_demos::demostats::reflects(&tl);
+            println!("
+{} reflects:", reflects.len());
+            for r in &reflects {
+                let victims: Vec<String> = r.victims.iter().map(|v| name(Some(*v))).collect();
+                println!(
+                    "  {} {:<16} {:<7} {:?}{}{} threat {:?} · demo_gototick {}",
+                    clock(r.at_s),
+                    name(r.slot),
+                    r.what,
+                    r.outcome,
+                    if victims.is_empty() { String::new() } else { format!(" {} dmg on {}", r.damage, victims.join(", ")) },
+                    if r.killed { " (kill)" } else { "" },
+                    r.threat,
+                    tl.tick_of(r.t)
+                );
             }
             Ok(())
         }

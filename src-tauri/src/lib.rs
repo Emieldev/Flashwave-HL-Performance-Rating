@@ -246,6 +246,7 @@ pub fn run() {
             sync_commands::get_match_analysis,
             sync_commands::get_aim,
             sync_commands::get_spychecks,
+            sync_commands::get_demo_stats,
             sync_commands::get_cart,
             sync_commands::played_filters,
             sync_commands::get_parts,
