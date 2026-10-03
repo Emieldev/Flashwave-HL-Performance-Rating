@@ -7,7 +7,9 @@ description = "Team Fortress 2 Highlander performance rating system"
 
 [lib]
 name = "hl_app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# No "staticlib": it is for iOS, and on the desktop it only wrote a 1.9 GB
+# hl_app_lib.lib on every debug build.
+crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
