@@ -3,7 +3,7 @@
 //! Each returns both a typed view and the verbatim JSON, because the verbatim
 //! JSON is what gets stored: parsing rules change, source rows don't.
 
-use crate::http::{download_client, download_to, refused, Refused, Throttled};
+use crate::http::{download_client, download_to, refused, url, Refused, Throttled};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
@@ -39,6 +39,10 @@ pub struct LogsTfRow {
     pub date: Option<i64>,
     pub players: Option<i64>,
 }
+
+/// Rows per page asked of ETF2L's paged lists: within what its docs call
+/// reasonable, and a fifth of the requests of its default 20.
+pub const ETF2L_PAGE: &str = "100";
 
 pub struct Sources {
     trends: Throttled,
@@ -96,15 +100,16 @@ impl Sources {
         updated_since: Option<i64>,
         mut on_page: impl FnMut(usize),
     ) -> Result<Vec<(TrendsRow, String)>> {
-        let mut path = format!("/api/v1/logs?steamid64={steamid64}&limit=100");
+        let mut query = vec![("steamid64", steamid64.to_string()), ("limit", "100".to_string())];
         if let Some(t) = updated_since {
-            path.push_str(&format!("&updated_since={t}"));
+            query.push(("updated_since", t.to_string()));
         }
+        let mut next = url("https://trends.tf/api/v1/logs", &query);
 
         let mut rows = Vec::new();
         // Hard cap as a guard against a pagination loop, well above any real history.
         for _ in 0..500 {
-            let body = self.trends.get_text(&format!("https://trends.tf{path}")).await?;
+            let body = self.trends.get_text(&next).await?;
             let page: Value = serde_json::from_str(&body).context("parsing trends.tf page")?;
 
             for raw in page.get("logs").and_then(Value::as_array).into_iter().flatten() {
@@ -114,8 +119,9 @@ impl Sources {
             }
             on_page(rows.len());
 
+            // trends.tf builds the next page's path itself.
             match page.get("next_page").and_then(Value::as_str) {
-                Some(next) if !next.is_empty() => path = next.to_string(),
+                Some(path) if !path.is_empty() => next = format!("https://trends.tf{path}"),
                 _ => return Ok(rows),
             }
         }
@@ -126,8 +132,8 @@ impl Sources {
     /// the path of the next page. For the league sample, which needs every
     /// official's logs, not only the owner's.
     pub async fn trends_league_page(&self, path: Option<&str>) -> Result<(Vec<TrendsRow>, Option<String>)> {
-        let path = path.unwrap_or("/api/v1/logs?league=etf2l&format=highlander&limit=100");
-        let body = self.trends.get_text(&format!("https://trends.tf{path}")).await?;
+        let first = || url("https://trends.tf/api/v1/logs", [("league", "etf2l"), ("format", "highlander"), ("limit", "100")]);
+        let body = self.trends.get_text(&path.map_or_else(first, |p| format!("https://trends.tf{p}"))).await?;
         let page: Value = serde_json::from_str(&body).context("parsing trends.tf league page")?;
         let rows = page
             .get("logs")
@@ -143,8 +149,9 @@ impl Sources {
     /// Every log logs.tf knows for this player, in one request. Covers the logs
     /// trends.tf never indexed — mostly 2014-2019 on this account.
     pub async fn logstf_search(&self, steamid64: &str) -> Result<Vec<(LogsTfRow, String)>> {
-        let url = format!("https://logs.tf/api/v1/log?player={steamid64}&limit=10000");
-        let body = self.logstf_gated(self.logstf.get_text(&url)).await?;
+        // 10000 is logs.tf's documented maximum: a whole history in one request.
+        let search = url("https://logs.tf/api/v1/log", [("player", steamid64), ("limit", "10000")]);
+        let body = self.logstf_gated(self.logstf.get_text(&search)).await?;
         let page: Value = serde_json::from_str(&body).context("parsing logs.tf search")?;
         page.get("logs")
             .and_then(Value::as_array)
@@ -187,13 +194,14 @@ impl Sources {
             Ok(v.get("logs").and_then(|l| l.get(0)).and_then(|l| l.get(key)).and_then(Value::as_i64))
         };
         if !self.logstf_resting() {
-            let url = format!("https://logs.tf/api/v1/log?player={steamid64}&limit=1");
-            match self.logstf_gated(self.logstf.get_text(&url)).await {
+            let newest = url("https://logs.tf/api/v1/log", [("player", steamid64), ("limit", "1")]);
+            match self.logstf_gated(self.logstf.get_text_interactive(&newest)).await {
                 Ok(body) => return Ok(first(&body, "id")?.map(|id| (id, "logs.tf"))),
                 Err(e) => tracing::info!(error = %format!("{e:#}"), "logs.tf would not say; asking trends.tf"),
             }
         }
-        let body = self.trends.get_text(&format!("https://trends.tf/api/v1/logs?steamid64={steamid64}&limit=1")).await?;
+        let newest = url("https://trends.tf/api/v1/logs", [("steamid64", steamid64), ("limit", "1")]);
+        let body = self.trends.get_text_interactive(&newest).await?;
         Ok(first(&body, "logid")?.map(|id| (id, "trends.tf")))
     }
 
@@ -249,11 +257,17 @@ impl Sources {
     /// A player's trends.tf page, ETF2L Highlander officials only (Q37):
     /// HTML, as it has no JSON API. `None` when trends.tf has no such player.
     pub async fn trends_player_page(&self, steamid64: &str) -> Result<Option<String>> {
-        self.trends.get_text_opt(&crate::trends_career::page_url(steamid64)).await
+        self.trends.get_text_opt_interactive(&crate::trends_career::page_url(steamid64)).await
     }
 
     pub async fn fetch_text(&self, url: &str) -> Result<Option<String>> {
         self.web.get_text_opt(url).await
+    }
+
+    /// As [`fetch_text`](Self::fetch_text), for a screen waiting on it: no
+    /// retries when the connection cannot be made.
+    pub async fn fetch_text_interactive(&self, url: &str) -> Result<Option<String>> {
+        self.web.get_text_opt_interactive(url).await
     }
 
     /// A small file (an avatar image); `None` when it does not exist.
@@ -263,6 +277,20 @@ impl Sources {
 
     pub async fn etf2l_get(&self, path: &str) -> Result<Option<String>> {
         self.etf2l.get_text_opt(&format!("https://api-v2.etf2l.org{path}")).await
+    }
+
+    /// One page of a paged ETF2L list, [`ETF2L_PAGE`] rows at a time rather
+    /// than its default 20.
+    pub async fn etf2l_page(&self, path: &str, page: i64) -> Result<Option<String>> {
+        let page = page.to_string();
+        let query = [("page", page.as_str()), ("limit", ETF2L_PAGE)];
+        self.etf2l.get_text_opt(&url(&format!("https://api-v2.etf2l.org{path}"), query)).await
+    }
+
+    /// As [`etf2l_get`](Self::etf2l_get), for a screen waiting on it: no
+    /// retries when the connection cannot be made.
+    pub async fn etf2l_get_interactive(&self, path: &str) -> Result<Option<String>> {
+        self.etf2l.get_text_opt_interactive(&format!("https://api-v2.etf2l.org{path}")).await
     }
 
     /// Every SourceTV demo demos.tf holds for one player, newest first.
@@ -279,11 +307,13 @@ impl Sources {
         steamid64: &str,
         before: Option<i64>,
     ) -> Result<Vec<DemosTfMeta>> {
-        let mut url = format!("https://api.demos.tf/demos?players[]={steamid64}&limit=100");
+        // `players[]` is PHP's array syntax, which demos.tf's API reads. It
+        // has no page-size parameter; paging is by `before`.
+        let mut query = vec![("players[]", steamid64.to_string())];
         if let Some(t) = before {
-            url.push_str(&format!("&before={t}"));
+            query.push(("before", t.to_string()));
         }
-        let body = self.demostf.get_text(&url).await?;
+        let body = self.demostf.get_text(&url("https://api.demos.tf/demos", &query)).await?;
         serde_json::from_str(&body).context("parsing the demos.tf demo list")
     }
 
