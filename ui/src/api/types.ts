@@ -1657,12 +1657,57 @@ export interface TeamResult {
   maps: string[];
 }
 
+/** A league season as a tile on the Teams tab. */
+export interface SeasonTile {
+  season: number;
+  seasonName: string;
+  from: number;
+  to: number;
+  divisions: CatDivision[];
+  teams: number;
+  matches: number;
+  champion: CatTeam | null;
+  championDivision: string | null;
+  you: PlayerSeason | null;
+}
+
+export interface PodiumPlace {
+  place: number;
+  team: CatTeam;
+  how: string;
+}
+
+/** One division's podium in a season, and its event MVP. */
+export interface Podium {
+  division: string;
+  tier: number | null;
+  medals: PodiumPlace[];
+  mvp: Mvp | null;
+  mvpName: string | null;
+}
+
+export interface TeamSeason {
+  season: number;
+  seasonName: string;
+  division: string;
+  tier: number | null;
+  played: number;
+  won: number;
+  lost: number;
+  place: number | null;
+}
+
+export interface TeamHonours {
+  medals: Medal[];
+  seasons: TeamSeason[];
+}
+
 export interface TeamRosterRow {
   accountId: number;
   name: string;
   matches: number;
   lastPlayed: number;
-  /** Most played class in your match pool, games on it, and average rating there. */
+  /** The class played most for this team in its officials, officials rated on it, and the average there. */
   class: string | null;
   games: number;
   rating: number | null;

@@ -1,0 +1,425 @@
+[
+  {
+    "division": "Premiership",
+    "tier": 0,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 35780,
+          "name": "4House",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/65726fab2458f.jpg"
+        },
+        "how": "Grand Final 6-0"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 36449,
+          "name": "C̶I̴L̴L̵A̴ ̸B̵L̷A̵C̶K̷ ̷W̷A̴R̶R̶I̷O̸R̶S̶",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/66634fc7dfdde.png"
+        },
+        "how": "Grand Final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 19335,
+          "name": "TWICE",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/67e3f46609848.jpg"
+        },
+        "how": "3rd place match 6-0"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Premiership",
+      "tier": 0,
+      "class": "sniper",
+      "accountId": 389383214,
+      "team": {
+        "id": 35780,
+        "name": "4House",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/65726fab2458f.jpg"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.32015,
+      "finalRating": 1.272,
+      "finalMaps": 5,
+      "playoffsRating": 1.4324999999999999,
+      "playoffsMaps": 4
+    },
+    "mvpName": "buko"
+  },
+  {
+    "division": "High",
+    "tier": 1,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 36670,
+          "name": "Turn 90 Artillery (Norway)",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/66f89e001deb5.jpg"
+        },
+        "how": "Grand Final 6-3"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 32258,
+          "name": "Kazakh e-Sports powered by Chapman",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/6524504f5aa4e.png"
+        },
+        "how": "Grand Final 3-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 32426,
+          "name": "THACI/VUCIC",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/5f14294154f75.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 35738,
+          "name": "ChudsX6",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/6a7c266876a8c.png"
+        },
+        "how": "joint 3rd: semi-final 3-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "High",
+      "tier": 1,
+      "class": "heavy",
+      "accountId": 254196047,
+      "team": {
+        "id": 36670,
+        "name": "Turn 90 Artillery (Norway)",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/66f89e001deb5.jpg"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.1456000000000002,
+      "finalRating": 1.125714285714286,
+      "finalMaps": 7,
+      "playoffsRating": 1.1920000000000002,
+      "playoffsMaps": 10
+    },
+    "mvpName": "Fuzze"
+  },
+  {
+    "division": "Mid",
+    "tier": 2,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 36667,
+          "name": "2 Blacked Up",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/66f3209700270.jpg"
+        },
+        "how": "Grand Final 6-0"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 32765,
+          "name": "L9 SPONSORED BY FRIENDS.TF",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/683bad9234274.png"
+        },
+        "how": "Grand Final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 30263,
+          "name": "BAD DRAGONS",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/5ee64926b5d9c.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 36320,
+          "name": "Red Panda Dynasty",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/69fce702347bf.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Mid",
+      "tier": 2,
+      "class": "demoman",
+      "accountId": 897131084,
+      "team": {
+        "id": 36667,
+        "name": "2 Blacked Up",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/66f3209700270.jpg"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.3177,
+      "finalRating": 1.326,
+      "finalMaps": 5,
+      "playoffsRating": 1.2983333333333336,
+      "playoffsMaps": 6
+    },
+    "mvpName": "def"
+  },
+  {
+    "division": "Low",
+    "tier": 3,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 35600,
+          "name": "SBQRRA",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+        },
+        "how": "Grand Final 6-3"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 36631,
+          "name": "Champions of Light",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/675c72e438e4d.jpg"
+        },
+        "how": "Grand Final 3-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 33634,
+          "name": "Help me I'm feeding",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/672be2dbc7bc7.png"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 26973,
+          "name": "Anglo: Death, Undeath and Re-death",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/64516cc529f3d.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Low",
+      "tier": 3,
+      "class": "pyro",
+      "accountId": 139431148,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.091,
+      "finalRating": 1.04,
+      "finalMaps": 1,
+      "playoffsRating": 1.21,
+      "playoffsMaps": 2
+    },
+    "mvpName": "mob"
+  },
+  {
+    "division": "Open",
+    "tier": 4,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 33526,
+          "name": "Clanking Hazard",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/691c962f82350.jpg"
+        },
+        "how": "Grand Final 6-0"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 30665,
+          "name": "Gentlemercs Union",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/60354751eda29.jpg"
+        },
+        "how": "Grand Final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 36597,
+          "name": "Gorizont",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/66f9bb74e1705.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 31646,
+          "name": "Tissit",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/5c7bebbaa2b4e.png"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Open",
+      "tier": 4,
+      "class": "sniper",
+      "accountId": 159183735,
+      "team": {
+        "id": 33526,
+        "name": "Clanking Hazard",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/691c962f82350.jpg"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.225,
+      "finalRating": 1.225,
+      "finalMaps": 4,
+      "playoffsRating": null,
+      "playoffsMaps": 0
+    },
+    "mvpName": "triple"
+  },
+  {
+    "division": "Fresh Meat",
+    "tier": 5,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 36879,
+          "name": "Oblock",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/6974ecdbe46dd.png"
+        },
+        "how": "Grand Final 6-0"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 36139,
+          "name": "HysK",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/65a94a848c9fb.jpg"
+        },
+        "how": "Grand Final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 36937,
+          "name": "Arizona Iced Out Boy$",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/67c5c00757883.png"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 36859,
+          "name": "Cule",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/67c70c49185d1.png"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Fresh Meat",
+      "tier": 5,
+      "class": "scout",
+      "accountId": 355105697,
+      "team": {
+        "id": 36879,
+        "name": "Oblock",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/6974ecdbe46dd.png"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.2608,
+      "finalRating": 1.334,
+      "finalMaps": 5,
+      "playoffsRating": 1.0899999999999999,
+      "playoffsMaps": 2
+    },
+    "mvpName": "fy"
+  },
+  {
+    "division": "Freshest",
+    "tier": 5,
+    "medals": [
+      {
+        "place": 1,
+        "team": {
+          "id": 36774,
+          "name": "Civilized Gentlemenn",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/67448c7e05ebe.jpg"
+        },
+        "how": "Grand Final 6-3"
+      },
+      {
+        "place": 2,
+        "team": {
+          "id": 36688,
+          "name": "Ruiners of TF2",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/67276913bef6e.jpg"
+        },
+        "how": "Grand Final 3-6"
+      },
+      {
+        "place": 3,
+        "team": {
+          "id": 35045,
+          "name": "Ресторан Папа Коля 6OmJaTHNK",
+          "avatar": "https://etf2l.org/wp-content/uploads/avatars/66ed94458ec25.jpg"
+        },
+        "how": "joint 3rd: semi-final 0-6"
+      }
+    ],
+    "mvp": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Freshest",
+      "tier": 5,
+      "class": "pyro",
+      "accountId": 168083213,
+      "team": {
+        "id": 36774,
+        "name": "Civilized Gentlemenn",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/67448c7e05ebe.jpg"
+      },
+      "won": true,
+      "event": true,
+      "score": 1.2243750000000002,
+      "finalRating": 1.17375,
+      "finalMaps": 8,
+      "playoffsRating": 1.3425,
+      "playoffsMaps": 4
+    },
+    "mvpName": "ganza"
+  }
+]

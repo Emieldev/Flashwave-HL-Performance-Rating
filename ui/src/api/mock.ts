@@ -10,6 +10,9 @@ import match4114301 from "./fixtures/match_4114301.json";
 import match4111116 from "./fixtures/match_4111116.json";
 // `hl guide --json`: the live models, as the built app serves them.
 import ratingGuide from "./fixtures/rating_guide.json";
+import seasonsOverview from "./fixtures/seasons_overview.json";
+import seasonPodiums33 from "./fixtures/season_podiums_33.json";
+import teamHonours35600 from "./fixtures/team_honours_35600.json";
 import cart4109131 from "./fixtures/cart_4109131.json";
 import match3863290 from "./fixtures/match_3863290.json";
 import analysis3863290 from "./fixtures/analysis_3863290.json";
@@ -55,7 +58,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings, MatchDivisions, CareerView } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings, MatchDivisions, CareerView, SeasonTile, Podium, TeamHonours } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -916,6 +919,20 @@ export const mockApi: Api = {
 
   // From `hl leagues --json` and `hl team 37805 --json` on a real fetch.
   getLeagues: (_season?: number) => delay(leagues as unknown as LeagueView),
+  // From a copy of the database, 3 October 2026: the tiles, S33's podiums
+  // and SBQRRA's honours; the banners ETF2L's news had.
+  getSeasonsOverview: () => delay(seasonsOverview as unknown as SeasonTile[]),
+  getSeasonBanner: (season: number) =>
+    delay<string | null>(
+      ({
+        36: "https://etf2l.org/wp-content/uploads/2026/07/ETF2L_HL_autumn_2026-1024x576.jpg",
+        35: "https://etf2l.org/wp-content/uploads/2026/03/ETF2L_HL_SPRING_2026-1024x576.jpg",
+        29: "https://etf2l.org/wp-content/uploads/2023/04/etf2l_hl_spring_23-1024x576.png",
+        28: "https://etf2l.org/wp-content/uploads/2023/03/ETF2L_HL_winter23-banner.png",
+      } as Record<number, string>)[season] ?? null,
+    ),
+  getSeasonPodiums: () => delay(seasonPodiums33 as unknown as Podium[]),
+  getTeamHonours: () => delay(teamHonours35600 as unknown as TeamHonours),
   getTeam: (teamId: number) => {
     const row = (leagues as unknown as LeagueView).divisions.flatMap((d) => d.teams).find((x) => x.teamId === teamId);
     const base = team37805 as unknown as TeamView;

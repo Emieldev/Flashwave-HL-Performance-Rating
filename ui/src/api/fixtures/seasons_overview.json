@@ -1,0 +1,662 @@
+[
+  {
+    "season": 36,
+    "seasonName": "Autumn 2026",
+    "from": 1787080500,
+    "to": 1790795700,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "High",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 58,
+    "matches": 118,
+    "champion": null,
+    "championDivision": null,
+    "you": {
+      "season": 36,
+      "seasonName": "Autumn 2026",
+      "division": "High",
+      "tier": 1,
+      "team": {
+        "id": 37805,
+        "name": "DD14",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/6a18b9b147176.png"
+      },
+      "played": 1,
+      "won": 1,
+      "lost": 0,
+      "place": null,
+      "merc": true
+    }
+  },
+  {
+    "season": 35,
+    "seasonName": "Spring 2026",
+    "from": 1775589300,
+    "to": 1780514100,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "High",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 52,
+    "matches": 146,
+    "champion": {
+      "id": 35797,
+      "name": "GANJA",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/65a940bb23df1.png"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 134,
+    "seasonName": "AFA 2025",
+    "from": 1762974000,
+    "to": 1766434500,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Division 3",
+        "tier": 2
+      },
+      {
+        "name": "Division 4",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 46,
+    "matches": 104,
+    "champion": {
+      "id": 37181,
+      "name": "3AM",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/686fdc0546434.png"
+    },
+    "championDivision": "Premiership",
+    "you": {
+      "season": 134,
+      "seasonName": "AFA 2025",
+      "division": "Division 3",
+      "tier": 2,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "played": 4,
+      "won": 0,
+      "lost": 4,
+      "place": null,
+      "merc": false
+    }
+  },
+  {
+    "season": 34,
+    "seasonName": "Summer 2025",
+    "from": 1755026100,
+    "to": 1759086900,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "High",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 57,
+    "matches": 146,
+    "champion": {
+      "id": 37181,
+      "name": "3AM",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/686fdc0546434.png"
+    },
+    "championDivision": "Premiership",
+    "you": {
+      "season": 34,
+      "seasonName": "Summer 2025",
+      "division": "Mid",
+      "tier": 2,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "played": 6,
+      "won": 4,
+      "lost": 2,
+      "place": 3,
+      "merc": false
+    }
+  },
+  {
+    "season": 33,
+    "seasonName": "Spring 2025",
+    "from": 1742847300,
+    "to": 1748978100,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "High",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      },
+      {
+        "name": "Fresh Meat",
+        "tier": 5
+      },
+      {
+        "name": "Freshest",
+        "tier": 5
+      }
+    ],
+    "teams": 59,
+    "matches": 182,
+    "champion": {
+      "id": 35780,
+      "name": "4House",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/65726fab2458f.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": {
+      "season": 33,
+      "seasonName": "Spring 2025",
+      "division": "Low",
+      "tier": 3,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "played": 9,
+      "won": 7,
+      "lost": 2,
+      "place": 1,
+      "merc": false
+    }
+  },
+  {
+    "season": 32,
+    "seasonName": "Summer 2024",
+    "from": 1721242800,
+    "to": 1726423200,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 56,
+    "matches": 141,
+    "champion": {
+      "id": 35780,
+      "name": "4House",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/65726fab2458f.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 31,
+    "seasonName": "Winter 2024",
+    "from": 1704744900,
+    "to": 1709842500,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "High",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 57,
+    "matches": 139,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": {
+      "season": 31,
+      "seasonName": "Winter 2024",
+      "division": "Low",
+      "tier": 3,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "played": 11,
+      "won": 9,
+      "lost": 1,
+      "place": 1,
+      "merc": false
+    }
+  },
+  {
+    "season": 30,
+    "seasonName": "Autumn 2023",
+    "from": 1692904500,
+    "to": 1697653800,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Division 3",
+        "tier": 2
+      },
+      {
+        "name": "Division 4",
+        "tier": 2
+      },
+      {
+        "name": "Division 5",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 58,
+    "matches": 140,
+    "champion": {
+      "id": 35797,
+      "name": "GANJA",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/65a940bb23df1.png"
+    },
+    "championDivision": "Premiership",
+    "you": {
+      "season": 30,
+      "seasonName": "Autumn 2023",
+      "division": "Open B",
+      "tier": 4,
+      "team": {
+        "id": 35600,
+        "name": "SBQRRA",
+        "avatar": "https://etf2l.org/wp-content/uploads/avatars/649b812af1c16.png"
+      },
+      "played": 6,
+      "won": 6,
+      "lost": 0,
+      "place": 1,
+      "merc": false
+    }
+  },
+  {
+    "season": 29,
+    "seasonName": "Spring 2023",
+    "from": 1684173600,
+    "to": 1688325300,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 54,
+    "matches": 136,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 28,
+    "seasonName": "Winter 2023",
+    "from": 1674587700,
+    "to": 1679252820,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Division 3",
+        "tier": 2
+      },
+      {
+        "name": "Division 4",
+        "tier": 2
+      },
+      {
+        "name": "Division 5",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 49,
+    "matches": 126,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 27,
+    "seasonName": "Season 27",
+    "from": 1659899700,
+    "to": 1665340200,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 50,
+    "matches": 118,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 26,
+    "seasonName": "Season 26",
+    "from": 1647543600,
+    "to": 1652727600,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Division 3",
+        "tier": 2
+      },
+      {
+        "name": "Division 4",
+        "tier": 2
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 63,
+    "matches": 137,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 25,
+    "seasonName": "Season 25",
+    "from": 1630610100,
+    "to": 1635275700,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Division 3",
+        "tier": 2
+      },
+      {
+        "name": "Division 4",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 76,
+    "matches": 184,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  },
+  {
+    "season": 24,
+    "seasonName": "Season 24",
+    "from": 1621192500,
+    "to": 1626026400,
+    "divisions": [
+      {
+        "name": "Premiership",
+        "tier": 0
+      },
+      {
+        "name": "Division 1",
+        "tier": 1
+      },
+      {
+        "name": "Division 2",
+        "tier": 1
+      },
+      {
+        "name": "Mid",
+        "tier": 2
+      },
+      {
+        "name": "Low",
+        "tier": 3
+      },
+      {
+        "name": "Open",
+        "tier": 4
+      }
+    ],
+    "teams": 77,
+    "matches": 193,
+    "champion": {
+      "id": 25693,
+      "name": "Super Dickmann's KANNONEN!",
+      "avatar": "https://etf2l.org/wp-content/uploads/avatars/63cdb6e20ca6d.jpg"
+    },
+    "championDivision": "Premiership",
+    "you": null
+  }
+]
