@@ -295,6 +295,41 @@ impl Db {
             .collect())
     }
 
+    /// Each player's officials for `team` per season: `(account, season, n)`.
+    pub async fn season_players_by_season(&self, team: i64) -> Result<Vec<(u32, i64, i64)>> {
+        let rows = sqlx::query(
+            "SELECT p.account_id, c.season, COUNT(*) AS n
+             FROM etf2l_season_player p
+             JOIN etf2l_season_match m ON m.match_id = p.match_id
+             JOIN etf2l_competition c ON c.competition_id = m.competition_id
+             WHERE p.team_id = ?1 GROUP BY p.account_id, c.season",
+        )
+        .bind(team)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.get::<i64, _>("account_id") as u32, r.get("season"), r.get("n"))).collect())
+    }
+
+    /// What each player played for this team per season: `(account, season,
+    /// class, seconds)`, most time first per account and season.
+    pub async fn team_classes_by_season(&self, team: i64) -> Result<Vec<(u32, i64, String, i64)>> {
+        let rows = sqlx::query(
+            "SELECT sp.account_id, c.season, p.class, SUM(p.seconds) AS s
+             FROM etf2l_season_player sp
+             JOIN etf2l_season_match m ON m.match_id = sp.match_id
+             JOIN etf2l_competition c ON c.competition_id = m.competition_id
+             JOIN league_log l ON l.etf2l_match_id = sp.match_id
+             JOIN league_log_player p ON p.log_id = l.log_id AND p.account_id = sp.account_id
+             WHERE sp.team_id = ?1 AND p.class IS NOT NULL
+             GROUP BY sp.account_id, c.season, p.class
+             ORDER BY sp.account_id, c.season, s DESC",
+        )
+        .bind(team)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.get::<i64, _>("account_id") as u32, r.get("season"), r.get("class"), r.get("s"))).collect())
+    }
+
     /// What each player played for this team in its officials: `(account,
     /// class, seconds)`, from the logs of its ETF2L matches, most time first
     /// per account (Flashy: the class must be the one played for the team,

@@ -1310,6 +1310,12 @@ pub async fn get_season_podiums(state: State<'_, AppState>, season: i64) -> CmdR
     Ok(hl_ingest::catalogue::season_podiums(&state.db, season).await?)
 }
 
+/// A team's own ETF2L page: its description and ETF2L's list of its awards.
+#[tauri::command]
+pub async fn get_team_etf2l(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamEtf2l> {
+    Ok(hl_ingest::catalogue::team_etf2l(&state.db, &state.sources, team_id).await?)
+}
+
 /// A team's medals and its seasons.
 #[tauri::command]
 pub async fn get_team_honours(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamHonours> {

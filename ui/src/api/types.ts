@@ -1711,6 +1711,16 @@ export interface TeamRosterRow {
   class: string | null;
   games: number;
   rating: number | null;
+  /** The same per season, newest first: the lineup of each season. */
+  seasons: { season: number; officials: number; class: string | null; rating: number | null }[];
+}
+
+/** A team's own ETF2L page: its description and ETF2L's list of its awards. */
+export interface TeamEtf2l {
+  description: string | null;
+  awards: { place: string; competition: string }[];
+  url: string;
+  fetchedAt: number;
 }
 
 export interface TeamView {

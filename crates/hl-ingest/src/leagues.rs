@@ -566,6 +566,17 @@ pub struct RosterRow {
     pub class: Option<String>,
     pub games: i64,
     pub rating: Option<f64>,
+    /// The same, season by season, newest first: the lineup per season.
+    pub seasons: Vec<RosterSeason>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RosterSeason {
+    pub season: i64,
+    pub officials: i64,
+    pub class: Option<String>,
+    pub rating: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -662,26 +673,41 @@ pub async fn team(db: &Db, team_id: i64) -> Result<Option<TeamView>> {
     // and their other teams say nothing about their role here.
     let players = db.season_players(team_id).await?;
     let classes = db.team_classes(team_id).await?;
-    let ours: HashSet<i64> = matches.iter().map(|m| m.match_id).collect();
+    let by_season = db.season_players_by_season(team_id).await?;
+    let classes_by_season = db.team_classes_by_season(team_id).await?;
+    let season_of: HashMap<i64, i64> = matches.iter().map(|m| (m.match_id, m.season)).collect();
     let mut roster = Vec::new();
     for (account_id, name, matches, last_played) in players {
         // Most time first per account.
         let class = classes.iter().find(|c| c.0 == account_id).map(|c| c.1.clone());
-        let (mut games, mut rating) = (0, None);
-        if let Some(class) = &class {
-            let rated: Vec<hl_db::RatedGame> = db
-                .rated_games(hl_rating::MODEL_VERSION, Some(account_id))
-                .await?
-                .into_iter()
-                .filter(|g| g.class == *class && g.etf2l_match_id.is_some_and(|id| ours.contains(&id)))
-                .collect();
-            let officials: HashSet<i64> = rated.iter().filter_map(|g| g.etf2l_match_id).collect();
-            games = officials.len() as i64;
-            if !rated.is_empty() {
-                rating = Some(rated.iter().map(|g| g.score).sum::<f64>() / rated.len() as f64);
-            }
-        }
-        roster.push(RosterRow { account_id, name, matches, last_played, class, games, rating });
+        // Their rated games in this team's officials, any class.
+        let rated: Vec<hl_db::RatedGame> = db
+            .rated_games(hl_rating::MODEL_VERSION, Some(account_id))
+            .await?
+            .into_iter()
+            .filter(|g| g.etf2l_match_id.is_some_and(|id| season_of.contains_key(&id)))
+            .collect();
+        let avg = |v: Vec<f64>| (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64);
+        let on_class: Vec<&hl_db::RatedGame> = rated.iter().filter(|g| class.as_deref() == Some(g.class.as_str())).collect();
+        let games = on_class.iter().filter_map(|g| g.etf2l_match_id).collect::<HashSet<i64>>().len() as i64;
+        let rating = avg(on_class.iter().map(|g| g.score).collect());
+        let mut seasons: Vec<RosterSeason> = by_season
+            .iter()
+            .filter(|(a, _, _)| *a == account_id)
+            .map(|(_, season, n)| {
+                let class = classes_by_season.iter().find(|c| c.0 == account_id && c.1 == *season).map(|c| c.2.clone());
+                let rating = avg(
+                    rated
+                        .iter()
+                        .filter(|g| class.as_deref() == Some(g.class.as_str()) && g.etf2l_match_id.and_then(|id| season_of.get(&id)) == Some(season))
+                        .map(|g| g.score)
+                        .collect(),
+                );
+                RosterSeason { season: *season, officials: *n, class, rating }
+            })
+            .collect();
+        seasons.sort_by_key(|s| std::cmp::Reverse(season_order(s.season)));
+        roster.push(RosterRow { account_id, name, matches, last_played, class, games, rating, seasons });
     }
 
     Ok(Some(TeamView { team_id, name, country, avatar, seasons, record, maps, results, roster }))

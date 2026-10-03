@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type TeamHonours, type TeamView } from "../../api/types";
+import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type TeamEtf2l, type TeamHonours, type TeamView } from "../../api/types";
 import { formatDate, rating } from "../../lib/format";
 import { openPlayer } from "../../lib/goto";
 import { t, tx } from "../../lib/i18n";
@@ -14,10 +14,10 @@ import "../players/players.css";
 import "./teams.css";
 
 /**
- * Teams (Q29, and Flashy's UX pass): every ETF2L Highlander season as a
+ * Teams (Q29, and Flashy's UX passes): every ETF2L Highlander season as a
  * tile -- its banner from ETF2L's news, who won it, how you did -- then a
  * season's podiums and division tables, then a team's own page, built like
- * a player's profile.
+ * a player's profile, with its ETF2L description and awards.
  */
 
 type View = { kind: "seasons" } | { kind: "season"; season: number } | { kind: "team"; teamId: number; from: View };
@@ -27,43 +27,51 @@ const PLACE = ["gold", "silver", "bronze"] as const;
 export function TeamsPage() {
   const [view, setView] = useState<View>({ kind: "seasons" });
   const openTeam = (teamId: number) => setView((from) => ({ kind: "team", teamId, from: from.kind === "team" ? from.from : from }));
+  let body;
   if (view.kind === "team") {
-    return <TeamScreen teamId={view.teamId} onBack={() => setView(view.from)} onTeam={openTeam} backLabel={view.from.kind === "season" ? t("← Season") : t("← All seasons")} />;
+    body = <TeamScreen teamId={view.teamId} onBack={() => setView(view.from)} onTeam={openTeam} backLabel={view.from.kind === "season" ? t("Season") : t("All seasons")} />;
+  } else if (view.kind === "season") {
+    body = <SeasonScreen season={view.season} onBack={() => setView({ kind: "seasons" })} onTeam={openTeam} />;
+  } else {
+    body = <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} />;
   }
-  if (view.kind === "season") {
-    return <SeasonScreen season={view.season} onBack={() => setView({ kind: "seasons" })} onTeam={openTeam} />;
-  }
-  return <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} />;
+  return <div className="content teams-page">{body}</div>;
+}
+
+function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button className="ts-back" onClick={onClick}>
+      <span aria-hidden>‹</span> {label}
+    </button>
+  );
 }
 
 // ---- 1. Every season as a tile ----------------------------------------
 
 function SeasonsGrid({ onSeason }: { onSeason: (season: number) => void }) {
   const q = useQuery({ queryKey: ["seasons_overview"], queryFn: api.getSeasonsOverview, staleTime: 5 * 60_000 });
-  if (q.isPending) return <div className="teams-page"><p className="hint">{t("Loading seasons…")}</p></div>;
-  if (q.isError) return <div className="teams-page"><p className="error">{errorMessage(q.error)}</p></div>;
-  if (q.data.length === 0) {
-    return (
-      <div className="teams-page">
-        <section className="panel">
-          <h2>{t("Teams")}</h2>
-          <p className="hint" style={{ marginTop: 6 }}>{t("No seasons yet. The next sync reads the last year of ETF2L Highlander: every division, team and result.")}</p>
-        </section>
-      </div>
-    );
-  }
   return (
-    <div className="teams-page">
-      <header className="ts-head">
-        <h2>{t("ETF2L Highlander seasons")}</h2>
+    <>
+      <header className="ts-pagehead">
+        <span className="ts-eyebrow">{t("ETF2L Highlander")}</span>
+        <h1>{t("Seasons")}</h1>
         <p className="hint">{t("Pick a season for its podiums, its divisions and every team in them.")}</p>
       </header>
-      <div className="ts-grid">
-        {q.data.map((s, i) => (
-          <SeasonCard key={s.season} s={s} live={i === 0 && !s.champion} onOpen={() => onSeason(s.season)} />
-        ))}
-      </div>
-    </div>
+      {q.isPending && <p className="hint">{t("Loading seasons…")}</p>}
+      {q.isError && <p className="error">{errorMessage(q.error)}</p>}
+      {q.data && q.data.length === 0 && (
+        <section className="panel">
+          <p className="hint">{t("No seasons yet. The next sync reads the last year of ETF2L Highlander: every division, team and result.")}</p>
+        </section>
+      )}
+      {q.data && q.data.length > 0 && (
+        <div className="ts-grid">
+          {q.data.map((s, i) => (
+            <SeasonCard key={s.season} s={s} live={i === 0 && !s.champion} onOpen={() => onSeason(s.season)} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -76,40 +84,65 @@ function useBanner(s: { season: number; seasonName: string }) {
   return useQuery({ queryKey: ["season_banner", s.season], queryFn: () => api.getSeasonBanner(s.season, s.seasonName), staleTime: Infinity }).data ?? null;
 }
 
+/** RED for even seasons, BLU for odd: the cards without a banner alternate. */
+function teamTint(season: number): string {
+  return season % 2 === 0 ? "ts-tint-red" : "ts-tint-blu";
+}
+
 function SeasonCard({ s, live, onOpen }: { s: SeasonTile; live: boolean; onOpen: () => void }) {
   const banner = useBanner(s);
-  const top = s.divisions.slice(0, 7);
   return (
-    <button className="ts-card" onClick={onOpen} title={t("Open {0}", { "0": seasonTitle(s) })}>
-      <span className={banner ? "ts-banner" : "ts-banner ts-banner-none"} style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
-        {!banner && <span className="ts-banner-label">{s.season >= 100 ? s.seasonName : `S${s.season}`}</span>}
-        {live && <span className="ts-live">{t("Live")}</span>}
+    <button className={`ts-card ${banner ? "" : teamTint(s.season)}`} onClick={onOpen} aria-label={t("Open {0}", { "0": seasonTitle(s) })}>
+      <span className="ts-art" style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
+        {!banner && <span className="ts-art-label">{s.season >= 100 ? s.seasonName : `S${s.season}`}</span>}
+        <span className="ts-chips">
+          <span className="ts-chip">{s.season >= 100 ? t("Off-season") : `S${s.season}`}</span>
+          {live && <span className="ts-chip ts-live">{t("Live")}</span>}
+        </span>
       </span>
       <span className="ts-body">
         <span className="ts-title">{seasonTitle(s)}</span>
-        <span className="hint">
-          {formatDate(s.from)} – {formatDate(s.to)} · {tx("{0} teams", { "0": s.teams })} · {tx("{0} officials", { "0": s.matches })}
+        <span className="ts-meta">
+          {formatDate(s.from)} – {formatDate(s.to)}
+          <span className="ts-dot" aria-hidden>
+            •
+          </span>
+          {tx("{0} teams", { "0": s.teams })}
+          <span className="ts-dot" aria-hidden>
+            •
+          </span>
+          {tx("{0} officials", { "0": s.matches })}
         </span>
         <span className="ts-divs">
-          {top.map((d) => (
+          {s.divisions.map((d) => (
             <DivisionBadge key={d.name} d={d} />
           ))}
         </span>
-        {s.champion && (
-          <span className="ts-champ">
-            <MedalGlyph size={18} place={1} />
-            <TeamAvatar src={s.champion.avatar} />
-            <strong>{s.champion.name}</strong>
-            <span className="muted">· {s.championDivision}</span>
+        <span className="ts-rows">
+          <span className="ts-row">
+            <span className="ts-row-label">{t("Champion")}</span>
+            {s.champion ? (
+              <span className="ts-row-value">
+                <MedalGlyph size={16} place={1} />
+                <TeamAvatar src={s.champion.avatar} />
+                <strong>{s.champion.name}</strong>
+              </span>
+            ) : (
+              <span className="ts-row-value muted">{t("still being played")}</span>
+            )}
           </span>
-        )}
-        {s.you && (
-          <span className="ts-you">
-            <span className="muted">{t("You")}:</span> {s.you.team.name} <DivisionBadge d={{ name: s.you.division, tier: s.you.tier ?? 4 }} />
-            {s.you.place && <MedalGlyph size={16} place={s.you.place} />}
-            {s.you.merc && <span className="muted"> · {t("merc")}</span>}
-          </span>
-        )}
+          {s.you && (
+            <span className="ts-row">
+              <span className="ts-row-label">{t("You")}</span>
+              <span className="ts-row-value">
+                {s.you.team.name} <DivisionBadge d={{ name: s.you.division, tier: s.you.tier ?? 4 }} />
+                {s.you.place && <MedalGlyph size={16} place={s.you.place} />}
+                {s.you.merc && <span className="muted">{t("merc")}</span>}
+              </span>
+            </span>
+          )}
+        </span>
+        <span className="ts-open">{t("Open season")} ›</span>
       </span>
     </button>
   );
@@ -125,21 +158,38 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
   const banner = useBanner(tile ?? { season, seasonName: "" });
   const v = tables.data;
   return (
-    <div className="teams-page">
-      <button className="linkish back" onClick={onBack}>
-        {t("← All seasons")}
-      </button>
-      <section className="panel ts-hero" style={banner ? { backgroundImage: `linear-gradient(90deg, var(--panel) 35%, transparent), url("${banner}")` } : undefined}>
-        <h2>{tile ? seasonTitle(tile) : t("Season {0}", { "0": season })}</h2>
-        {tile && (
-          <p className="hint">
-            {formatDate(tile.from)} – {formatDate(tile.to)} · {tx("{0} teams", { "0": tile.teams })} · {tx("{0} officials", { "0": tile.matches })}
-          </p>
-        )}
-        {v?.season && v.season.pool.length > 0 && <p className="hint teams-pool">{tx("Map pool: {0}", { "0": v.season.pool.map((m) => <code key={m}>{m}</code>) })}</p>}
+    <>
+      <BackButton label={t("All seasons")} onClick={onBack} />
+      <section className={`ts-hero ${banner ? "" : teamTint(season)}`} style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
+        <div className="ts-hero-text">
+          <span className="ts-eyebrow">{t("ETF2L Highlander")}</span>
+          <h1>{tile ? seasonTitle(tile) : t("Season {0}", { "0": season })}</h1>
+          {tile && (
+            <p className="ts-meta">
+              {formatDate(tile.from)} – {formatDate(tile.to)}
+              <span className="ts-dot">•</span>
+              {tx("{0} teams", { "0": tile.teams })}
+              <span className="ts-dot">•</span>
+              {tx("{0} officials", { "0": tile.matches })}
+            </p>
+          )}
+          {v?.season && v.season.pool.length > 0 && (
+            <p className="ts-pool">
+              {v.season.pool.map((m) => (
+                <code key={m}>{m}</code>
+              ))}
+            </p>
+          )}
+        </div>
       </section>
 
+      <h2 className="ts-section">{t("Podiums")}</h2>
       {podiums.isPending && <p className="hint">{t("Loading podiums…")}</p>}
+      {podiums.data && podiums.data.length === 0 && (
+        <section className="panel ts-pending">
+          <p className="hint">{t("No final has been played yet this season. The podiums appear here as each division finishes.")}</p>
+        </section>
+      )}
       {podiums.data && podiums.data.length > 0 && (
         <section className="ts-podiums">
           {podiums.data.map((p) => (
@@ -148,12 +198,13 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
         </section>
       )}
 
+      <h2 className="ts-section">{t("Divisions")}</h2>
       {tables.isError && <p className="error">{errorMessage(tables.error)}</p>}
       {v && v.divisions.length > 0 && (
         <div className="teams-divisions">
           {v.divisions.map((d) => (
-            <section key={d.division} className="panel">
-              <h2>{d.division}</h2>
+            <section key={d.division} className="panel ts-division">
+              <h3>{d.division}</h3>
               <div className="table-wrap">
                 <table className="match-table teams-table">
                   <thead>
@@ -172,12 +223,12 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
                         <td>
                           <span className="teams-name">
                             <TeamAvatar src={row.avatar} />
-                            {row.name}
+                            <span>{row.name}</span>
                           </span>
                         </td>
                         <td className="num">{row.record.played}</td>
-                        <td className="num">{wl(row.record)}</td>
-                        <td className="num">
+                        <td className="num nowrap">{wl(row.record)}</td>
+                        <td className="num nowrap">
                           {row.scoreFor}:{row.scoreAgainst}
                         </td>
                       </tr>
@@ -190,7 +241,7 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
         </div>
       )}
       {v && v.pendingDetails > 0 && <p className="hint">{t("{0} matches still to be read in detail; the per-map numbers fill in over the next syncs.", { "0": v.pendingDetails })}</p>}
-    </div>
+    </>
   );
 }
 
@@ -206,20 +257,22 @@ function PodiumCard({ p, onTeam }: { p: Podium; onTeam: (id: number) => void }) 
             <span className="pp-medal-tile ts-place-tile">
               <MedalGlyph size={20} place={m.place} />
             </span>
-            <button className="linkish ts-team" onClick={() => onTeam(m.team.id)}>
+            <button className="ts-team" onClick={() => onTeam(m.team.id)}>
               <TeamAvatar src={m.team.avatar} />
-              {m.team.name}
+              <span>{m.team.name}</span>
             </button>
           </li>
         ))}
       </ol>
       {p.mvp && (
-        <button className="linkish ts-mvp" onClick={() => openPlayer(p.mvp!.accountId)} title={t("Grand Final {0} over {1} logs", { "0": p.mvp.finalRating.toFixed(2), "1": p.mvp.finalMaps })}>
+        <button className="ts-mvp" onClick={() => openPlayer(p.mvp!.accountId)} title={t("Grand Final {0} over {1} logs", { "0": p.mvp.finalRating.toFixed(2), "1": p.mvp.finalMaps })}>
           <span className="pp-mvp-star" aria-hidden>
             ★
           </span>
-          <span className="muted">{t("MVP")}</span> <ClassIcon cls={p.mvp.class} size={16} /> <strong>{p.mvpName ?? "?"}</strong>
-          <span className="muted">{rating(p.mvp.score)}</span>
+          <span className="ts-mvp-label">{t("MVP")}</span>
+          <ClassIcon cls={p.mvp.class} size={16} />
+          <strong>{p.mvpName ?? "?"}</strong>
+          <span className="ts-mvp-rating">{rating(p.mvp.score)}</span>
         </button>
       )}
     </div>
@@ -228,17 +281,16 @@ function PodiumCard({ p, onTeam }: { p: Podium; onTeam: (id: number) => void }) 
 
 // ---- 3. One team, like a player's profile ------------------------------
 
-type TeamTab = "overview" | "roster" | "seasons" | "results";
+type TeamTab = "overview" | "lineup" | "seasons" | "results";
 
 function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onBack: () => void; onTeam: (id: number) => void; backLabel: string }) {
   const q = useQuery({ queryKey: ["team", teamId], queryFn: () => api.getTeam(teamId) });
   const h = useQuery({ queryKey: ["team_honours", teamId], queryFn: () => api.getTeamHonours(teamId) });
+  const e = useQuery({ queryKey: ["team_etf2l", teamId], queryFn: () => api.getTeamEtf2l(teamId), staleTime: 60 * 60_000 });
   const [tab, setTab] = useState<TeamTab>("overview");
   return (
-    <div className="teams-page">
-      <button className="linkish back" onClick={onBack}>
-        {backLabel}
-      </button>
+    <>
+      <BackButton label={backLabel} onClick={onBack} />
       {q.isPending && <p className="hint">{t("Loading team…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
       {q.data === null && <p className="hint">{t("This team is not stored.")}</p>}
@@ -250,7 +302,7 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
               {(
                 [
                   ["overview", t("Overview")],
-                  ["roster", tx("Roster ({0})", { "0": q.data.roster.length })],
+                  ["lineup", tx("Lineup ({0})", { "0": q.data.roster.length })],
                   ["seasons", t("Seasons")],
                   ["results", tx("Results ({0})", { "0": q.data.results.length })],
                 ] as [TeamTab, React.ReactNode][]
@@ -260,14 +312,14 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
                 </button>
               ))}
             </nav>
-            {tab === "overview" && <TeamOverview v={q.data} onTeam={onTeam} onRoster={() => setTab("roster")} onResults={() => setTab("results")} />}
-            {tab === "roster" && <Roster v={q.data} />}
-            {tab === "seasons" && <Seasons honours={h.data} />}
+            {tab === "overview" && <TeamOverview v={q.data} etf2l={e.data} onTeam={onTeam} onLineup={() => setTab("lineup")} onResults={() => setTab("results")} />}
+            {tab === "lineup" && <Lineup v={q.data} />}
+            {tab === "seasons" && <Seasons honours={h.data} etf2l={e.data} />}
             {tab === "results" && <Results v={q.data} onTeam={onTeam} />}
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
 
@@ -276,9 +328,9 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
   const titles = medalTitles(honours?.medals ?? []);
   const p = pct(v.record);
   return (
-    <div className="panel pp-head">
+    <div className="panel pp-head ts-teamhead">
       <div className="pp-top">
-        <div className="pp-avatar">{v.avatar ? <img src={v.avatar} alt="" /> : <span>{v.name.slice(0, 1).toUpperCase()}</span>}</div>
+        <div className="pp-avatar ts-teamavatar">{v.avatar ? <img src={v.avatar} alt="" /> : <span>{v.name.slice(0, 1).toUpperCase()}</span>}</div>
         <div className="pp-who">
           <div className="pp-name-row">
             <h2 className="pp-name">{v.name}</h2>
@@ -315,10 +367,16 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
             </div>
           )}
         </div>
-        <div className="team-record">
+        <div className="ts-record">
+          <span className="ts-record-label">{t("Officials")}</span>
           <strong>{wl(v.record)}</strong>
+          {p !== null && (
+            <span className="ts-winbar" title={t("{0}% won", { "0": p })}>
+              <span style={{ width: `${p}%` }} />
+            </span>
+          )}
           <span className="hint">{p === null ? "" : t("{0}% won", { "0": p })}</span>
-          <a href={`https://etf2l.org/teams/${v.teamId}/`} target="_blank" rel="noreferrer" className="ts-etf2l">
+          <a href={`https://etf2l.org/teams/${v.teamId}/`} target="_blank" rel="noreferrer" className="ts-link">
             {t("ETF2L ↗")}
           </a>
         </div>
@@ -341,12 +399,27 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
   );
 }
 
-function TeamOverview({ v, onTeam, onRoster, onResults }: { v: TeamView; onTeam: (id: number) => void; onRoster: () => void; onResults: () => void }) {
-  const regulars = v.roster.filter((r) => r.class).slice(0, 9);
+function TeamOverview({ v, etf2l, onTeam, onLineup, onResults }: { v: TeamView; etf2l: TeamEtf2l | undefined; onTeam: (id: number) => void; onLineup: () => void; onResults: () => void }) {
+  const newest = v.roster.flatMap((r) => r.seasons ?? []).reduce((a, s) => (a === null || s.season > a ? s.season : a), null as number | null);
+  // The newest season's lineup; the whole roster where seasons are not known.
+  const current = (
+    newest !== null
+      ? v.roster.map((r) => ({ r, s: (r.seasons ?? []).find((x) => x.season === newest) }))
+      : v.roster.map((r) => ({ r, s: { season: 0, officials: r.matches, class: r.class, rating: r.rating } }))
+  )
+    .filter((x) => x.s && x.s.officials > 0)
+    .sort((a, b) => b.s!.officials - a.s!.officials || (b.s!.rating ?? 0) - (a.s!.rating ?? 0))
+    .slice(0, 9);
   const maps = v.maps.filter((m) => m.inPool);
   return (
     <div className="pp-overview">
       <section>
+        {etf2l?.description && (
+          <>
+            <h3>{t("About")}</h3>
+            <blockquote className="ts-about">{etf2l.description}</blockquote>
+          </>
+        )}
         <h3>{t("Recent officials")}</h3>
         <ul className="pp-matches">
           {v.results.slice(0, 8).map((r) => {
@@ -372,31 +445,29 @@ function TeamOverview({ v, onTeam, onRoster, onResults }: { v: TeamView; onTeam:
           })}
         </ul>
         {v.results.length > 8 && (
-          <button className="linkish ts-more" onClick={onResults}>
-            {tx("All {0} results →", { "0": v.results.length })}
+          <button className="ts-more" onClick={onResults}>
+            {tx("All {0} results", { "0": v.results.length })} ›
           </button>
         )}
       </section>
       <section>
-        <h3>{t("Lineup")}</h3>
-        {regulars.length === 0 && <p className="hint">{t("None of this team's officials have been downloaded yet, so there are no classes or ratings to show.")}</p>}
+        <h3>{newest !== null ? tx("Lineup, {0}", { "0": seasonShort(newest) }) : t("Lineup")}</h3>
+        {current.length === 0 && <p className="hint">{t("None of this team's officials have been downloaded yet, so there are no classes or ratings to show.")}</p>}
         <ul className="ts-lineup">
-          {regulars.map((r) => (
+          {current.map(({ r, s }) => (
             <li key={r.accountId}>
-              {r.class && <ClassIcon cls={r.class} size={20} />}
-              <button className="linkish" onClick={() => openPlayer(r.accountId)}>
+              {s!.class ? <ClassIcon cls={s!.class} size={20} /> : <span />}
+              <button className="linkish ts-lineup-name" onClick={() => openPlayer(r.accountId)}>
                 {r.name}
               </button>
-              <span className="muted">{tx("{0} officials", { "0": r.matches })}</span>
-              <span className="ts-lineup-rating">{r.rating !== null ? rating(r.rating) : "–"}</span>
+              <span className="muted">{tx("{0} officials", { "0": s!.officials })}</span>
+              <span className="ts-lineup-rating">{s!.rating !== null ? rating(s!.rating) : "–"}</span>
             </li>
           ))}
         </ul>
-        {v.roster.length > regulars.length && (
-          <button className="linkish ts-more" onClick={onRoster}>
-            {tx("Whole roster ({0}) →", { "0": v.roster.length })}
-          </button>
-        )}
+        <button className="ts-more" onClick={onLineup}>
+          {tx("Every season's lineup ({0} players)", { "0": v.roster.length })} ›
+        </button>
         {maps.length > 0 && (
           <>
             <h3 className="ts-maps-title">{t("Current map pool")}</h3>
@@ -433,38 +504,95 @@ function MapBars({ maps }: { maps: TeamView["maps"] }) {
   );
 }
 
-function Roster({ v }: { v: TeamView }) {
+type Sort = "officials" | "rating" | "name";
+
+/** Every player who played for the team: all seasons, or one, sorted. */
+function Lineup({ v }: { v: TeamView }) {
+  const seasons = useMemo(() => {
+    const set = new Set<number>();
+    for (const r of v.roster) for (const s of r.seasons ?? []) set.add(s.season);
+    return [...set].sort((a, b) => order(b) - order(a));
+  }, [v]);
+  const [season, setSeason] = useState<number | null>(null);
+  const [sort, setSort] = useState<Sort>("officials");
+  const rows = v.roster
+    .map((r) => {
+      if (season === null) return { r, officials: r.matches, cls: r.class, rating: r.rating };
+      const s = (r.seasons ?? []).find((x) => x.season === season);
+      return s ? { r, officials: s.officials, cls: s.class, rating: s.rating } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null && x.officials > 0)
+    .sort((a, b) =>
+      sort === "name" ? a.r.name.localeCompare(b.r.name) : sort === "rating" ? (b.rating ?? -1) - (a.rating ?? -1) || b.officials - a.officials : b.officials - a.officials || (b.rating ?? -1) - (a.rating ?? -1),
+    );
+  const best = Math.max(1.4, ...rows.map((x) => x.rating ?? 0));
   return (
     <>
+      <div className="ts-filters">
+        <div className="ts-seasons" role="tablist" aria-label={t("Season")}>
+          <button role="tab" aria-selected={season === null} className={season === null ? "ts-pill on" : "ts-pill"} onClick={() => setSeason(null)}>
+            {t("All seasons")}
+          </button>
+          {seasons.map((s) => (
+            <button key={s} role="tab" aria-selected={season === s} className={season === s ? "ts-pill on" : "ts-pill"} onClick={() => setSeason(s)}>
+              {seasonShort(s, s >= 100 ? "AFA" : undefined)}
+            </button>
+          ))}
+        </div>
+        <div className="segmented" role="tablist" aria-label={t("Sort by")}>
+          {(
+            [
+              ["officials", t("Officials")],
+              ["rating", t("Rating")],
+              ["name", t("Name")],
+            ] as [Sort, string][]
+          ).map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={sort === id} className={sort === id ? "seg active" : "seg"} onClick={() => setSort(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="hint">{t("Class: what they played for this team in its officials. Rating: their average on it in those officials.")}</p>
       <div className="table-wrap">
-        <table className="match-table">
+        <table className="match-table ts-lineup-table">
           <thead>
             <tr>
               <th>{t("Player")}</th>
               <th>{t("Class")}</th>
               <th className="num">{t("Officials")}</th>
               <th className="num">{t("Last played")}</th>
-              <th className="num">{t("Rating")}</th>
+              <th>{t("Rating")}</th>
             </tr>
           </thead>
           <tbody>
-            {v.roster.map((r) => (
+            {rows.map(({ r, officials, cls, rating: score }) => (
               <tr key={r.accountId} className="teams-row" onClick={() => openPlayer(r.accountId)} title={t("Open {0}'s profile", { "0": r.name })}>
-                <td className="nowrap">{r.name}</td>
                 <td className="nowrap">
-                  {r.class ? (
+                  <strong>{r.name}</strong>
+                </td>
+                <td className="nowrap">
+                  {cls ? (
                     <span className="ts-class">
-                      <ClassIcon cls={r.class} size={16} /> {classLabel(r.class)}
+                      <ClassIcon cls={cls} size={16} /> {classLabel(cls)}
                     </span>
                   ) : (
                     <span className="muted">–</span>
                   )}
                 </td>
-                <td className="num">{r.matches}</td>
-                <td className="num muted">{r.lastPlayed ? formatDate(r.lastPlayed) : "–"}</td>
-                <td className="num" title={r.rating !== null ? t("{0} rated officials", { "0": r.games }) : undefined}>
-                  {r.rating !== null ? rating(r.rating) : <span className="muted">–</span>}
+                <td className="num">{officials}</td>
+                <td className="num muted nowrap">{r.lastPlayed ? formatDate(r.lastPlayed) : "–"}</td>
+                <td className="ts-rating-cell">
+                  {score !== null ? (
+                    <>
+                      <span className="ts-rating-bar" aria-hidden>
+                        <span style={{ width: `${Math.min(100, (score / best) * 100)}%` }} />
+                      </span>
+                      <span className="num">{rating(score)}</span>
+                    </>
+                  ) : (
+                    <span className="muted">–</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -478,39 +606,62 @@ function Roster({ v }: { v: TeamView }) {
   );
 }
 
-function Seasons({ honours }: { honours: TeamHonours | undefined }) {
+function order(season: number): number {
+  return season >= 100 ? (season - 100) * 2 + 1 : season * 2;
+}
+
+function Seasons({ honours, etf2l }: { honours: TeamHonours | undefined; etf2l: TeamEtf2l | undefined }) {
   if (!honours) return <p className="hint">{t("Loading…")}</p>;
   return (
-    <table className="pp-seasons">
-      <thead>
-        <tr>
-          <th>{t("Season")}</th>
-          <th>{t("Division")}</th>
-          <th className="num">{t("W–L")}</th>
-          <th>{t("Finish")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {honours.seasons.map((s) => (
-          <tr key={s.season}>
-            <td>{s.season >= 100 ? s.seasonName : <>S{s.season} <span className="muted">{s.seasonName}</span></>}</td>
-            <td>{s.tier !== null ? <DivisionBadge d={{ name: s.division, tier: s.tier }} /> : s.division}</td>
-            <td className="num">
-              {s.won}–{s.lost}
-            </td>
-            <td>
-              {s.place ? (
-                <span className={`pp-place pp-${PLACE[s.place - 1]}`}>
-                  <MedalGlyph size={16} place={s.place} /> {s.place === 1 ? t("Winner") : s.place === 2 ? t("Runner-up") : t("Third")}
-                </span>
-              ) : (
-                <span className="muted">–</span>
-              )}
-            </td>
+    <div className="ts-seasons-tab">
+      <table className="pp-seasons">
+        <thead>
+          <tr>
+            <th>{t("Season")}</th>
+            <th>{t("Division")}</th>
+            <th className="num">{t("W–L")}</th>
+            <th>{t("Finish")}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {honours.seasons.map((s) => (
+            <tr key={s.season}>
+              <td>{s.season >= 100 ? s.seasonName : <>S{s.season} <span className="muted">{s.seasonName}</span></>}</td>
+              <td>{s.tier !== null ? <DivisionBadge d={{ name: s.division, tier: s.tier }} /> : s.division}</td>
+              <td className="num">
+                {s.won}–{s.lost}
+              </td>
+              <td>
+                {s.place ? (
+                  <span className={`pp-place pp-${PLACE[s.place - 1]}`}>
+                    <MedalGlyph size={16} place={s.place} /> {s.place === 1 ? t("Winner") : s.place === 2 ? t("Runner-up") : t("Third")}
+                  </span>
+                ) : (
+                  <span className="muted">–</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {etf2l && etf2l.awards.length > 0 && (
+        <aside className="ts-awards">
+          <h3>{t("ETF2L awards")}</h3>
+          <p className="hint">{t("As ETF2L's team page lists them, cups included.")}</p>
+          <ul>
+            {etf2l.awards.map((a, i) => {
+              const place = a.place.startsWith("1") ? 1 : a.place.startsWith("2") ? 2 : a.place.startsWith("3") ? 3 : null;
+              return (
+                <li key={i} className={place ? `pp-${PLACE[place - 1]}` : undefined}>
+                  {place ? <MedalGlyph size={18} place={place} /> : <span className="muted">{a.place}</span>}
+                  <span>{a.competition}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+      )}
+    </div>
   );
 }
 

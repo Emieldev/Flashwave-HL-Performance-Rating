@@ -222,6 +222,7 @@ pub fn run() {
             sync_commands::get_season_banner,
             sync_commands::get_season_podiums,
             sync_commands::get_team_honours,
+            sync_commands::get_team_etf2l,
             sync_commands::get_player_stats,
             sync_commands::get_rankings,
             sync_commands::get_match_divisions,
