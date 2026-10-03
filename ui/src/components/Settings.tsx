@@ -40,7 +40,8 @@ export function Settings({
       <HistoryPanel />
       <ImportPanel />
       <Etf2lPanel />
-      <LeagueSamplePanel />
+      {/* The mass log downloader: the developer's tool, dev builds only. */}
+      {import.meta.env.DEV && <LeagueSamplePanel />}
       <RawlogPanel />
       <DemosPanel />
       <DownloadedDemosPanel />

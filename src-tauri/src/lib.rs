@@ -175,7 +175,12 @@ pub fn run() {
             // The league sample, when it is switched on (Settings).
             let busy = Arc::new(AtomicBool::new(false));
             let league_activity = league::SharedActivity::default();
-            league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
+            // The mass log downloader is the developer's (Flashy): it runs in
+            // a dev build only. A release never starts it, whatever the
+            // database's setting says.
+            if cfg!(debug_assertions) {
+                league::spawn(db.clone(), sources.clone(), busy.clone(), league_activity.clone(), db_path.with_file_name("weights.toml"));
+            }
 
             app.manage(AppState {
                 db,

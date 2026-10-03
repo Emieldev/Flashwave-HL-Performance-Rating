@@ -268,6 +268,10 @@ pub async fn get_league_activity(state: State<'_, AppState>) -> CmdResult<crate:
 /// Switch the league sample's background download on or off.
 #[tauri::command]
 pub async fn set_league_sample(state: State<'_, AppState>, on: bool) -> CmdResult<()> {
+    // Dev builds only, like the downloader itself.
+    if !cfg!(debug_assertions) {
+        return Ok(());
+    }
     Ok(hl_ingest::league_sample::set_enabled(&state.db, on).await?)
 }
 
