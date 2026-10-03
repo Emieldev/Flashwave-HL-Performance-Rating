@@ -277,6 +277,20 @@ export interface TransferRow {
   by: string | null;
 }
 
+/** A team as ETF2L's API has it (Q48). */
+export interface TeamInfo {
+  tag: string | null;
+  homepage: string | null;
+  steamGroup: string | null;
+  /** Oldest first. */
+  formerNames: Array<{ from: string; to: string; time: number }>;
+  /** Who is on the team now; role as ETF2L has it: Leader, Deputy, Member, Buddy, Inactive. */
+  members: Array<{ accountId: number | null; name: string; role: string }>;
+  /** Cups entered, newest first; place from ETF2L's awards. */
+  cups: Array<{ name: string; division: string | null; tier: number | null; place: string | null; competitionId: number }>;
+  fetchedAt: number | null;
+}
+
 export interface TeamTransfers {
   /** Newest first. */
   rows: TransferRow[];

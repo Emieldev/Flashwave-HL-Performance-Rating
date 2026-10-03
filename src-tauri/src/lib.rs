@@ -242,6 +242,7 @@ pub fn run() {
             sync_commands::get_team_honours,
             sync_commands::get_team_etf2l,
             sync_commands::get_team_transfers,
+            sync_commands::get_team_info,
             sync_commands::get_player_teams,
             sync_commands::get_player_stats,
             sync_commands::get_rankings,

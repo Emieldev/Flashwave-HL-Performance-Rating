@@ -1346,6 +1346,27 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["team-info", id, rest @ ..] => {
+            // A team as ETF2L's API has it: tag, links, former names, roles, cups.
+            let db = Db::connect(&db_path).await?;
+            let i = hl_ingest::team_info::team_info(&db, &Sources::new()?, id.parse()?).await?;
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&i)?);
+            } else {
+                println!("tag {:?}  homepage {:?}  steam group {:?}", i.tag, i.homepage, i.steam_group);
+                for n in &i.former_names {
+                    println!("  was {} until {}", n.from, fmt_date(n.time));
+                }
+                for m in &i.members {
+                    println!("  {:<24} {}", m.name, m.role);
+                }
+                for c in &i.cups {
+                    println!("  cup {:<48} {:<10} {}", c.name, c.division.as_deref().unwrap_or("-"), c.place.as_deref().unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+
         ["transfers", "team", id, "--json"] => {
             let db = Db::connect(&db_path).await?;
             let t = hl_ingest::transfers::team_transfers(&db, &Sources::new()?, id.parse()?).await?;

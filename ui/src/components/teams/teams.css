@@ -112,6 +112,19 @@
   .ts-card:hover .ts-art-img, .ts-card:focus-visible .ts-art-img { transform: none; }
 }
 
+/* ---- ETF2L team info (Q48) ---- */
+.ts-tag { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.25); color: var(--muted); font: 700 0.85rem var(--font-display); letter-spacing: 0.06em; }
+.ts-links { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.ts-former { white-space: nowrap; }
+.ts-role { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font: 700 0.66rem/1.6 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; vertical-align: middle; border: 1px solid var(--border); color: var(--muted); }
+.ts-role-leader { border-color: #d4a73a; color: #e8c15a; background: rgba(212, 167, 58, 0.12); }
+.ts-role-deputy { border-color: color-mix(in srgb, var(--tf2-tan) 70%, transparent); color: var(--tf2-tan); background: color-mix(in srgb, var(--tf2-tan) 10%, transparent); }
+.ts-role-inactive { border-style: dashed; }
+.ts-inactive { opacity: 0.55; }
+.ts-lineup-who, .ts-stay-who { display: inline-flex; align-items: center; min-width: 0; overflow: hidden; }
+.ts-awards .ts-cups { margin-bottom: 20px; }
+.ts-cup-dot { display: inline-block; width: 8px; height: 8px; margin: 0 5px; border-radius: 50%; background: var(--border); }
+
 /* ---- roster history (Q48) ---- */
 .ts-history { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 @media (max-width: 960px) { .ts-history { grid-template-columns: 1fr; } }

@@ -1330,6 +1330,12 @@ pub async fn get_team_transfers(state: State<'_, AppState>, team_id: i64) -> Cmd
     Ok(hl_ingest::transfers::team_transfers(&state.db, &state.sources, team_id).await?)
 }
 
+/// A team as ETF2L's API has it (Q48): tag, links, former names, roles, cups.
+#[tauri::command]
+pub async fn get_team_info(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::team_info::TeamInfo> {
+    Ok(hl_ingest::team_info::team_info(&state.db, &state.sources, team_id).await?)
+}
+
 /// A player's teams with the dates they were on them (Q48), read when due.
 #[tauri::command]
 pub async fn get_player_teams(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::transfers::Stay>> {

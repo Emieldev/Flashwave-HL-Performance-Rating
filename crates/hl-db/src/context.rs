@@ -189,6 +189,15 @@ impl Db {
     }
 
     /// `(id, fetched_at, json)` for every stored source of one kind.
+    /// One stored ETF2L response: `(fetched_at, json)`.
+    pub async fn etf2l_raw_one(&self, kind: &str, id: i64) -> Result<Option<(i64, String)>> {
+        Ok(sqlx::query_as("SELECT fetched_at, json FROM etf2l_raw WHERE kind = ?1 AND id = ?2")
+            .bind(kind)
+            .bind(id)
+            .fetch_optional(self.pool())
+            .await?)
+    }
+
     pub async fn etf2l_raw(&self, kind: &str) -> Result<Vec<(i64, i64, String)>> {
         let rows = sqlx::query("SELECT id, fetched_at, json FROM etf2l_raw WHERE kind = ?1 ORDER BY id")
             .bind(kind)

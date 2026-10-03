@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamTransfers, type TeamView } from "../../api/types";
+import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamInfo, type TeamTransfers, type TeamView } from "../../api/types";
 import { formatDate, formatMonth, formatStay, rating } from "../../lib/format";
 import { openPlayer } from "../../lib/goto";
 import { t, tx } from "../../lib/i18n";
@@ -290,6 +290,8 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
   const q = useQuery({ queryKey: ["team", teamId], queryFn: () => api.getTeam(teamId) });
   const h = useQuery({ queryKey: ["team_honours", teamId], queryFn: () => api.getTeamHonours(teamId) });
   const e = useQuery({ queryKey: ["team_etf2l", teamId], queryFn: () => api.getTeamEtf2l(teamId), staleTime: 60 * 60_000 });
+  const info = useQuery({ queryKey: ["team_info", teamId], queryFn: () => api.getTeamInfo(teamId), staleTime: 60 * 60_000 });
+  const roles = useMemo(() => new Map((info.data?.members ?? []).filter((m) => m.accountId !== null).map((m) => [m.accountId!, m.role])), [info.data]);
   const [tab, setTab] = useState<TeamTab>("overview");
   return (
     <>
@@ -299,7 +301,7 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
       {q.data === null && <p className="hint">{t("This team is not stored.")}</p>}
       {q.data && (
         <>
-          <TeamHeader v={q.data} honours={h.data} />
+          <TeamHeader v={q.data} honours={h.data} info={info.data} />
           <div className="panel pp-body">
             <nav className="pp-tabs" role="tablist">
               {(
@@ -316,10 +318,10 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
                 </button>
               ))}
             </nav>
-            {tab === "overview" && <TeamOverview v={q.data} etf2l={e.data} onTeam={onTeam} onLineup={() => setTab("lineup")} onResults={() => setTab("results")} />}
-            {tab === "lineup" && <Lineup v={q.data} />}
-            {tab === "seasons" && <Seasons honours={h.data} etf2l={e.data} />}
-            {tab === "history" && <RosterHistory teamId={teamId} etf2lUrl={e.data?.url} />}
+            {tab === "overview" && <TeamOverview v={q.data} etf2l={e.data} roles={roles} onTeam={onTeam} onLineup={() => setTab("lineup")} onResults={() => setTab("results")} />}
+            {tab === "lineup" && <Lineup v={q.data} roles={roles} />}
+            {tab === "seasons" && <Seasons honours={h.data} etf2l={e.data} info={info.data} />}
+            {tab === "history" && <RosterHistory teamId={teamId} etf2lUrl={e.data?.url} roles={roles} />}
             {tab === "results" && <Results v={q.data} onTeam={onTeam} />}
           </div>
         </>
@@ -328,7 +330,14 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
   );
 }
 
-function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefined }) {
+/** A member's ETF2L role as a chip; an ordinary member gets none. */
+function RoleChip({ role }: { role: string | undefined }) {
+  if (!role || role === "Member") return null;
+  const label = role === "Leader" ? t("Leader") : role === "Deputy" ? t("Deputy") : role === "Inactive" ? t("Inactive") : role === "Buddy" ? t("Buddy") : role;
+  return <span className={`ts-role ts-role-${role.toLowerCase()}`}>{label}</span>;
+}
+
+function TeamHeader({ v, honours, info }: { v: TeamView; honours: TeamHonours | undefined; info: TeamInfo | undefined }) {
   const latest = honours?.seasons[0];
   const titles = medalTitles(honours?.medals ?? []);
   const p = pct(v.record);
@@ -339,6 +348,7 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
         <div className="pp-who">
           <div className="pp-name-row">
             <h2 className="pp-name">{v.name}</h2>
+            {info?.tag && <span className="ts-tag">{info.tag}</span>}
             {latest && latest.tier !== null && <DivisionBadge d={{ name: latest.division, tier: latest.tier }} />}
           </div>
           <dl className="pp-facts">
@@ -360,6 +370,19 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
             )}
             <dt>{t("Seasons")}</dt>
             <dd>{honours ? honours.seasons.length : v.seasons.length}</dd>
+            {info && info.formerNames.length > 0 && (
+              <>
+                <dt>{t("Formerly")}</dt>
+                <dd>
+                  {info.formerNames.map((n, i) => (
+                    <span key={i} className="ts-former" title={tx("Renamed {0}", { "0": formatDate(n.time, true) }) as string}>
+                      {i > 0 && " · "}
+                      {n.from} <span className="muted">({tx("until {0}", { "0": formatMonth(n.time) })})</span>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            )}
           </dl>
           {titles.length > 0 && (
             <div className="pp-titles">
@@ -381,9 +404,21 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
             </span>
           )}
           <span className="hint">{p === null ? "" : t("{0}% won", { "0": p })}</span>
-          <a href={`https://etf2l.org/teams/${v.teamId}/`} target="_blank" rel="noreferrer" className="ts-link">
-            {t("ETF2L ↗")}
-          </a>
+          <span className="ts-links">
+            <a href={`https://etf2l.org/teams/${v.teamId}/`} target="_blank" rel="noreferrer" className="ts-link">
+              {t("ETF2L ↗")}
+            </a>
+            {info?.homepage && (
+              <a href={info.homepage} target="_blank" rel="noreferrer" className="ts-link">
+                {t("Website ↗")}
+              </a>
+            )}
+            {info?.steamGroup && (
+              <a href={info.steamGroup} target="_blank" rel="noreferrer" className="ts-link">
+                {t("Steam group ↗")}
+              </a>
+            )}
+          </span>
         </div>
       </div>
       {honours && honours.medals.length > 0 && (
@@ -404,7 +439,21 @@ function TeamHeader({ v, honours }: { v: TeamView; honours: TeamHonours | undefi
   );
 }
 
-function TeamOverview({ v, etf2l, onTeam, onLineup, onResults }: { v: TeamView; etf2l: TeamEtf2l | undefined; onTeam: (id: number) => void; onLineup: () => void; onResults: () => void }) {
+function TeamOverview({
+  v,
+  etf2l,
+  roles,
+  onTeam,
+  onLineup,
+  onResults,
+}: {
+  v: TeamView;
+  etf2l: TeamEtf2l | undefined;
+  roles: Map<number, string>;
+  onTeam: (id: number) => void;
+  onLineup: () => void;
+  onResults: () => void;
+}) {
   const newest = v.roster.flatMap((r) => r.seasons ?? []).reduce((a, s) => (a === null || s.season > a ? s.season : a), null as number | null);
   // The newest season's lineup; the whole roster where seasons are not known.
   const current = (
@@ -460,11 +509,14 @@ function TeamOverview({ v, etf2l, onTeam, onLineup, onResults }: { v: TeamView; 
         {current.length === 0 && <p className="hint">{t("None of this team's officials have been downloaded yet, so there are no classes or ratings to show.")}</p>}
         <ul className="ts-lineup">
           {current.map(({ r, s }) => (
-            <li key={r.accountId}>
+            <li key={r.accountId} className={roles.get(r.accountId) === "Inactive" ? "ts-inactive" : undefined}>
               {s!.class ? <ClassIcon cls={s!.class} size={20} /> : <span />}
-              <button className="linkish ts-lineup-name" onClick={() => openPlayer(r.accountId)}>
-                {r.name}
-              </button>
+              <span className="ts-lineup-who">
+                <button className="linkish ts-lineup-name" onClick={() => openPlayer(r.accountId)}>
+                  {r.name}
+                </button>
+                <RoleChip role={roles.get(r.accountId)} />
+              </span>
               <span className="muted">{tx("{0} officials", { "0": s!.officials })}</span>
               <span className="ts-lineup-rating">{s!.rating !== null ? rating(s!.rating) : "–"}</span>
             </li>
@@ -512,7 +564,7 @@ function MapBars({ maps }: { maps: TeamView["maps"] }) {
 type Sort = "officials" | "rating" | "name";
 
 /** Every player who played for the team: all seasons, or one, sorted. */
-function Lineup({ v }: { v: TeamView }) {
+function Lineup({ v, roles }: { v: TeamView; roles: Map<number, string> }) {
   const seasons = useMemo(() => {
     const set = new Set<number>();
     for (const r of v.roster) for (const s of r.seasons ?? []) set.add(s.season);
@@ -574,7 +626,7 @@ function Lineup({ v }: { v: TeamView }) {
             {rows.map(({ r, officials, cls, rating: score }) => (
               <tr key={r.accountId} className="teams-row" onClick={() => openPlayer(r.accountId)} title={t("Open {0}'s profile", { "0": r.name })}>
                 <td className="nowrap">
-                  <strong>{r.name}</strong>
+                  <strong>{r.name}</strong> <RoleChip role={roles.get(r.accountId)} />
                 </td>
                 <td className="nowrap">
                   {cls ? (
@@ -617,16 +669,16 @@ function stayLength(s: Stay, now: number): number {
   return (s.to ?? now) - (s.from ?? s.to ?? now);
 }
 
-function RosterHistory({ teamId, etf2lUrl }: { teamId: number; etf2lUrl: string | undefined }) {
+function RosterHistory({ teamId, etf2lUrl, roles }: { teamId: number; etf2lUrl: string | undefined; roles: Map<number, string> }) {
   const q = useQuery({ queryKey: ["team_transfers", teamId], queryFn: () => api.getTeamTransfers(teamId), staleTime: 60 * 60_000 });
   if (q.isPending) return <p className="hint">{t("Reading the team's transfers from ETF2L…")}</p>;
   if (q.isError) return <p className="error">{errorMessage(q.error)}</p>;
   const v: TeamTransfers = q.data;
   if (v.rows.length === 0) return <p className="hint">{t("ETF2L lists no transfers for this team.")}</p>;
-  return <RosterHistoryView v={v} etf2lUrl={etf2lUrl} />;
+  return <RosterHistoryView v={v} etf2lUrl={etf2lUrl} roles={roles} />;
 }
 
-function RosterHistoryView({ v, etf2lUrl }: { v: TeamTransfers; etf2lUrl: string | undefined }) {
+function RosterHistoryView({ v, etf2lUrl, roles }: { v: TeamTransfers; etf2lUrl: string | undefined; roles: Map<number, string> }) {
   const now = Math.floor(Date.now() / 1000);
   const [showAll, setShowAll] = useState(false);
   const current = v.stays.filter((s) => s.to === null);
@@ -646,13 +698,16 @@ function RosterHistoryView({ v, etf2lUrl }: { v: TeamTransfers; etf2lUrl: string
   }, [v.rows]);
   const stayRow = (s: Stay, i: number) => (
     <li key={`${s.accountId ?? s.name}-${s.from ?? i}`} className={s.to === null ? "ts-stay on" : "ts-stay"}>
-      {s.accountId !== null ? (
-        <button className="linkish ts-stay-name" onClick={() => openPlayer(s.accountId!)}>
-          {s.name}
-        </button>
-      ) : (
-        <span className="ts-stay-name">{s.name}</span>
-      )}
+      <span className="ts-stay-who">
+        {s.accountId !== null ? (
+          <button className="linkish ts-stay-name" onClick={() => openPlayer(s.accountId!)}>
+            {s.name}
+          </button>
+        ) : (
+          <span className="ts-stay-name">{s.name}</span>
+        )}
+        {s.to === null && s.accountId !== null && <RoleChip role={roles.get(s.accountId)} />}
+      </span>
       <span className="ts-stay-dates muted">
         {s.from !== null ? formatMonth(s.from) : t("before the records")} – {s.to !== null ? formatMonth(s.to) : t("now")}
       </span>
@@ -731,7 +786,7 @@ function order(season: number): number {
   return season >= 100 ? (season - 100) * 2 + 1 : season * 2;
 }
 
-function Seasons({ honours, etf2l }: { honours: TeamHonours | undefined; etf2l: TeamEtf2l | undefined }) {
+function Seasons({ honours, etf2l, info }: { honours: TeamHonours | undefined; etf2l: TeamEtf2l | undefined; info: TeamInfo | undefined }) {
   if (!honours) return <p className="hint">{t("Loading…")}</p>;
   return (
     <div className="ts-seasons-tab">
@@ -765,8 +820,35 @@ function Seasons({ honours, etf2l }: { honours: TeamHonours | undefined; etf2l: 
           ))}
         </tbody>
       </table>
-      {etf2l && etf2l.awards.length > 0 && (
+      {((info && info.cups.length > 0) || (etf2l && etf2l.awards.length > 0)) && (
         <aside className="ts-awards">
+          {info && info.cups.length > 0 && (
+            <>
+              <h3>{tx("Cups ({0})", { "0": info.cups.length })}</h3>
+              <p className="hint">{t("Every Highlander cup the team entered, from ETF2L; the placing where ETF2L awarded one.")}</p>
+              <ul className="ts-cups">
+                {info.cups.map((c) => {
+                  const place = c.place?.startsWith("1") ? 1 : c.place?.startsWith("2") ? 2 : c.place?.startsWith("3") ? 3 : null;
+                  return (
+                    <li key={c.competitionId} className={place ? `pp-${PLACE[place - 1]}` : undefined}>
+                      {place ? <MedalGlyph size={18} place={place} /> : <span className="ts-cup-dot" aria-hidden />}
+                      <span>
+                        {c.name}
+                        {c.division && (
+                          <>
+                            {" "}
+                            {c.tier !== null ? <DivisionBadge d={{ name: c.division, tier: c.tier }} /> : <span className="muted">{c.division}</span>}
+                          </>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {etf2l && etf2l.awards.length > 0 && (
+            <>
           <h3>{t("ETF2L awards")}</h3>
           <p className="hint">{t("As ETF2L's team page lists them, cups included.")}</p>
           <ul>
@@ -780,6 +862,8 @@ function Seasons({ honours, etf2l }: { honours: TeamHonours | undefined; etf2l: 
               );
             })}
           </ul>
+            </>
+          )}
         </aside>
       )}
     </div>
