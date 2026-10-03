@@ -400,6 +400,53 @@ impl Db {
     }
 }
 
+/// One official between two teams, from the first team's side (Q48).
+#[derive(Debug, Clone)]
+pub struct H2hRow {
+    pub match_id: i64,
+    pub time: Option<i64>,
+    pub season: i64,
+    pub division: Option<String>,
+    pub round: Option<String>,
+    pub score_a: Option<i64>,
+    pub score_b: Option<i64>,
+    pub default_win: bool,
+}
+
+impl Db {
+    /// Every official between teams `a` and `b`, newest first, scores from
+    /// `a`'s side.
+    pub async fn head_to_head(&self, a: i64, b: i64) -> Result<Vec<H2hRow>> {
+        let rows = sqlx::query(
+            "SELECT m.match_id, m.time, c.season, m.division, m.round, m.clan1_id, m.r1, m.r2, m.default_win
+               FROM etf2l_season_match m JOIN etf2l_competition c ON c.competition_id = m.competition_id
+              WHERE (m.clan1_id = ?1 AND m.clan2_id = ?2) OR (m.clan1_id = ?2 AND m.clan2_id = ?1)
+              ORDER BY m.time DESC",
+        )
+        .bind(a)
+        .bind(b)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let first = r.get::<i64, _>("clan1_id") == a;
+                let (r1, r2): (Option<i64>, Option<i64>) = (r.get("r1"), r.get("r2"));
+                H2hRow {
+                    match_id: r.get("match_id"),
+                    time: r.get("time"),
+                    season: r.get("season"),
+                    division: r.get("division"),
+                    round: r.get("round"),
+                    score_a: if first { r1 } else { r2 },
+                    score_b: if first { r2 } else { r1 },
+                    default_win: r.get::<Option<i64>, _>("default_win").unwrap_or(0) != 0,
+                }
+            })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Db;

@@ -284,6 +284,37 @@ pub struct NewestLog {
     pub known: bool,
 }
 
+/// What the startup look found: new Highlander logs since the app was last
+/// opened, before any sync.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewLogs {
+    /// Highlander logs you are in that are not stored yet.
+    pub count: usize,
+    pub source: &'static str,
+    /// When the app was last opened before now, if it has been.
+    pub since: Option<i64>,
+}
+
+/// Asked once when the app opens: one small request for your recent logs,
+/// and how many Highlander ones are new. The window then syncs only when
+/// there is something to sync (Flashy).
+#[tauri::command]
+pub async fn check_new_logs(state: State<'_, AppState>) -> CmdResult<Option<NewLogs>> {
+    let Some(me) = state.db.get_me().await? else { return Ok(None) };
+    let since = state.db.get_setting("last_opened_at").await?.and_then(|v| v.parse().ok());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    state.db.set_setting("last_opened_at", &now.to_string()).await?;
+    let (logs, source) = state.sources.recent_logs(&me.to_steamid64(), 30).await?;
+    let mut count = 0;
+    for (id, highlander) in logs {
+        if highlander && !state.db.is_indexed(id).await? {
+            count += 1;
+        }
+    }
+    Ok(Some(NewLogs { count, source, since }))
+}
+
 /// One small request: is there a log newer than what is stored? What the
 /// app asks every few seconds after a match, rather than syncing each time.
 #[tauri::command]
@@ -1328,6 +1359,12 @@ pub async fn get_team_etf2l(state: State<'_, AppState>, team_id: i64) -> CmdResu
 #[tauri::command]
 pub async fn get_team_transfers(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::transfers::TeamTransfers> {
     Ok(hl_ingest::transfers::team_transfers(&state.db, &state.sources, team_id).await?)
+}
+
+/// Every upcoming Highlander official, with each pairing's head-to-head (Q48).
+#[tauri::command]
+pub async fn get_fixtures(state: State<'_, AppState>) -> CmdResult<Vec<hl_ingest::fixtures::Fixture>> {
+    Ok(hl_ingest::fixtures::upcoming(&state.db, &state.sources).await?)
 }
 
 /// A team as ETF2L's API has it (Q48): tag, links, former names, roles, cups.

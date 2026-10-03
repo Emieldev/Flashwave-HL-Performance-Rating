@@ -1346,6 +1346,35 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        ["fixtures", rest @ ..] => {
+            // Every upcoming Highlander official, with its head-to-head.
+            let db = Db::connect(&db_path).await?;
+            let list = hl_ingest::fixtures::upcoming(&db, &Sources::new()?).await?;
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&list)?);
+            } else {
+                for f in &list {
+                    println!("  {} {:<28} {:<24} vs {:<24} h2h {}-{} ({})", fmt_date(f.time), f.competition, f.clan1.name, f.clan2.name, f.h2h.won, f.h2h.lost, f.round.as_deref().unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+
+        ["h2h", a, b, rest @ ..] => {
+            // Every official between two teams.
+            let db = Db::connect(&db_path).await?;
+            let h = hl_ingest::fixtures::head_to_head(&db, a.parse()?, b.parse()?).await?;
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&h)?);
+            } else {
+                println!("{}-{}-{} in {}", h.record.won, h.record.lost, h.record.drawn, h.record.played);
+                for m in &h.matches {
+                    println!("  S{:<4} {:<12} {:<20} {:?}-{:?}", m.season, m.division.as_deref().unwrap_or(""), m.round.as_deref().unwrap_or(""), m.score_for, m.score_against);
+                }
+            }
+            Ok(())
+        }
+
         ["team-info", id, rest @ ..] => {
             // A team as ETF2L's API has it: tag, links, former names, roles, cups.
             let db = Db::connect(&db_path).await?;

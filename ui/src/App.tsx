@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { lookForNewLogs } from "./lib/newlogs";
 import { api } from "./api/client";
 import { t, useLanguage, t as tr, tx } from "./lib/i18n";
 import { errorMessage } from "./api/types";
@@ -83,6 +84,11 @@ export default function App() {
     queryFn: api.appStatus,
     retry: false,
   });
+  // Once the database is open and set up: anything new since last time?
+  const ready = status.data?.ready === true && !status.data.restore;
+  useEffect(() => {
+    if (ready) void lookForNewLogs();
+  }, [ready]);
 
   if (status.isPending) {
     return (

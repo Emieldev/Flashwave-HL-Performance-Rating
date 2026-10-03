@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamInfo, type TeamTransfers, type TeamView } from "../../api/types";
+import { errorMessage, type Fixture, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamInfo, type TeamTransfers, type TeamView } from "../../api/types";
 import { formatDate, formatMonth, formatStay, rating } from "../../lib/format";
 import { openPlayer } from "../../lib/goto";
-import { t, tx } from "../../lib/i18n";
+import { locale, t, tx } from "../../lib/i18n";
 import { ClassIcon } from "../ClassIcon";
 import { Country } from "../Country";
 import { classLabel } from "../analysis/common";
@@ -33,7 +33,7 @@ export function TeamsPage() {
   } else if (view.kind === "season") {
     body = <SeasonScreen season={view.season} onBack={() => setView({ kind: "seasons" })} onTeam={openTeam} />;
   } else {
-    body = <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} />;
+    body = <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} onTeam={openTeam} />;
   }
   return <div className="content teams-page">{body}</div>;
 }
@@ -48,8 +48,60 @@ function BackButton({ label, onClick }: { label: string; onClick: () => void }) 
 
 // ---- 1. Every season as a tile ----------------------------------------
 
-function SeasonsGrid({ onSeason }: { onSeason: (season: number) => void }) {
+/** Every upcoming Highlander official (Q48), read from ETF2L at most every half hour. */
+function useFixtures() {
+  return useQuery({ queryKey: ["fixtures"], queryFn: api.getFixtures, staleTime: 10 * 60_000 }).data ?? [];
+}
+
+/** When a match is: "Sun 4 Oct, 20:15". */
+function kickoff(unix: number): string {
+  return new Date(unix * 1000).toLocaleString(locale(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+}
+
+/** One upcoming match. `side` puts that team on the left and reads the record from its side. */
+function FixtureCard({ f, side, onTeam }: { f: Fixture; side?: number; onTeam: (id: number) => void }) {
+  const flip = side !== undefined && f.clan2.id === side;
+  const [a, b] = flip ? [f.clan2, f.clan1] : [f.clan1, f.clan2];
+  const r = flip ? { ...f.h2h, won: f.h2h.lost, lost: f.h2h.won } : f.h2h;
+  const team = (x: Fixture["clan1"]) => (
+    <button className="ts-fx-team" onClick={() => onTeam(x.id)} title={t("Open {0}", { "0": x.name })}>
+      <TeamAvatar src={x.avatar} />
+      <span>{x.name}</span>
+    </button>
+  );
+  return (
+    <article className="ts-fx">
+      <header className="ts-fx-head">
+        <span className="ts-fx-when">{kickoff(f.time)}</span>
+        <span className="ts-fx-what">
+          {f.division && f.tier !== null && <DivisionBadge d={{ name: f.division, tier: f.tier }} />}
+          {f.round && <span className="muted">{f.round}</span>}
+        </span>
+      </header>
+      <div className="ts-fx-teams">
+        {team(a)}
+        <span className="ts-fx-vs">{t("vs")}</span>
+        {team(b)}
+      </div>
+      <footer className="ts-fx-foot">
+        <span>
+          {r.played === 0 ? (
+            <span className="muted">{t("First meeting in an official")}</span>
+          ) : (
+            <>
+              <span className="muted">{t("Head-to-head")}</span> <strong>{wl(r)}</strong>
+            </>
+          )}
+        </span>
+        <span className="muted">{f.maps.length > 0 ? f.maps.join(" · ") : t("Maps still to be picked")}</span>
+      </footer>
+    </article>
+  );
+}
+
+function SeasonsGrid({ onSeason, onTeam }: { onSeason: (season: number) => void; onTeam: (id: number) => void }) {
   const q = useQuery({ queryKey: ["seasons_overview"], queryFn: api.getSeasonsOverview, staleTime: 5 * 60_000 });
+  const fixtures = useFixtures();
   return (
     <>
       <header className="ts-pagehead">
@@ -57,6 +109,16 @@ function SeasonsGrid({ onSeason }: { onSeason: (season: number) => void }) {
         <h1>{t("Seasons")}</h1>
         <p className="hint">{t("Pick a season for its podiums, its divisions and every team in them.")}</p>
       </header>
+      {fixtures.length > 0 && (
+        <>
+          <h2 className="ts-section">{tx("Coming up ({0})", { "0": fixtures.length })}</h2>
+          <section className="ts-fixtures">
+            {fixtures.slice(0, 6).map((f) => (
+              <FixtureCard key={f.matchId} f={f} onTeam={onTeam} />
+            ))}
+          </section>
+        </>
+      )}
       {q.isPending && <p className="hint">{t("Loading seasons…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
       {q.data && q.data.length === 0 && (
@@ -159,6 +221,7 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
   const tables = useQuery({ queryKey: ["leagues", season], queryFn: () => api.getLeagues(season), placeholderData: keepPreviousData });
   const podiums = useQuery({ queryKey: ["season_podiums", season], queryFn: () => api.getSeasonPodiums(season), staleTime: 5 * 60_000 });
   const banner = useBanner(tile ?? { season, seasonName: "" }, true);
+  const upcoming = useFixtures().filter((f) => f.season === season);
   const v = tables.data;
   return (
     <>
@@ -185,6 +248,17 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
           )}
         </div>
       </section>
+
+      {upcoming.length > 0 && (
+        <>
+          <h2 className="ts-section">{tx("Upcoming ({0})", { "0": upcoming.length })}</h2>
+          <section className="ts-fixtures">
+            {upcoming.map((f) => (
+              <FixtureCard key={f.matchId} f={f} onTeam={onTeam} />
+            ))}
+          </section>
+        </>
+      )}
 
       <h2 className="ts-section">{t("Podiums")}</h2>
       {podiums.isPending && <p className="hint">{t("Loading podiums…")}</p>}
@@ -465,9 +539,20 @@ function TeamOverview({
     .sort((a, b) => b.s!.officials - a.s!.officials || (b.s!.rating ?? 0) - (a.s!.rating ?? 0))
     .slice(0, 9);
   const maps = v.maps.filter((m) => m.inPool);
+  const next = useFixtures().filter((f) => f.clan1.id === v.teamId || f.clan2.id === v.teamId);
   return (
     <div className="pp-overview">
       <section>
+        {next.length > 0 && (
+          <>
+            <h3>{next.length === 1 ? t("Next match") : t("Next matches")}</h3>
+            <div className="ts-fixtures ts-fixtures-one">
+              {next.map((f) => (
+                <FixtureCard key={f.matchId} f={f} side={v.teamId} onTeam={onTeam} />
+              ))}
+            </div>
+          </>
+        )}
         {etf2l?.description && (
           <>
             <h3>{t("About")}</h3>
@@ -870,7 +955,69 @@ function Seasons({ honours, etf2l, info }: { honours: TeamHonours | undefined; e
   );
 }
 
+/** Each opponent's record against this team, from its officials. */
+function opponents(v: TeamView): { id: number; name: string; r: LeagueRecord; last: number | null }[] {
+  const by = new Map<number, { id: number; name: string; r: LeagueRecord; last: number | null }>();
+  for (const x of v.results) {
+    const o = by.get(x.opponentId) ?? { id: x.opponentId, name: x.opponent, r: { played: 0, won: 0, lost: 0, drawn: 0 }, last: null };
+    if (!x.defaultWin && x.scoreFor !== null && x.scoreAgainst !== null && x.scoreFor + x.scoreAgainst > 0) {
+      o.r.played += 1;
+      if (x.scoreFor > x.scoreAgainst) o.r.won += 1;
+      else if (x.scoreFor < x.scoreAgainst) o.r.lost += 1;
+      else o.r.drawn += 1;
+    }
+    if (x.time !== null && (o.last === null || x.time > o.last)) o.last = x.time;
+    by.set(x.opponentId, o);
+  }
+  return [...by.values()].filter((o) => o.r.played > 0).sort((a, b) => b.r.played - a.r.played || (b.last ?? 0) - (a.last ?? 0));
+}
+
 function Results({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
+  const [against, setAgainst] = useState<number | null>(null);
+  const rivals = useMemo(() => opponents(v), [v]);
+  const shown = against === null ? v.results : v.results.filter((r) => r.opponentId === against);
+  return (
+    <>
+      {rivals.some((o) => o.r.played > 1) && (
+        <section className="ts-h2h">
+          <h3>{t("Head-to-head")}</h3>
+          <p className="hint">{t("Every team met in more than one official, most met first. Pick one for just those matches.")}</p>
+          <div className="ts-h2h-list">
+            {rivals
+              .filter((o) => o.r.played > 1)
+              .slice(0, 12)
+              .map((o) => (
+                <button key={o.id} className={against === o.id ? "ts-h2h-row on" : "ts-h2h-row"} onClick={() => setAgainst(against === o.id ? null : o.id)}>
+                  <span className="ts-h2h-name">{o.name}</span>
+                  <span className="ts-h2h-bar" aria-hidden>
+                    <span className="won" style={{ flex: o.r.won }} />
+                    <span className="drawn" style={{ flex: o.r.drawn }} />
+                    <span className="lost" style={{ flex: o.r.lost }} />
+                  </span>
+                  <strong>{wl(o.r)}</strong>
+                </button>
+              ))}
+          </div>
+          {against !== null && (
+            <p className="hint">
+              {tx("Only the matches against {0}.", { "0": rivals.find((o) => o.id === against)?.name ?? "" })}{" "}
+              <button className="linkish" onClick={() => setAgainst(null)}>
+                {t("Show all")}
+              </button>{" "}
+              ·{" "}
+              <button className="linkish" onClick={() => onTeam(against)}>
+                {t("Open their page")}
+              </button>
+            </p>
+          )}
+        </section>
+      )}
+      <ResultsTable rows={shown} onTeam={onTeam} />
+    </>
+  );
+}
+
+function ResultsTable({ rows, onTeam }: { rows: TeamView["results"]; onTeam: (id: number) => void }) {
   return (
     <div className="table-wrap">
       <table className="match-table">
@@ -884,7 +1031,7 @@ function Results({ v, onTeam }: { v: TeamView; onTeam: (id: number) => void }) {
           </tr>
         </thead>
         <tbody>
-          {v.results.map((r) => {
+          {rows.map((r) => {
             const won = r.scoreFor !== null && r.scoreAgainst !== null && r.scoreFor > r.scoreAgainst;
             const lost = r.scoreFor !== null && r.scoreAgainst !== null && r.scoreFor < r.scoreAgainst;
             return (

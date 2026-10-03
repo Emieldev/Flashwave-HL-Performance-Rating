@@ -277,6 +277,31 @@ export interface TransferRow {
   by: string | null;
 }
 
+/** An upcoming official (Q48), with the pairing's record from clan1's side. */
+export interface Fixture {
+  matchId: number;
+  time: number;
+  competition: string;
+  season: number | null;
+  division: string | null;
+  tier: number | null;
+  round: string | null;
+  week: number | null;
+  clan1: { id: number; name: string; avatar: string | null };
+  clan2: { id: number; name: string; avatar: string | null };
+  /** Empty while the maps are still to be picked. */
+  maps: string[];
+  h2h: LeagueRecord;
+}
+
+/** What the startup look found, before any sync. */
+export interface NewLogs {
+  count: number;
+  source: string;
+  /** When the app was last opened before now. */
+  since: number | null;
+}
+
 /** A team as ETF2L's API has it (Q48). */
 export interface TeamInfo {
   tag: string | null;

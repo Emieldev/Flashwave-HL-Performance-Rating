@@ -63,5 +63,6 @@ pub mod catalogue;
 pub mod trends_career;
 pub mod transfers;
 pub mod team_info;
+pub mod fixtures;
 pub use demos::{fetch_stv, index_demos, DemoIndexSummary, StvFetched};
 pub use rating::{load_profile, rate_all, rated_classes, RateSummary};

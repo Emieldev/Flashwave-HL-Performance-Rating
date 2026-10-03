@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
 import { dismissSync, fractionOf, labelOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
+import { dismissNewLogs, useNewLogs } from "../lib/newlogs";
+import { formatDate } from "../lib/format";
 import { dismissUpdate, installUpdate, restartNow, useUpdate } from "../lib/update";
 import { t, tx } from "../lib/i18n";
 
@@ -17,18 +19,41 @@ export function Notifications({ onOpenMatch }: { onOpenMatch: (logId: number) =>
   const downloads = useDownloads();
   const sync = useSyncStatus();
   const demo = useDemoSeen();
+  const fresh = useNewLogs();
   const update = useUpdate();
   const quiet = update.state === "idle" || update.state === "checking" || update.state === "current";
-  if (downloads.length === 0 && sync.state === "idle" && !demo && quiet) return null;
+  if (downloads.length === 0 && sync.state === "idle" && !demo && !fresh && quiet) return null;
 
   return (
     <div className="downloads" role="status" aria-live="polite">
       <UpdateCard />
+      <NewLogsCard />
       <DemoSeenCard />
       <SyncCard />
       {downloads.map((d) => (
         <DownloadCard key={d.logId} d={d} onOpenMatch={onOpenMatch} />
       ))}
+    </div>
+  );
+}
+
+/** Why a sync started by itself: new Highlander logs since the app was last open. */
+function NewLogsCard() {
+  const n = useNewLogs();
+  if (!n) return null;
+  return (
+    <div className="dl dl-running">
+      <div className="dl-head">
+        <span className="dl-title">{t("New logs")}</span>
+        <button className="dl-close" onClick={() => dismissNewLogs()} title={t("Dismiss")}>
+          ×
+        </button>
+      </div>
+      <p className="dl-label">
+        {n.count === 1 ? t("1 new Highlander log") : t("{0} new Highlander logs", { "0": n.count })}
+        {n.since !== null && <> {t("since {0}", { "0": formatDate(n.since) })}</>}
+      </p>
+      <p className="dl-sub">{tx("Syncing them now, from {0}.", { "0": n.source })}</p>
     </div>
   );
 }

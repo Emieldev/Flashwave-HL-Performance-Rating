@@ -52,6 +52,8 @@ import type {
   TeamEtf2l,
   TeamTransfers,
   TeamInfo,
+  Fixture,
+  NewLogs,
   Stay,
   DemoImported,
   DemoLinked,
@@ -204,6 +206,8 @@ const realApi = {
   getTeamEtf2l: (teamId: number) => invoke<TeamEtf2l>("get_team_etf2l", { teamId }),
   getTeamTransfers: (teamId: number) => invoke<TeamTransfers>("get_team_transfers", { teamId }),
   getTeamInfo: (teamId: number) => invoke<TeamInfo>("get_team_info", { teamId }),
+  getFixtures: () => invoke<Fixture[]>("get_fixtures"),
+  checkNewLogs: () => invoke<NewLogs | null>("check_new_logs"),
   getPlayerTeams: (accountId: number) => invoke<Stay[]>("get_player_teams", { accountId }),
   /** Q28: a map's callouts; the owner's copy wins over the built-in one. */
   getCallouts: (map: string) => invoke<CalloutFile>("get_callouts", { map }),

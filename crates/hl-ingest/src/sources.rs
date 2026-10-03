@@ -197,6 +197,28 @@ impl Sources {
         Ok(first(&body, "logid")?.map(|id| (id, "trends.tf")))
     }
 
+    /// The player's most recent logs, newest first: `(log id, Highlander)`.
+    /// logs.tf counts a log's players (16 to 22 is a Highlander match, with
+    /// its stand-ins and swaps); trends.tf, asked while logs.tf refuses us,
+    /// names the format.
+    pub async fn recent_logs(&self, steamid64: &str, limit: u32) -> Result<(Vec<(i64, bool)>, &'static str)> {
+        if !self.logstf_resting() {
+            let url = format!("https://logs.tf/api/v1/log?player={steamid64}&limit={limit}");
+            match self.logstf_gated(self.logstf.get_text(&url)).await {
+                Ok(body) => {
+                    let v: Value = serde_json::from_str(&body).context("parsing logs.tf's recent logs")?;
+                    let rows = v["logs"].as_array().into_iter().flatten();
+                    return Ok((rows.filter_map(|l| Some((l["id"].as_i64()?, l["players"].as_i64().is_some_and(|n| (16..=22).contains(&n))))).collect(), "logs.tf"));
+                }
+                Err(e) => tracing::info!(error = %format!("{e:#}"), "logs.tf would not list recent logs; asking trends.tf"),
+            }
+        }
+        let body = self.trends.get_text(&format!("https://trends.tf/api/v1/logs?steamid64={steamid64}&limit={limit}")).await?;
+        let v: Value = serde_json::from_str(&body).context("parsing trends.tf's recent logs")?;
+        let rows = v["logs"].as_array().into_iter().flatten();
+        Ok((rows.filter_map(|l| Some((l["logid"].as_i64()?, l["format"].as_str() == Some("highlander")))).collect(), "trends.tf"))
+    }
+
     /// Seconds left of logs.tf's rest, if it is resting.
     pub fn logstf_rest_left(&self) -> Option<u64> {
         let at = (*self.logstf_refused_at.lock().unwrap())?;

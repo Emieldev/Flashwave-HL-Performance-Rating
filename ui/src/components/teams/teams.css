@@ -112,6 +112,33 @@
   .ts-card:hover .ts-art-img, .ts-card:focus-visible .ts-art-img { transform: none; }
 }
 
+/* ---- fixtures and head-to-head (Q48) ---- */
+.ts-fixtures { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.ts-fixtures-one { grid-template-columns: 1fr; margin-bottom: 14px; }
+.ts-fx { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); border-left: 3px solid var(--tf2-tan); background: linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.ts-fx-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; }
+.ts-fx-when { font: 700 0.85rem var(--font-display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--tf2-tan); }
+.ts-fx-what { display: inline-flex; align-items: center; gap: 6px; }
+.ts-fx-teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.ts-fx-team { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: 700 0.95rem var(--font-display); cursor: pointer; text-align: left; }
+.ts-fx-team:last-child { justify-content: flex-end; text-align: right; flex-direction: row-reverse; }
+.ts-fx-team span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-fx-team:hover:not(:disabled) { background: none; color: var(--tf2-tan); }
+.ts-fx-vs { font: 700 0.75rem var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.ts-fx-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.8rem; }
+.ts-h2h { margin-bottom: 18px; }
+.ts-h2h h3 { margin: 0 0 2px; }
+.ts-h2h-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px; margin-top: 10px; }
+.ts-h2h-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 3.5em; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.16); color: var(--text); font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer; }
+.ts-h2h-row:hover:not(:disabled) { background: rgba(0, 0, 0, 0.26); border-color: color-mix(in srgb, var(--tf2-tan) 50%, var(--border)); }
+.ts-h2h-row.on { border-color: var(--tf2-tan); background: color-mix(in srgb, var(--tf2-tan) 12%, transparent); }
+.ts-h2h-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-h2h-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.06); gap: 2px; }
+.ts-h2h-bar .won { background: #8fcf68; }
+.ts-h2h-bar .drawn { background: var(--muted); }
+.ts-h2h-bar .lost { background: #e07a7c; }
+.ts-h2h-row strong { text-align: right; font-family: var(--font-display); }
+
 /* ---- ETF2L team info (Q48) ---- */
 .ts-tag { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.25); color: var(--muted); font: 700 0.85rem var(--font-display); letter-spacing: 0.06em; }
 .ts-links { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
