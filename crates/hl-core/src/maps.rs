@@ -24,6 +24,18 @@ pub fn map_base(map: &str) -> String {
     m
 }
 
+/// A map as people name it: the gamemode kept, the version gone.
+/// `pl_upward_f12` and `pl_upward_rc7` are both `pl_upward`; versions are
+/// small fixes, not a different map to win or lose on.
+pub fn map_name(map: &str) -> String {
+    let m = map.to_ascii_lowercase();
+    let base = map_base(&m);
+    match PREFIXES.iter().find(|p| m.starts_with(*p)) {
+        Some(p) => format!("{p}{base}"),
+        None => base,
+    }
+}
+
 /// Gamemode prefixes, longest first so `koth_` is tried before `k`-anything.
 /// `tow_` and the rest are here because a Highlander season occasionally
 /// runs something that is not payload or king of the hill.
@@ -78,6 +90,19 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn a_map_name_keeps_its_gamemode() {
+        assert_eq!(map_name("pl_upward_f12"), "pl_upward");
+        assert_eq!(map_name("pl_upward_f10"), "pl_upward");
+        assert_eq!(map_name("koth_ashville_final1"), "koth_ashville");
+        assert_eq!(map_name("koth_product_final"), "koth_product");
+        assert_eq!(map_name("tow_tetsudo_b10c"), "tow_tetsudo");
+        assert_eq!(map_name("koth_cascade"), "koth_cascade");
+        assert_eq!(map_name("PL_Vigil_RC10"), "pl_vigil");
+        // Two different maps stay two.
+        assert_ne!(map_name("koth_proot_b5b"), map_name("koth_proplant_v8"));
+    }
 
     #[test]
     fn a_version_comes_off_and_a_name_does_not() {

@@ -1,5 +1,5 @@
 {
-  "modelVersion": "v9",
+  "modelVersion": "v10",
   "ratingSpread": 0.25,
   "minMinutes": 5.0,
   "classes": [
@@ -590,7 +590,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.2631578947368421,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -600,7 +600,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.15,
+          "share": 0.15789473684210525,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -610,7 +610,7 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.15,
+          "share": 0.15789473684210525,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -620,27 +620,27 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.10526315789473685,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
         },
         {
-          "key": "backstabs",
-          "label": "Backstabs",
+          "key": "medic_picks",
+          "label": "Medic picks",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.1,
-          "group": "speciality",
+          "share": 0.10526315789473685,
+          "group": "teamplay",
           "source": "log",
-          "description": "Backstabs, per 10 minutes."
+          "description": "Enemy Medics you killed. A dead Medic loses his team the uber, and usually the next fight."
         },
         {
           "key": "untraded",
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.10526315789473685,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
@@ -650,30 +650,10 @@
           "label": "Fight KAST, engaged",
           "unit": "% of fights",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.10526315789473685,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Fight KAST, but surviving only counts if you fired a shot: hiding through a fight does not."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.1,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
-        },
-        {
-          "key": "medic_picks",
-          "label": "Medic picks",
-          "unit": "per 10 min",
-          "higherIsBetter": true,
-          "share": 0.05,
-          "group": "teamplay",
-          "source": "log",
-          "description": "Enemy Medics you killed. A dead Medic loses his team the uber, and usually the next fight."
         }
       ]
     }

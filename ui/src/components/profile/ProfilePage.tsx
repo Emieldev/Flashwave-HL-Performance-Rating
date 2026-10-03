@@ -11,7 +11,7 @@ import {
   type PlayerProfile,
   type Profile,
 } from "../../api/types";
-import { Achievements, PlayerHeader, RecentOfficials, SeasonsTable, TrendsCareer } from "../players/PlayerProfile";
+import { Achievements, PlayerHeader, RecentOfficials, SeasonsTable, TeamStays, TrendsCareer } from "../players/PlayerProfile";
 import "../players/players.css";
 import { TeammatesPanel } from "./TeammatesPanel";
 import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
@@ -127,6 +127,7 @@ export function ProfilePage({ steamid, onOpenMatch }: { steamid: string | null; 
             <section className="panel">
               <h3>{t("Teams by season")}</h3>
               <SeasonsTable p={me} />
+              <TeamStays accountId={me.accountId} />
               <h3 className="career-sub">{t("Recent officials")}</h3>
               <RecentOfficials p={me} count={6} />
             </section>

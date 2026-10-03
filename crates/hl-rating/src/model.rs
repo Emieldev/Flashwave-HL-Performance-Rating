@@ -31,7 +31,9 @@ use std::collections::HashMap;
 /// cross-validated, in place of six classes sharing one generic model.
 /// v9: seven models refitted on the league sample (Q39): ~4,650 matchups a
 /// class, 3,900 of them ETF2L officials.
-pub const MODEL_VERSION: &str = "v9";
+/// v10: the Spy reweighted with the Spy mains: medic picks up, caps and
+/// backstabs out.
+pub const MODEL_VERSION: &str = "v10";
 
 /// How far one standard deviation moves the rating.
 ///

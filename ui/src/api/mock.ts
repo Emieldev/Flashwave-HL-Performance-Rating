@@ -13,6 +13,9 @@ import ratingGuide from "./fixtures/rating_guide.json";
 import seasonsOverview from "./fixtures/seasons_overview.json";
 import seasonPodiums33 from "./fixtures/season_podiums_33.json";
 import teamHonours35600 from "./fixtures/team_honours_35600.json";
+import teamTransfers35600 from "./fixtures/team_transfers_35600.json";
+import teamInfo35600 from "./fixtures/team_info_35600.json";
+import playerTeams139131191 from "./fixtures/player_teams_139131191.json";
 import cart4109131 from "./fixtures/cart_4109131.json";
 import match3863290 from "./fixtures/match_3863290.json";
 import analysis3863290 from "./fixtures/analysis_3863290.json";
@@ -28,6 +31,9 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  Stay,
+  TeamInfo,
+  TeamTransfers,
   SpyReport,
   MatchDemoStats,
   DemoLinked,
@@ -59,7 +65,7 @@ import type {
   Teammates,
   TfPathInfo,
   FightsCard,
-  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings, MatchDivisions, CareerView, SeasonTile, Podium, TeamHonours } from "./types";
+  SeasonsView, StvStage, RatingGuide, LeagueSample, LeagueActivity, CatalogueHit, PlayerProfile, PlayerStats, Rankings, MatchDivisions, CareerView, SeasonTile, Podium, TeamHonours, TeamEtf2l } from "./types";
 
 // Starts configured, since setup is not what you are usually iterating on.
 // Append `?setup` to the URL to start from the first-run screen instead.
@@ -962,12 +968,33 @@ export const mockApi: Api = {
       ({
         36: "https://etf2l.org/wp-content/uploads/2026/07/ETF2L_HL_autumn_2026-1024x576.jpg",
         35: "https://etf2l.org/wp-content/uploads/2026/03/ETF2L_HL_SPRING_2026-1024x576.jpg",
+        34: "https://etf2l.org/wp-content/uploads/2025/07/ETF2L_HL_SUMMER_2025-1024x576.png",
+        33: "https://etf2l.org/wp-content/uploads/2025/03/etf2l_HL_SPRING_25-1024x576.png",
+        32: "https://etf2l.org/wp-content/uploads/2024/06/hls32soda-1024x576.png",
         29: "https://etf2l.org/wp-content/uploads/2023/04/etf2l_hl_spring_23-1024x576.png",
         28: "https://etf2l.org/wp-content/uploads/2023/03/ETF2L_HL_winter23-banner.png",
       } as Record<number, string>)[season] ?? null,
     ),
   getSeasonPodiums: () => delay(seasonPodiums33 as unknown as Podium[]),
   getTeamHonours: () => delay(teamHonours35600 as unknown as TeamHonours),
+  // SBQRRA's transfers and Flashy's teams from ETF2L, 3 October 2026.
+  getTeamTransfers: () => delay(teamTransfers35600 as unknown as TeamTransfers),
+  getTeamInfo: () => delay(teamInfo35600 as unknown as TeamInfo),
+  getPlayerTeams: () => delay(playerTeams139131191 as unknown as Stay[]),
+  // SBQRRA's ETF2L page, 3 October 2026.
+  getTeamEtf2l: () =>
+    delay<TeamEtf2l>({
+      description: "\u201cSe ni\u2019 mondo esistesse un po\u2019 di bene\ne ognun si honsiderasse suo fratello\nci sarebbe meno pensieri e meno pene\ne il mondo ne sarebbe assai pi\u00f9 bello\u201d\nP.P.\n\n\u2013 1st Place S30: tiad \u2013 bad \u2013 mob \u2013 steko \u2013 bull \u2013 tonno \u2013 zero \u2013 flashy \u2013 mata\n\u2013 3rd Place S34: Kosta \u2013 scrly \u2013 mob \u2013 bad \u2013 Mathis \u2013 tonno \u2013 eron \u2013 flashy \u2013 belfast\n\nSBQRRA Invicta!",
+      awards: [
+        { place: "1st", competition: "Highlander Autumn 2023 (Open B)" },
+        { place: "1st", competition: "Highlander Winter 2024: Low (Low)" },
+        { place: "1st", competition: "Highlander Winter 2024 Preseason Cup (Low A)" },
+        { place: "1st", competition: "Highlander Season 33 (Spring 2025): Low Playoffs" },
+        { place: "3rd", competition: "Highlander Season 34 (Summer 2025) (Mid)" },
+      ],
+      url: "https://etf2l.org/teams/35600/",
+      fetchedAt: Math.floor(Date.now() / 1000),
+    }),
   getTeam: (teamId: number) => {
     const row = (leagues as unknown as LeagueView).divisions.flatMap((d) => d.teams).find((x) => x.teamId === teamId);
     const base = team37805 as unknown as TeamView;

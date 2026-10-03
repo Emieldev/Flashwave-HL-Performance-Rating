@@ -1307,14 +1307,39 @@ pub async fn get_seasons_overview(state: State<'_, AppState>) -> CmdResult<Vec<h
 
 /// A season's banner from ETF2L's news, looked for once and kept.
 #[tauri::command]
-pub async fn get_season_banner(state: State<'_, AppState>, season: i64, season_name: String) -> CmdResult<Option<String>> {
-    Ok(hl_ingest::catalogue::season_banner(&state.db, &state.sources, season, &season_name).await?)
+/// Shrunk to a small JPEG once; `large` for the season's own header.
+pub async fn get_season_banner(state: State<'_, AppState>, season: i64, season_name: String, large: Option<bool>) -> CmdResult<Option<String>> {
+    Ok(hl_ingest::catalogue::season_banner_image(&state.db, &state.sources, season, &season_name, large.unwrap_or(false)).await?)
 }
 
 /// A season's podiums, each division's medals and MVP.
 #[tauri::command]
 pub async fn get_season_podiums(state: State<'_, AppState>, season: i64) -> CmdResult<Vec<hl_ingest::catalogue::Podium>> {
     Ok(hl_ingest::catalogue::season_podiums(&state.db, season).await?)
+}
+
+/// A team's own ETF2L page: its description and ETF2L's list of its awards.
+#[tauri::command]
+pub async fn get_team_etf2l(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamEtf2l> {
+    Ok(hl_ingest::catalogue::team_etf2l(&state.db, &state.sources, team_id).await?)
+}
+
+/// A team's roster history from ETF2L's transfers (Q48), read when due.
+#[tauri::command]
+pub async fn get_team_transfers(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::transfers::TeamTransfers> {
+    Ok(hl_ingest::transfers::team_transfers(&state.db, &state.sources, team_id).await?)
+}
+
+/// A team as ETF2L's API has it (Q48): tag, links, former names, roles, cups.
+#[tauri::command]
+pub async fn get_team_info(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::team_info::TeamInfo> {
+    Ok(hl_ingest::team_info::team_info(&state.db, &state.sources, team_id).await?)
+}
+
+/// A player's teams with the dates they were on them (Q48), read when due.
+#[tauri::command]
+pub async fn get_player_teams(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::transfers::Stay>> {
+    Ok(hl_ingest::transfers::player_teams(&state.db, &state.sources, account_id).await?)
 }
 
 /// A team's medals and its seasons.

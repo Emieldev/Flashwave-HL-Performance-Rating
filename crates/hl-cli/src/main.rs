@@ -101,6 +101,10 @@ COMMANDS:
     snapshot --check       What the built-in snapshot holds; fails when it is
                            for another rating model than this build's
     etf2l [--offline]      Fetch ETF2L officials and classify every match (official/scrim/pug)
+    transfers team ID | player STEAMID | backfill [N] | medals
+                           ETF2L transfers: a team's roster history, a player's
+                           teams with dates, read every team's (medal winners
+                           first), and the medals withheld for leaving early
     teammates [--all] [--json]
                            Your teams and regular teammates (officials and scrims unless --all)
     profile [CLASS] [--official|--scrim|--pug] [--json]
@@ -1339,6 +1343,97 @@ async fn main() -> Result<()> {
                 println!("  {:<22} {:<12} S{}{}", names.get(a).and_then(|n| n.first()).map_or("?", |n| n.as_str()), p.division, p.season, if p.exact { "" } else { " (nearest)" });
             }
             println!("{} of the players have a division", d.players.len());
+            Ok(())
+        }
+
+        ["team-info", id, rest @ ..] => {
+            // A team as ETF2L's API has it: tag, links, former names, roles, cups.
+            let db = Db::connect(&db_path).await?;
+            let i = hl_ingest::team_info::team_info(&db, &Sources::new()?, id.parse()?).await?;
+            if rest.contains(&"--json") {
+                println!("{}", serde_json::to_string(&i)?);
+            } else {
+                println!("tag {:?}  homepage {:?}  steam group {:?}", i.tag, i.homepage, i.steam_group);
+                for n in &i.former_names {
+                    println!("  was {} until {}", n.from, fmt_date(n.time));
+                }
+                for m in &i.members {
+                    println!("  {:<24} {}", m.name, m.role);
+                }
+                for c in &i.cups {
+                    println!("  cup {:<48} {:<10} {}", c.name, c.division.as_deref().unwrap_or("-"), c.place.as_deref().unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+
+        ["transfers", "team", id, "--json"] => {
+            let db = Db::connect(&db_path).await?;
+            let t = hl_ingest::transfers::team_transfers(&db, &Sources::new()?, id.parse()?).await?;
+            println!("{}", serde_json::to_string(&t)?);
+            Ok(())
+        }
+
+        ["transfers", "player", who, "--json"] => {
+            let db = Db::connect(&db_path).await?;
+            let account = hl_core::SteamId::parse(who).map(|s| s.account_id()).or_else(|_| who.parse::<u32>())?;
+            println!("{}", serde_json::to_string(&hl_ingest::transfers::player_teams(&db, &Sources::new()?, account).await?)?);
+            Ok(())
+        }
+
+        ["transfers", "team", id] => {
+            // A team's ETF2L transfers, read when due, and its roster history.
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let t = hl_ingest::transfers::team_transfers(&db, &sources, id.parse()?).await?;
+            let day = fmt_date;
+            println!("{} transfers; stays:", t.rows.len());
+            for s in &t.stays {
+                println!("  {:<24} {:>10} - {:<10}", s.name, s.from.map(day).unwrap_or("?".into()), s.to.map(day).unwrap_or("now".into()));
+            }
+            for r in t.rows.iter().take(15) {
+                println!("  {} {:<6} {:<24} {}", day(r.time), if r.joined { "joined" } else { "left" }, r.name, r.by.as_deref().map(|b| format!("by {b}")).unwrap_or_default());
+            }
+            Ok(())
+        }
+
+        ["transfers", "player", who] => {
+            // A player's teams with dates.
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let account = hl_core::SteamId::parse(who).map(|s| s.account_id()).or_else(|_| who.parse::<u32>())?;
+            let day = fmt_date;
+            for s in hl_ingest::transfers::player_teams(&db, &sources, account).await? {
+                println!("  {:<28} {:<20} {:>10} - {:<10}", s.team_name, s.team_type.unwrap_or_default(), s.from.map(day).unwrap_or("?".into()), s.to.map(day).unwrap_or("now".into()));
+            }
+            Ok(())
+        }
+
+        ["transfers", "backfill", rest @ ..] => {
+            // Read the transfers of teams never read, medal winners first.
+            let limit: usize = rest.first().map(|n| n.parse()).transpose()?.unwrap_or(usize::MAX);
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let order = hl_ingest::transfers::backfill_order(&db).await?;
+            println!("{} teams to read", order.len());
+            for (i, team) in order.into_iter().take(limit).enumerate() {
+                let n = hl_ingest::transfers::fetch_team(&db, &sources, team).await?;
+                println!("  {:>4}. team {team}: {n} transfers", i + 1);
+            }
+            Ok(())
+        }
+
+        ["transfers", "medals"] => {
+            // Medals withheld because the player had left before the team's
+            // last match of the season.
+            let db = Db::connect(&db_path).await?;
+            let cat = hl_ingest::catalogue::Catalogue::load(&db).await?;
+            let teams = db.etf2l_teams().await?;
+            let withheld = cat.withheld_medals();
+            for (season, team, _, name) in &withheld {
+                println!("  S{season:<4} {:<28} {name}", teams.get(team).map(|t| t.0.as_str()).unwrap_or("?"));
+            }
+            println!("{} medals withheld", withheld.len());
             Ok(())
         }
 

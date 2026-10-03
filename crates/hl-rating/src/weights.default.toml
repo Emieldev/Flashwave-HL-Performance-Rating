@@ -426,19 +426,23 @@ untraded_deaths = 0.15
 # v9 (Q39, 1 Oct 2026): refitted on the league -- ~4,650 matchups, 3,900 of
 # them ETF2L officials from Open to Premiership. Picks the winner (all /
 # before / after S34) 74.4 / 74.6 / 74.0 against 71.6 / 71.5 / 71.7 on the same matchups.
-# JUDGEMENT kept: backstabs at 0.10, which the fit is indifferent to. The
-# duel and headshot share are gone; the old model lost to `generic`.
+# The duel and headshot share are gone; the old model lost to `generic`.
+#
+# v10 (3 Oct 2026), from the Spy mains (Suomipe, Taiga): medic picks up to
+# 0.10 ("med picks are very important"), the cost of caps out (a Spy caps
+# a last-second steal or nothing), and backstabs out -- "value of the kill
+# is still based on who/when", which kills valued by victim already are:
+# their 0.10 goes to impact kills. Picks the winner 75.8 / 76.4 / 74.0
+# against v9's 75.5 / 76.0 / 74.0 on 5,323 league matchups. This drops the
+# v9 judgement that kept backstabs: the Spy mains and the data now agree.
 [model.spy]
-impact_kills       = 0.15
+impact_kills       = 0.25
 impact_assists     = 0.10
-backstabs          = 0.10
-medic_picks        = 0.05
+medic_picks        = 0.10
 deaths             = 0.15
 untraded           = 0.10
 untraded_deaths    = 0.15
 fight_kast_engaged = 0.10
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay   = 0.10
 
 # The fallback, for a class with no model of its own. Every class has one as
 # of Q8, so nothing reads this today -- it stays because a weights file is

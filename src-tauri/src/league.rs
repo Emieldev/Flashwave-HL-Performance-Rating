@@ -99,6 +99,43 @@ pub fn snapshot(activity: &SharedActivity, sources: &Sources) -> Activity {
 /// turn after a long download catches up a few hundred at a time.
 const RATE_BATCH: i64 = 200;
 
+/// ETF2L's transfers for every team (Q48), the medal winners first: each
+/// team's list in turn at the ETF2L client's pace, then the teams still
+/// playing again every six hours. Dev builds only, like the sample; a
+/// release has them from the league snapshot and reads a team's when its
+/// page is opened.
+pub fn spawn_transfers(db: Db, sources: Arc<Sources>) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(90)).await;
+        loop {
+            let mut teams = hl_ingest::transfers::backfill_order(&db).await.unwrap_or_else(|e| {
+                tracing::warn!(error = %format!("{e:#}"), "listing the teams to read transfers for failed");
+                Vec::new()
+            });
+            for team in hl_ingest::transfers::stale_active_teams(&db).await.unwrap_or_default() {
+                if !teams.contains(&team) {
+                    teams.push(team);
+                }
+            }
+            let (mut read, mut added) = (0, 0);
+            for team in teams {
+                match hl_ingest::transfers::fetch_team(&db, &sources, team).await {
+                    Ok(n) => {
+                        read += 1;
+                        added += n;
+                    }
+                    Err(e) => tracing::warn!(team, error = %format!("{e:#}"), "reading a team's transfers failed"),
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            if read > 0 {
+                tracing::info!(teams = read, transfers = added, "ETF2L transfers read");
+            }
+            tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
+        }
+    });
+}
+
 pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: SharedActivity, weights_path: std::path::PathBuf) {
     activity.lock().unwrap().state = "starting";
     tauri::async_runtime::spawn(async move {

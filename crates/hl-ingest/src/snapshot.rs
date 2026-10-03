@@ -68,6 +68,8 @@ fn league_tables(keep_ours: bool) -> Vec<TableCopy<'static>> {
         t("etf2l_season_player"),
         t("etf2l_player"),
         t("trends_career"),
+        t("etf2l_transfer"),
+        t("etf2l_transfer_fetch"),
         t("league_log"),
         t("league_log_player"),
         TableCopy { table: "league_rating", filter: Some(format!("model_version = '{MODEL_VERSION}'")), keep_ours },

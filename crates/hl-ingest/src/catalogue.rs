@@ -62,6 +62,9 @@ pub struct PlayerSeason {
     pub place: Option<u8>,
     /// Only ever a merc for this team that season: not on its roster.
     pub merc: bool,
+    /// On the roster, but ETF2L has them leaving before the team's last
+    /// match of the season: the team's medal is not theirs (Q48).
+    pub left_early: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -219,6 +222,11 @@ pub struct Catalogue {
     newest_season: i64,
     /// `(match, account)`: played as a merc, for a team they were not on.
     mercs: std::collections::HashSet<(i64, u32)>,
+    /// `(team, account)` -> their joins (true) and leaves, oldest first,
+    /// from ETF2L's transfers (Q48).
+    transfers: HashMap<(i64, u32), Vec<(i64, bool)>>,
+    /// `(season, team)` -> the time of the team's last decided match.
+    season_end: HashMap<(i64, i64), i64>,
 }
 
 /// The rounds a medal is read from.
@@ -258,7 +266,51 @@ impl Catalogue {
         // The newest numbered season: 134 (AFA 2025) is older than 35.
         let newest_season = matches.values().map(|m| m.season).filter(|s| *s < crate::leagues::OFF_SEASON).max().unwrap_or(0);
         let mercs = db.catalogue_mercs().await?.into_iter().collect();
-        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season, mercs })
+        let mut transfers: HashMap<(i64, u32), Vec<(i64, bool)>> = HashMap::new();
+        for (team, account, time, joined) in db.catalogue_transfers().await? {
+            transfers.entry((team, account)).or_default().push((time, joined));
+        }
+        let season_end = Self::season_ends(&matches);
+        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season, mercs, transfers, season_end })
+    }
+
+    /// Each team's last decided match of each season.
+    fn season_ends(matches: &HashMap<i64, CatMatch>) -> HashMap<(i64, i64), i64> {
+        let mut out: HashMap<(i64, i64), i64> = HashMap::new();
+        for m in matches.values().filter(|m| Self::played(m) || m.default_win) {
+            let Some(time) = m.time else { continue };
+            for team in [m.clan1, m.clan2] {
+                let e = out.entry((m.season, team)).or_insert(time);
+                *e = (*e).max(time);
+            }
+        }
+        out
+    }
+
+    /// Whether a player was still on a team's roster at its last match of
+    /// the season, by ETF2L's transfers. Without transfers for them and
+    /// that team, or with none from before then, they are taken to be.
+    fn on_roster_at_end(&self, account: u32, season: i64, team: i64) -> bool {
+        let (Some(events), Some(end)) = (self.transfers.get(&(team, account)), self.season_end.get(&(season, team))) else { return true };
+        events.iter().rev().find(|(at, _)| at <= end).is_none_or(|(_, joined)| *joined)
+    }
+
+    /// Medals withheld because the player had left first:
+    /// `(season, team, account, name)`, for checking (`hl transfers medals`).
+    pub fn withheld_medals(&self) -> Vec<(i64, i64, u32, String)> {
+        let medal_teams: std::collections::HashSet<(i64, i64)> =
+            self.medals().into_iter().flat_map(|((season, _), list)| list.into_iter().map(move |(_, team, _)| (season, team))).collect();
+        let mut out: std::collections::BTreeSet<(i64, i64, u32, String)> = Default::default();
+        for (match_id, roster) in &self.rosters {
+            let Some(m) = self.matches.get(match_id).filter(|m| Self::played(m)) else { continue };
+            for (account, team, name) in roster {
+                let Some(team) = *team else { continue };
+                if medal_teams.contains(&(m.season, team)) && !self.mercs.contains(&(*match_id, *account)) && !self.on_roster_at_end(*account, m.season, team) {
+                    out.insert((m.season, team, *account, name.clone()));
+                }
+            }
+        }
+        out.into_iter().collect()
     }
 
     fn team(&self, id: i64) -> Team {
@@ -670,7 +722,8 @@ impl Catalogue {
             .map(|((season, team), (divs, played, won, lost))| {
                 // The division they played most for this team that season.
                 let ((division, tier), _) = divs.into_iter().max_by_key(|(_, n)| *n).unwrap_or(((String::new(), None), 0));
-                let place = medals.iter().filter(|((s, _), _)| *s == season && rostered.contains(&(season, team))).find_map(|((_, d), list)| {
+                let left_early = rostered.contains(&(season, team)) && !self.on_roster_at_end(account, season, team);
+                let place = medals.iter().filter(|((s, _), _)| *s == season && rostered.contains(&(season, team)) && !left_early).find_map(|((_, d), list)| {
                     list.iter().find(|(_, t, _)| *t == team).map(|(p, _, how)| (*p, d.clone(), how.clone()))
                 });
                 if let Some((p, d, how)) = &place {
@@ -685,7 +738,7 @@ impl Catalogue {
                     });
                 }
                 let merc = !rostered.contains(&(season, team));
-                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0), merc }
+                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0), merc, left_early }
             })
             .collect();
         out.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(b.played.cmp(&a.played)));
@@ -1590,7 +1643,7 @@ pub async fn team_honours(db: &Db, team: i64) -> Result<TeamHonours> {
 /// looked for once and kept ("-" when there is none, asked again after a
 /// week). Season tiles show it.
 pub async fn season_banner(db: &Db, sources: &Sources, season: i64, season_name: &str) -> Result<Option<String>> {
-    let key = format!("season_banner:{season}");
+    let key = format!("season_banner2:{season}");
     if let Some(v) = db.get_setting(&key).await? {
         let (url, at) = v.split_once('|').unwrap_or((v.as_str(), "0"));
         let fresh = now() - at.parse::<i64>().unwrap_or(0) < 7 * 24 * 3600;
@@ -1598,41 +1651,94 @@ pub async fn season_banner(db: &Db, sources: &Sources, season: i64, season_name:
             return Ok((url != "-").then(|| url.to_string()));
         }
     }
-    // "Highlander Season 34"; by name for the seasons without a number
-    // (Winter 2023 to Winter 2024, AFA 2025).
-    let wanted = if season < crate::leagues::OFF_SEASON && !(28..=31).contains(&season) {
-        format!("Highlander Season {season}")
-    } else {
-        format!("Highlander {season_name}")
-    };
-    let url = crate::http::url(
-        "https://etf2l.org/wp-json/wp/v2/posts",
-        [("search", wanted.as_str()), ("per_page", "20"), ("_fields", "title,content")],
-    );
-    let found = match sources.fetch_text_interactive(&url).await {
-        Ok(Some(body)) => banner_in(&body, &wanted),
-        _ => None,
-    };
+    // By number first ("Highlander Season 34"), then by name ("Winter
+    // 2024", "AFA 2025") for the seasons without one.
+    let numbered = season < crate::leagues::OFF_SEASON && !(28..=31).contains(&season);
+    let mut queries: Vec<String> = Vec::new();
+    if numbered {
+        queries.push(format!("Highlander Season {season}"));
+    }
+    if !season_name.is_empty() && !season_name.starts_with("Season") {
+        queries.push(format!("Highlander {season_name}"));
+    }
+    let mut found = None;
+    for q in queries {
+        let url = crate::http::url(
+            "https://etf2l.org/wp-json/wp/v2/posts",
+            [("search", q.as_str()), ("per_page", "50"), ("_fields", "title,content")],
+        );
+        if let Ok(Some(body)) = sources.fetch_text_interactive(&url).await {
+            found = banner_in(&body, numbered.then_some(season), season_name);
+        }
+        if found.is_some() {
+            break;
+        }
+    }
     db.set_setting(&key, &format!("{}|{}", found.as_deref().unwrap_or("-"), now())).await?;
     Ok(found)
 }
 
-/// The first season banner among the posts whose title names the season.
-fn banner_in(body: &str, wanted: &str) -> Option<String> {
+/// A season's banner as a small JPEG, made once from ETF2L's picture and
+/// kept: 640 px wide for a tile, 1280 for the season's own header. ETF2L's
+/// banners are up to 1.9 MB of PNG each; a grid of them made the page slow.
+/// When the picture cannot be read, its link is returned as it is.
+pub async fn season_banner_image(db: &Db, sources: &Sources, season: i64, season_name: &str, large: bool) -> Result<Option<String>> {
+    let width = if large { 1280 } else { 640 };
+    let key = format!("season_banner_img:{season}:{width}");
+    if let Some(v) = db.get_setting(&key).await? {
+        return Ok(Some(v));
+    }
+    let Some(url) = season_banner(db, sources, season, season_name).await? else { return Ok(None) };
+    let Some(bytes) = sources.fetch_bytes(&url).await? else { return Ok(Some(url)) };
+    match tokio::task::spawn_blocking(move || shrink_to_jpeg(&bytes, width)).await? {
+        Ok(jpeg) => {
+            use base64::Engine;
+            let data = format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(jpeg));
+            db.set_setting(&key, &data).await?;
+            Ok(Some(data))
+        }
+        Err(e) => {
+            tracing::warn!("season {season} banner kept at full size: {e:#}");
+            Ok(Some(url))
+        }
+    }
+}
+
+/// A picture no wider than `width`, as a JPEG at quality 80.
+fn shrink_to_jpeg(bytes: &[u8], width: u32) -> Result<Vec<u8>> {
+    let img = image::load_from_memory(bytes).context("reading the picture")?;
+    let img = if img.width() > width { img.resize(width, u32::MAX, image::imageops::FilterType::Triangle) } else { img };
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80).encode_image(&img.to_rgb8())?;
+    Ok(out)
+}
+
+/// The first picture in a post about this Highlander season: its title says
+/// "Highlander" and "Season 34" (not 340) or the season's name.
+fn banner_in(body: &str, number: Option<i64>, name: &str) -> Option<String> {
     let posts: Vec<Value> = serde_json::from_str(body).ok()?;
-    let wanted = wanted.to_ascii_lowercase();
+    let name = name.to_ascii_lowercase();
     for p in posts {
         let title = p.pointer("/title/rendered").and_then(Value::as_str).unwrap_or("").to_ascii_lowercase();
-        // "Highlander Season 3" must not take Season 34's post.
-        let fits = title.find(&wanted).is_some_and(|i| !title[i + wanted.len()..].starts_with(|c: char| c.is_ascii_digit()));
-        if !fits {
+        if !title.contains("highlander") {
+            continue;
+        }
+        let by_number = number.is_some_and(|n| {
+            let w = format!("season {n}");
+            title.match_indices(&w).any(|(i, _)| !title[i + w.len()..].starts_with(|c: char| c.is_ascii_digit()))
+        });
+        let by_name = !name.is_empty() && !name.starts_with("season") && title.contains(&name);
+        if !by_number && !by_name {
             continue;
         }
         let content = p.pointer("/content/rendered").and_then(Value::as_str).unwrap_or("");
         for part in content.split("<img").skip(1) {
             let Some(src) = part.split("src=\"").nth(1).and_then(|s| s.split('"').next()) else { continue };
             let lower = src.to_ascii_lowercase();
-            if lower.contains("/wp-content/uploads/") && !lower.contains("placeholder") && (lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") || lower.ends_with(".webp")) {
+            let path = lower.split('?').next().unwrap_or(&lower);
+            let picture = path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".png") || path.ends_with(".webp");
+            let chrome = ["/flags/", "/achs/", "emoji", "placeholder", "avatar"].iter().any(|x| lower.contains(x));
+            if picture && !chrome && src.starts_with("http") {
                 return Some(src.replace("&amp;", "&"));
             }
         }
@@ -1640,8 +1746,150 @@ fn banner_in(body: &str, wanted: &str) -> Option<String> {
     None
 }
 
+/// What ETF2L's own page says about a team: its description, and its
+/// awards as ETF2L lists them.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamEtf2l {
+    pub description: Option<String>,
+    pub awards: Vec<TeamAward>,
+    pub url: String,
+    pub fetched_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamAward {
+    /// "1st", "2nd", "3rd".
+    pub place: String,
+    pub competition: String,
+}
+
+/// A team's ETF2L page, read when the team is opened and kept a week. The
+/// API has neither the description nor the awards; the page has both.
+pub async fn team_etf2l(db: &Db, sources: &Sources, team: i64) -> Result<TeamEtf2l> {
+    let key = format!("etf2l_team_page:{team}");
+    let url = format!("https://etf2l.org/teams/{team}/");
+    if let Some(held) = db.get_setting(&key).await?.and_then(|v| serde_json::from_str::<TeamEtf2l>(&v).ok()) {
+        if now() - held.fetched_at < 7 * 24 * 3600 {
+            return Ok(held);
+        }
+    }
+    let Ok(Some(html)) = sources.fetch_text(&url).await else {
+        return Ok(TeamEtf2l { url, ..Default::default() });
+    };
+    let page = TeamEtf2l { description: team_description(&html), awards: team_awards(&html), url, fetched_at: now() };
+    db.set_setting(&key, &serde_json::to_string(&page)?).await?;
+    Ok(page)
+}
+
+/// The free text under the team's info table, as plain lines.
+fn team_description(html: &str) -> Option<String> {
+    let start = html.find("teamplaceholder")?;
+    let end = html[start..].find("<h2>Warnings").map_or(html.len(), |e| start + e);
+    let block = &html[start..end];
+    let div = block.find("<div class=\"fix\">")?;
+    let text = html_text(&block[div + "<div class=\"fix\">".len()..]);
+    let text = text.trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
+/// The Awards list: `1st: Highlander Season 33 (Spring 2025): Low Playoffs`.
+fn team_awards(html: &str) -> Vec<TeamAward> {
+    let Some(start) = html.find(">Awards</h2>") else { return Vec::new() };
+    let end = html[start..].find("</ul>").map_or(html.len(), |e| start + e);
+    html[start..end]
+        .split("<li>")
+        .skip(1)
+        .filter_map(|li| {
+            let line = html_text(li);
+            let (place, competition) = line.split_once(':')?;
+            Some(TeamAward { place: place.trim().to_string(), competition: competition.trim().to_string() })
+        })
+        .collect()
+}
+
+/// HTML to plain text: line breaks kept, tags dropped, entities read.
+fn html_text(fragment: &str) -> String {
+    // A newline in the source is a space in HTML; <br> and </p> are breaks.
+    let mut s = fragment.replace(['\r', '\n'], " ").replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n").replace("</p>", "\n\n").replace("</li>", "\n");
+    // Tags out.
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for ch in s.drain(..) {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    // Entities: numeric and the common named ones.
+    let mut text = String::with_capacity(out.len());
+    let mut rest = out.as_str();
+    while let Some(i) = rest.find('&') {
+        text.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let Some(semi) = tail[..tail.len().min(10)].find(';') else {
+            text.push('&');
+            rest = &tail[1..];
+            continue;
+        };
+        let entity = &tail[1..semi];
+        let ch = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" | "#039" => Some('\''),
+            "nbsp" => Some(' '),
+            "hellip" => Some('…'),
+            "ndash" => Some('–'),
+            "mdash" => Some('—'),
+            e if e.starts_with("#x") => u32::from_str_radix(&e[2..], 16).ok().and_then(char::from_u32),
+            e if e.starts_with('#') => e[1..].parse::<u32>().ok().and_then(char::from_u32),
+            _ => None,
+        };
+        match ch {
+            Some(c) => {
+                text.push(c);
+                rest = &tail[semi + 1..];
+            }
+            None => {
+                text.push('&');
+                rest = &tail[1..];
+            }
+        }
+    }
+    text.push_str(rest);
+    // Tidy the whitespace: trimmed lines, at most one blank line in a row.
+    let mut lines: Vec<&str> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() && lines.last().is_some_and(|l| l.is_empty()) {
+            continue;
+        }
+        lines.push(line);
+    }
+    lines.join("\n").trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_banner_is_shrunk_to_a_small_jpeg() {
+        // A 2048 x 1152 PNG, as big as ETF2L's largest.
+        let img = image::RgbImage::from_fn(2048, 1152, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, 90]));
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        let jpeg = super::shrink_to_jpeg(&png, 640).unwrap();
+        assert!(jpeg.starts_with(&[0xFF, 0xD8, 0xFF]), "a JPEG");
+        let back = image::load_from_memory(&jpeg).unwrap();
+        assert_eq!((back.width(), back.height()), (640, 360), "aspect kept");
+        // A small picture is not blown up.
+        let small = super::shrink_to_jpeg(&jpeg, 1280).unwrap();
+        assert_eq!(image::load_from_memory(&small).unwrap().width(), 640);
+    }
+
     use super::*;
 
     #[test]
@@ -1744,14 +1992,59 @@ mod tests {
     }
 
     #[test]
+    fn a_player_who_left_before_the_final_does_not_take_its_medal() {
+        // Team 11 wins the final (match 3, at time 3). Account 11 played week
+        // 1 on the roster and left at time 2; account 600 played week 1 too
+        // and stayed.
+        let mut c = cat(vec![
+            m(1, 33, "regular", Some("Open"), "Open", Some("Week 1"), 11, 12, 6, 0),
+            m(3, 33, "Playoffs", None, "Open", Some("Grand Final"), 11, 13, 6, 0),
+        ]);
+        c.rosters.get_mut(&1).unwrap().push((600, Some(11), "stayed".into()));
+        c.season_end = Catalogue::season_ends(&c.matches);
+        c.transfers.insert((11, 11), vec![(0, true), (2, false)]);
+        c.transfers.insert((11, 600), vec![(0, true), (5, false)]);
+        let medals = c.medals();
+        let (seasons, won, _) = c.player(11, &medals);
+        assert!(won.is_empty(), "left before the final");
+        assert!(seasons[0].left_early && seasons[0].place.is_none());
+        let (seasons, won, _) = c.player(600, &medals);
+        assert_eq!(won.len(), 1, "left after it: still theirs");
+        assert!(!seasons[0].left_early);
+        assert_eq!(c.withheld_medals(), vec![(33, 11, 11, "p11".to_string())]);
+    }
+
+    #[test]
     fn a_season_banner_is_taken_from_a_post_naming_that_season_only() {
         let body = r#"[
-            {"title":{"rendered":"Highlander Season 34 (Summer 2025): Playoffs"},"content":{"rendered":"<p><img src=\"https://etf2l.org/wp-content/uploads/2025/HL34.jpg\"></p>"}},
-            {"title":{"rendered":"Highlander Season 3 recap"},"content":{"rendered":"<img src=\"https://etf2l.org/wp-content/uploads/placeholderbanner.jpg\"><img src=\"/images/flags/European.gif\"><img src=\"https://etf2l.org/wp-content/uploads/2014/HL3.png\">"}}
+            {"title":{"rendered":"Highlander Season 34 (Summer 2025): Wrap-Up"},"content":{"rendered":"<p><img src=\"https://etf2l.org/wp-content/uploads/2025/HL34.png\"></p>"}},
+            {"title":{"rendered":"Highlander Season 3 recap"},"content":{"rendered":"<img src=\"https://etf2l.org/wp-content/uploads/placeholderbanner.jpg\"><img src=\"/images/flags/European.gif\"><img src=\"https://i.imgur.com/HL3.jpg?x=1\">"}},
+            {"title":{"rendered":"6v6 Season 34"},"content":{"rendered":"<img src=\"https://etf2l.org/wp-content/uploads/6v6.jpg\">"}},
+            {"title":{"rendered":"Highlander Winter 2024: Playoffs"},"content":{"rendered":"<img src=\"https://etf2l.org/wp-content/uploads/w24.png\">"}}
         ]"#;
-        assert_eq!(banner_in(body, "Highlander Season 3").as_deref(), Some("https://etf2l.org/wp-content/uploads/2014/HL3.png"), "not Season 34's, not the placeholder, not a flag");
-        assert_eq!(banner_in(body, "Highlander Season 34").as_deref(), Some("https://etf2l.org/wp-content/uploads/2025/HL34.jpg"));
-        assert_eq!(banner_in(body, "Highlander Season 35"), None);
+        assert_eq!(banner_in(body, Some(3), "Season 3").as_deref(), Some("https://i.imgur.com/HL3.jpg?x=1"), "not Season 34's, not the placeholder, not a flag");
+        assert_eq!(banner_in(body, Some(34), "Summer 2025").as_deref(), Some("https://etf2l.org/wp-content/uploads/2025/HL34.png"), "not the 6v6 post");
+        assert_eq!(banner_in(body, None, "Winter 2024").as_deref(), Some("https://etf2l.org/wp-content/uploads/w24.png"), "by name");
+        assert_eq!(banner_in(body, Some(35), "Spring 2026"), None);
+    }
+
+    #[test]
+    fn a_teams_etf2l_page_gives_its_description_and_awards() {
+        let html = r#"<h1>SBQRRA</h1> <table class="teaminfo"></table>
+            <div class="teamplaceholder"><img src="x.png"/></div>
+            <div class="fix"> <p><p>&#8220;Se ni&#8217; mondo&#8221;<br />
+            P.P.</p>
+            <p>&#8211; 1st Place S30: tiad &#8211; bad</p>
+            </p></div>
+            <h2>Warnings</h2><ul><li>None</li></ul>
+            <h2>Awards</h2>
+            <ul><li><img src="1st.gif" alt="1st">1st: <a href="/archives/885">Highlander Autumn 2023 (Open B)</a></li><li><img alt="3rd">3rd: <a href="/archives/966">Highlander Season 34 (Summer 2025) (Mid)</a></li>
+            </ul><h2>Upcoming Fixtures</h2>"#;
+        assert_eq!(team_description(html).as_deref(), Some("\u{201c}Se ni\u{2019} mondo\u{201d}\nP.P.\n\n\u{2013} 1st Place S30: tiad \u{2013} bad"));
+        let awards = team_awards(html);
+        assert_eq!(awards.len(), 2);
+        assert_eq!((awards[0].place.as_str(), awards[0].competition.as_str()), ("1st", "Highlander Autumn 2023 (Open B)"));
+        assert_eq!(awards[1].place, "3rd");
     }
 
     #[test]
@@ -1817,7 +2110,7 @@ mod tests {
             }
         }
         let tiers = matches.iter().filter_map(|x| Some(((x.season, x.division.clone()?), x.tier?))).collect();
-        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new(), mercs: Default::default() }
+        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new(), mercs: Default::default(), transfers: HashMap::new(), season_end: HashMap::new() }
     }
 
     #[test]

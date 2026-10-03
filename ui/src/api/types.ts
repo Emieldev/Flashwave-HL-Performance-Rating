@@ -251,6 +251,52 @@ export interface PlayerSeason {
   place: number | null;
   /** Only ever a merc for this team that season. */
   merc?: boolean;
+  /** On the roster, but left before the team's last match of the season (Q48). */
+  leftEarly?: boolean;
+}
+
+/** One stay on a team, from ETF2L's transfers (Q48). `to` null: still on it. */
+export interface Stay {
+  teamId: number;
+  teamName: string;
+  teamType: string | null;
+  accountId: number | null;
+  name: string;
+  /** Null when ETF2L has no join: a founder, or older than its records. */
+  from: number | null;
+  to: number | null;
+}
+
+/** One join or leave on a team's roster. */
+export interface TransferRow {
+  time: number;
+  joined: boolean;
+  name: string;
+  accountId: number | null;
+  /** The leader who made the change, when not the player themselves. */
+  by: string | null;
+}
+
+/** A team as ETF2L's API has it (Q48). */
+export interface TeamInfo {
+  tag: string | null;
+  homepage: string | null;
+  steamGroup: string | null;
+  /** Oldest first. */
+  formerNames: Array<{ from: string; to: string; time: number }>;
+  /** Who is on the team now; role as ETF2L has it: Leader, Deputy, Member, Buddy, Inactive. */
+  members: Array<{ accountId: number | null; name: string; role: string }>;
+  /** Cups entered, newest first; place from ETF2L's awards. */
+  cups: Array<{ name: string; division: string | null; tier: number | null; place: string | null; competitionId: number }>;
+  fetchedAt: number | null;
+}
+
+export interface TeamTransfers {
+  /** Newest first. */
+  rows: TransferRow[];
+  /** The current roster first, longest on the team first; then who left. */
+  stays: Stay[];
+  fetchedAt: number | null;
 }
 
 export interface Medal {
@@ -1788,6 +1834,16 @@ export interface TeamRosterRow {
   class: string | null;
   games: number;
   rating: number | null;
+  /** The same per season, newest first: the lineup of each season. */
+  seasons: { season: number; officials: number; class: string | null; rating: number | null }[];
+}
+
+/** A team's own ETF2L page: its description and ETF2L's list of its awards. */
+export interface TeamEtf2l {
+  description: string | null;
+  awards: { place: string; competition: string }[];
+  url: string;
+  fetchedAt: number;
 }
 
 export interface TeamView {

@@ -431,11 +431,11 @@ engineer = 3.0
 
     #[test]
     fn a_typo_in_a_component_is_an_error() {
-        let line = DEFAULT_TOML.lines().find(|l| l.starts_with("backstabs ")).expect("the Spy model rates backstabs");
-        let broken = DEFAULT_TOML.replace(line, &line.replacen("backstabs", "backstab", 1));
+        let line = DEFAULT_TOML.lines().find(|l| l.starts_with("heal ")).expect("the Medic model rates healing");
+        let broken = DEFAULT_TOML.replace(line, &line.replacen("heal", "heals", 1));
         assert_ne!(broken, DEFAULT_TOML, "the test must break something");
         let err = Weights::parse(&broken).unwrap_err();
-        assert!(format!("{err:#}").contains("backstab"));
+        assert!(format!("{err:#}").contains("heals"));
     }
 
     #[test]
@@ -497,7 +497,10 @@ dpm = 0.0
         let w = Weights::default_weights();
         let has = |c: TfClass, k: Component| w.model_for(c).iter().any(|(x, _)| *x == k);
         assert!(has(TfClass::Medic, Component::Drops), "a Medic rating that cannot see a drop is not one");
-        assert!(has(TfClass::Spy, Component::Backstabs));
+        // v10, from the Spy mains: a Spy is rated on who his picks were, the
+        // Medic above all -- not on whether they were stabs.
+        assert!(has(TfClass::Spy, Component::MedicPicks), "a Spy rating that cannot see a Medic pick is not one");
+        assert!(!has(TfClass::Spy, Component::Backstabs), "the method of a kill is not rated, only its victim");
         assert!(!has(TfClass::Heavy, Component::Backstabs));
         assert!(!has(TfClass::Sniper, Component::Heal));
         // Q8: DPM was measured redundant for every class and kept only in
