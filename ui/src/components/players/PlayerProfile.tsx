@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type CatDivision, type Medal, type Mvp, type PlayerProfile as Profile } from "../../api/types";
+import { errorMessage, type CatDivision, type Etf2lRoster, type Medal, type Mvp, type PlayerProfile as Profile } from "../../api/types";
 import { formatDate } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import { classLabel } from "../analysis/common";
-import { t, tx } from "../../lib/i18n";
+import { locale, t, tx } from "../../lib/i18n";
 import { PlayerStatsCard, RankChip } from "./PlayerStats";
 import { MedalGlyph } from "./MedalGlyph";
 import { Country } from "../Country";
@@ -31,7 +31,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
   const p = q.data;
   return (
     <>
-      <Header p={p} />
+      <PlayerHeader p={p} />
       <div className="panel pp-body">
         <nav className="pp-tabs" role="tablist">
           {(
@@ -48,7 +48,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
           ))}
         </nav>
         {tab === "overview" && <Overview p={p} />}
-        {tab === "teams" && <Teams p={p} />}
+        {tab === "teams" && <SeasonsTable p={p} />}
         {tab === "achievements" && <Achievements medals={p.medals} mvps={p.mvps ?? []} />}
         {tab === "yours" && yours}
       </div>
@@ -56,19 +56,38 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
   );
 }
 
-function Header({ p }: { p: Profile }) {
+/**
+ * Who they are: picture, name, division, team, medals. `aside` takes the
+ * right-hand column (your own profile puts your numbers there, above the
+ * links), and `own` dresses it as yours: the main class behind the name.
+ */
+export function PlayerHeader({ p, aside, own }: { p: Profile; aside?: React.ReactNode; own?: boolean }) {
   const titles = medalTitles(p.medals);
   const played = p.mainClass;
   const declared = p.declaredClasses.map((c) => c.toLowerCase()).filter((c) => c !== played);
   const shownAliases = p.aliases.slice(0, 6);
+  // When the profile opened: a ban that runs out while it is open can wait.
+  const [openedAt] = useState(() => Date.now() / 1000);
+  const banned = p.bans.find((b) => b.end === null || b.end > openedAt);
   return (
-    <div className="panel pp-head">
+    <div className={own ? "panel pp-head pp-own" : "panel pp-head"}>
+      {own && played && (
+        <span className="pp-watermark" aria-hidden>
+          <ClassIcon cls={played} size={240} />
+        </span>
+      )}
       <div className="pp-top">
         <div className="pp-avatar">{p.avatar ? <img src={p.avatar} alt="" /> : <span>{p.name.slice(0, 1).toUpperCase()}</span>}</div>
         <div className="pp-who">
           <div className="pp-name-row">
             <h2 className="pp-name">{p.name}</h2>
             {p.highest && <DivisionBadge d={p.highest} />}
+            {p.etf2lTitle && p.etf2lTitle !== "Player" && <span className="pp-role">{p.etf2lTitle}</span>}
+            {banned && (
+              <span className="pp-banned" title={banned.reason ?? undefined}>
+                {banned.end ? t("Banned until {0}", { "0": formatDate(banned.end, true) }) : t("Banned")}
+              </span>
+            )}
           </div>
           {shownAliases.length > 0 && (
             <p className="hint pp-aka">
@@ -114,8 +133,21 @@ function Header({ p }: { p: Profile }) {
                 <span className="muted">{t("No ETF2L official in the seasons read")}</span>
               )}
             </dd>
+            {p.etf2lTeams.length > 0 && (
+              <>
+                <dt>{t("ETF2L rosters")}</dt>
+                <dd className="pp-rosters">
+                  {p.etf2lTeams.map((r) => (
+                    <RosterChip key={r.id} r={r} />
+                  ))}
+                </dd>
+              </>
+            )}
             <dt>{t("Officials")}</dt>
-            <dd>{tx("{0} in {1} season{2}", { "0": p.officials.length, "1": new Set(p.seasons.map((s) => s.season)).size, "2": new Set(p.seasons.map((s) => s.season)).size === 1 ? "" : "s" })}</dd>
+            <dd>
+              {tx("{0} in {1} season{2}", { "0": p.officials.length, "1": new Set(p.seasons.map((s) => s.season)).size, "2": new Set(p.seasons.map((s) => s.season)).size === 1 ? "" : "s" })}
+              {p.registered !== null && <span className="muted"> · {t("on ETF2L since {0}", { "0": monthYear(p.registered) })}</span>}
+            </dd>
           </dl>
           <HeaderRanks accountId={p.accountId} />
           {(titles.length > 0 || mvpTitles(p.mvps ?? []).length > 0) && (
@@ -135,15 +167,9 @@ function Header({ p }: { p: Profile }) {
             </div>
           )}
         </div>
-        <div className="pp-links">
-          {p.etf2lId !== null && (
-            <a href={`https://etf2l.org/forum/user/${p.etf2lId}/`} target="_blank" rel="noreferrer">
-              {t("ETF2L ↗")}
-            </a>
-          )}
-          <a href={`https://trends.tf/player/${p.steamid64}/`} target="_blank" rel="noreferrer">{t("trends.tf ↗")}</a>
-          <a href={`https://logs.tf/profile/${p.steamid64}`} target="_blank" rel="noreferrer">{t("logs.tf ↗")}</a>
-          <a href={`https://steamcommunity.com/profiles/${p.steamid64}`} target="_blank" rel="noreferrer">{t("Steam ↗")}</a>
+        <div className={aside ? "pp-side" : undefined}>
+          {aside}
+          <ProfileLinks p={p} />
         </div>
       </div>
       {p.medals.length + (p.mvps?.length ?? 0) > 0 && (
@@ -158,6 +184,39 @@ function Header({ p }: { p: Profile }) {
       )}
     </div>
   );
+}
+
+function ProfileLinks({ p }: { p: Profile }) {
+  return (
+    <div className="pp-links">
+          {p.etf2lId !== null && (
+            <a href={`https://etf2l.org/forum/user/${p.etf2lId}/`} target="_blank" rel="noreferrer">
+              {t("ETF2L ↗")}
+            </a>
+          )}
+          <a href={`https://trends.tf/player/${p.steamid64}/`} target="_blank" rel="noreferrer">{t("trends.tf ↗")}</a>
+          <a href={`https://logs.tf/profile/${p.steamid64}`} target="_blank" rel="noreferrer">{t("logs.tf ↗")}</a>
+          <a href={`https://steamcommunity.com/profiles/${p.steamid64}`} target="_blank" rel="noreferrer">{t("Steam ↗")}</a>
+    </div>
+  );
+}
+
+/** "[9S] The 9 Stooges · hl fun", linking to the team on ETF2L. */
+function RosterChip({ r }: { r: Etf2lRoster }) {
+  const kind = r.kind?.replace("Highlander", "HL").replace(" Team", "").toLowerCase();
+  return (
+    <a className="pp-roster" href={`https://etf2l.org/teams/${r.id}/`} target="_blank" rel="noreferrer" title={[r.name, r.kind, r.country].filter(Boolean).join(" · ")}>
+      <TeamAvatar src={r.avatar} />
+      {r.tag && <span className="pp-roster-tag">{r.tag}</span>}
+      {r.name}
+      {kind && <span className="muted"> · {kind}</span>}
+    </a>
+  );
+}
+
+/** "Jun 2014". */
+function monthYear(unix: number): string {
+  return new Date(unix * 1000).toLocaleDateString(locale(), { month: "short", year: "numeric" });
 }
 
 /** The newest season's ranks, best first, beside the name like HLTV's Top 20. */
@@ -243,7 +302,7 @@ export function seasonShort(season: number, name?: string): string {
 
 /** "Season 34 (Summer 2025)", or just "AFA 2025". */
 export function seasonLong(season: number, name: string): string {
-  return season >= 100 ? name : `${tx("Season {0}", { "0": season })} (${name})`;
+  return season >= 100 ? name : `${t("Season {0}", { "0": season })} (${name})`;
 }
 
 function shortDivision(d: string): string {
@@ -263,11 +322,27 @@ function TeamAvatar({ src }: { src: string | null }) {
 }
 
 function Overview({ p }: { p: Profile }) {
-  const recent = p.officials.slice(0, 10);
   return (
     <div className="pp-overview">
       <section>
         <h3>{t("Recent officials")}</h3>
+        <RecentOfficials p={p} />
+      </section>
+      <section>
+        <h3>{t("Rating")}</h3>
+        <PlayerStatsCard accountId={p.accountId} />
+        <h3 className="pp-career-title">{t("ETF2L officials on trends.tf")}</h3>
+        <TrendsCareer accountId={p.accountId} />
+      </section>
+    </div>
+  );
+}
+
+/** The newest officials, with the score. */
+export function RecentOfficials({ p, count = 10 }: { p: Profile; count?: number }) {
+  const recent = p.officials.slice(0, count);
+  return (
+    <>
         {recent.length === 0 && <p className="hint">{t("No ETF2L official in the seasons read.")}</p>}
         <ul className="pp-matches">
           {recent.map((o) => (
@@ -288,14 +363,7 @@ function Overview({ p }: { p: Profile }) {
             </li>
           ))}
         </ul>
-      </section>
-      <section>
-        <h3>{t("Rating")}</h3>
-        <PlayerStatsCard accountId={p.accountId} />
-        <h3 className="pp-career-title">{t("ETF2L officials on trends.tf")}</h3>
-        <TrendsCareer accountId={p.accountId} />
-      </section>
-    </div>
+    </>
   );
 }
 
@@ -303,7 +371,7 @@ function Overview({ p }: { p: Profile }) {
  * What only trends.tf knows (Q37): every Highlander game they played, not
  * only the ones held here. Read when the profile opens, kept a day.
  */
-function TrendsCareer({ accountId }: { accountId: number }) {
+export function TrendsCareer({ accountId }: { accountId: number }) {
   const q = useQuery({ queryKey: ["trends_career", accountId], queryFn: () => api.getTrendsCareer(accountId), staleTime: 60 * 60_000 });
   if (q.isPending) return <p className="hint">{t("Reading trends.tf…")}</p>;
   if (q.isError) return <p className="hint">{errorMessage(q.error)}</p>;
@@ -362,7 +430,8 @@ function TrendsCareer({ accountId }: { accountId: number }) {
   );
 }
 
-function Teams({ p }: { p: Profile }) {
+/** Their teams, season by season. */
+export function SeasonsTable({ p }: { p: Profile }) {
   if (p.seasons.length === 0) return <p className="hint">{t("No ETF2L official in the seasons read.")}</p>;
   return (
     <table className="pp-seasons">
@@ -405,7 +474,7 @@ function Teams({ p }: { p: Profile }) {
   );
 }
 
-function Achievements({ medals, mvps }: { medals: Medal[]; mvps: Mvp[] }) {
+export function Achievements({ medals, mvps }: { medals: Medal[]; mvps: Mvp[] }) {
   if (medals.length === 0 && mvps.length === 0) {
     return <p className="hint">{t("No medals in the seasons read. Medals come from ETF2L playoff finals and, where a division has no playoffs, its final table.")}</p>;
   }

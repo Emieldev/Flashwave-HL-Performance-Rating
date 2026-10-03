@@ -64,3 +64,23 @@
 .ts-maps-title { margin-top: 18px !important; }
 .ts-class { display: inline-flex; align-items: center; gap: 6px; }
 .ts-etf2l { margin-top: 6px; font-size: 0.85rem; }
+
+/* --- your teams (once the Teammates tab's cards) --- */
+
+.yt-strip h3 { margin: 0 0 10px; font-size: 0.95rem; }
+.yt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.yt-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; text-align: left; background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent-dim); border-radius: var(--radius); color: var(--text); cursor: pointer; }
+.yt-card:hover { border-color: var(--line-2); border-left-color: var(--accent); background: var(--raised); }
+.yt-name { font-weight: 600; font-size: 1.02rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yt-nums { display: flex; gap: 10px; align-items: baseline; font-size: 0.88rem; font-variant-numeric: tabular-nums; width: 100%; }
+.yt-rating { margin-left: auto; font-weight: 700; color: var(--accent-text); }
+.yt-you { border-left: 3px solid var(--accent); }
+.yt-you-head { display: flex; align-items: baseline; gap: 12px; }
+.yt-you-head h3 { margin: 0; font-size: 0.95rem; }
+.yt-you-stats { display: flex; flex-wrap: wrap; gap: 6px 34px; margin: 12px 0 0; }
+.yt-you-stats dt { font-size: 0.76rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.yt-you-stats dd { margin: 0; font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.yt-you-stats dd .muted { font-weight: 400; font-size: 0.86rem; }
+.yt-core { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.yt-mate { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--border); color: var(--text); font-size: 0.86rem; cursor: pointer; }
+.yt-mate:hover { border-color: var(--accent-dim); color: var(--accent-text); }

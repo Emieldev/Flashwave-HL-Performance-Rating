@@ -282,7 +282,7 @@ const MOCK_HITS: CatalogueHit[] = [
 const mockTeam = (id: number, name: string) => ({ id, name, avatar: null });
 function mockProfile(accountId: number): PlayerProfile {
   const hit = MOCK_HITS.find((h) => h.accountId === accountId) ?? MOCK_HITS[0];
-  const dd = mockTeam(37000, "DD14"), sbq = mockTeam(35000, "SBQRRA");
+  const dd = mockTeam(37805, "DD14"), sbq = mockTeam(35600, "SBQRRA");
   return {
     accountId,
     steamid64: "76561198099396919",
@@ -311,6 +311,14 @@ function mockProfile(accountId: number): PlayerProfile {
       { matchId: 85001, competition: "Highlander Season 33 Playoffs", tier: 4, time: 1_757_000_000, season: 33, division: "Low", stage: "Playoffs", round: "Grand Final", team: sbq, opponent: mockTeam(3, "Gibus and The Gang"), scoreFor: 6, scoreAgainst: 3, won: true },
     ],
     etf2lId: 97913,
+    // Flashy's api-v2 /player answer, 3 October 2026.
+    registered: 1_402_247_571,
+    etf2lTitle: "Player",
+    etf2lTeams: [
+      { id: 35849, name: "The 9 Stooges", tag: "9S", kind: "Highlander Fun Team", country: "Croatia", avatar: "https://etf2l.org/wp-content/uploads/avatars/657792a02e49d.png" },
+      { id: 37805, name: "DD14", tag: "DD14", kind: "Highlander", country: "Netherlands", avatar: null },
+    ],
+    bans: [],
   };
 }
 

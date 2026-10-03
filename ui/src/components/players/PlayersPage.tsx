@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type CatalogueHit } from "../../api/types";
-import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
+import { capitalize, formatDate, rating, ratingPercent, signed, splitMap } from "../../lib/format";
 import { ClassIcon } from "../ClassIcon";
 import "./players.css";
 import { t, tx } from "../../lib/i18n";
@@ -132,12 +132,15 @@ function PlayerCard({ accountId, onOpenMatch }: { accountId: number; onOpenMatch
     queryFn: () => api.getPlayer(accountId, cls),
     placeholderData: keepPreviousData,
   });
+  // A regular teammate's line from your side: how you did together.
+  const mates = useQuery({ queryKey: ["teammates", true], queryFn: () => api.getTeammates(true), staleTime: 5 * 60_000 });
 
   if (q.isPending) return <div className="panel"><p className="hint">{t("Loading…")}</p></div>;
   if (q.isError) return <div className="panel"><p className="error">{errorMessage(q.error)}</p></div>;
 
   const { summary: s, profile } = q.data!;
   const shown = q.data!.class;
+  const mate = mates.data?.teammates.find((m) => m.accountId === accountId);
 
   return (
     <>
@@ -172,6 +175,24 @@ function PlayerCard({ accountId, onOpenMatch }: { accountId: number; onOpenMatch
                 {tx("{0}· {youBeatThem}–{theyBeatYou} to you", { "0": " ", youBeatThem: s.youBeatThem, theyBeatYou: s.theyBeatYou })}</span>
             )}
           </dd>
+          {mate && (
+            <>
+              <dt>{t("Together")}</dt>
+              <dd>
+                {mate.wins}–{mate.losses}
+                <span className="muted"> · {formatDate(mate.firstPlayed, true)} – {formatDate(mate.lastPlayed, true)}</span>
+              </dd>
+              {mate.myAvgWith !== null && (
+                <>
+                  <dt title={t("Your average rating in games with them, and the difference from your other games")}>{t("Your rating with them")}</dt>
+                  <dd>
+                    {rating(mate.myAvgWith)}{" "}
+                    <span className={mate.myAvgDelta! > 0 ? "delta up" : mate.myAvgDelta! < 0 ? "delta down" : "delta"}>({signed(mate.myAvgDelta!, 2)})</span>
+                  </dd>
+                </>
+              )}
+            </>
+          )}
         </dl>
 
         {s.classes.length > 0 && (

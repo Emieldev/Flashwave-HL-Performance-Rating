@@ -12,6 +12,7 @@ import { MedalGlyph } from "../players/MedalGlyph";
 import { DivisionBadge, medalTitles, seasonLong, seasonShort } from "../players/PlayerProfile";
 import "../players/players.css";
 import "./teams.css";
+import { YouOnThisTeam, YourTeamsStrip } from "./YourTeams";
 
 /**
  * Teams (Q29, and Flashy's UX pass): every ETF2L Highlander season as a
@@ -33,12 +34,12 @@ export function TeamsPage() {
   if (view.kind === "season") {
     return <SeasonScreen season={view.season} onBack={() => setView({ kind: "seasons" })} onTeam={openTeam} />;
   }
-  return <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} />;
+  return <SeasonsGrid onSeason={(season) => setView({ kind: "season", season })} onTeam={openTeam} />;
 }
 
 // ---- 1. Every season as a tile ----------------------------------------
 
-function SeasonsGrid({ onSeason }: { onSeason: (season: number) => void }) {
+function SeasonsGrid({ onSeason, onTeam }: { onSeason: (season: number) => void; onTeam: (teamId: number) => void }) {
   const q = useQuery({ queryKey: ["seasons_overview"], queryFn: api.getSeasonsOverview, staleTime: 5 * 60_000 });
   if (q.isPending) return <div className="teams-page"><p className="hint">{t("Loading seasons…")}</p></div>;
   if (q.isError) return <div className="teams-page"><p className="error">{errorMessage(q.error)}</p></div>;
@@ -54,6 +55,7 @@ function SeasonsGrid({ onSeason }: { onSeason: (season: number) => void }) {
   }
   return (
     <div className="teams-page">
+      <YourTeamsStrip onTeam={onTeam} />
       <header className="ts-head">
         <h2>{t("ETF2L Highlander seasons")}</h2>
         <p className="hint">{t("Pick a season for its podiums, its divisions and every team in them.")}</p>
@@ -241,10 +243,16 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
       </button>
       {q.isPending && <p className="hint">{t("Loading team…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
-      {q.data === null && <p className="hint">{t("This team is not stored.")}</p>}
+      {q.data === null && (
+        <>
+          <p className="hint">{t("This team's seasons are older than the ones read, so only your own games with it are here.")}</p>
+          <YouOnThisTeam teamId={teamId} named />
+        </>
+      )}
       {q.data && (
         <>
           <TeamHeader v={q.data} honours={h.data} />
+          <YouOnThisTeam teamId={teamId} />
           <div className="panel pp-body">
             <nav className="pp-tabs" role="tablist">
               {(
