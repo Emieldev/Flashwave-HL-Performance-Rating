@@ -156,7 +156,14 @@ export type Progress =
   /** Fights: who was in each one, and what each kill's state was. */
   | { kind: "fights"; done: number; total: number }
   /** Demos being read for aim, routes and deaths. The slowest phase there is. */
-  | { kind: "readingDemos"; done: number; total: number; logId: number | null }
+  | {
+      kind: "readingDemos";
+      done: number;
+      total: number;
+      logId: number | null;
+      /** The match being read, to name it on the card. */
+      what?: { map: string | null; playedAt: number | null; kind: string | null; opponent: string | null } | null;
+    }
   /** The per-map logs a combined log was built from. */
   | { kind: "parts"; done: number; total: number }
   /** A source could not be reached; the sync carries on without it. */

@@ -1070,6 +1070,14 @@ th.num {
   line-height: 1.35;
 }
 
+/* Step 8's match: "Official vs Kebab · pl_upward · 14 Sept". */
+.dl-match {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dl-sub {
   color: var(--muted);
   font-variant-numeric: tabular-nums;

@@ -33,6 +33,26 @@ pub struct SyncOptions {
     pub max_fetch: Option<usize>,
 }
 
+/// The match a slow step is on, for the sync card to name it (Flashy):
+/// "Official vs Kebab · upward · 14 Sept".
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingMatch {
+    /// Without its version: `pl_upward`.
+    pub map: Option<String>,
+    pub played_at: Option<i64>,
+    /// "official", "scrim" or "pug".
+    pub kind: Option<String>,
+    pub opponent: Option<String>,
+}
+
+impl ReadingMatch {
+    pub async fn of(db: &Db, log_id: i64) -> Option<ReadingMatch> {
+        let (map, played_at, kind, opponent) = db.match_label(log_id).await.ok()??;
+        Some(ReadingMatch { map: map.filter(|m| !m.is_empty()).map(|m| hl_core::maps::map_name(&m)), played_at, kind, opponent: opponent.filter(|o| !o.is_empty()) })
+    }
+}
+
 /// Progress as the UI and CLI see it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -75,7 +95,7 @@ pub enum Progress {
     /// and then sat silent for minutes. `logId` names the match being read,
     /// because a job this slow should say which one it is on.
     #[serde(rename_all = "camelCase")]
-    ReadingDemos { done: usize, total: usize, log_id: Option<i64> },
+    ReadingDemos { done: usize, total: usize, log_id: Option<i64>, what: Option<ReadingMatch> },
     /// A source could not be reached. The sync carries on without it: every
     /// one of them adds to what is already stored rather than replacing it.
     #[serde(rename_all = "camelCase")]

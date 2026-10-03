@@ -440,14 +440,14 @@ pub async fn derive_all(
     db: &Db,
     me: SteamId,
     all: bool,
-    mut progress: impl FnMut(usize, usize, Option<i64>),
+    mut progress: impl FnMut(usize, usize, Option<i64>, Option<crate::sync::ReadingMatch>),
 ) -> Result<AimSummary> {
     let ids = db.aim_queue().await?;
     let done = if all { Default::default() } else { db.aim_logs(VERSION).await? };
     let todo: Vec<i64> = ids.iter().copied().filter(|id| !done.contains(id)).collect();
     let mut out = AimSummary { total: ids.len(), ..AimSummary::default() };
     for (i, log_id) in todo.iter().copied().enumerate() {
-        progress(i, todo.len(), Some(log_id));
+        progress(i, todo.len(), Some(log_id), crate::sync::ReadingMatch::of(db, log_id).await);
         // One unreadable demo is one match without aim, not a failed sync.
         // This used to propagate, so a single corrupt or moved file stopped
         // every match behind it from ever being read.
@@ -475,7 +475,7 @@ pub async fn derive_all(
         out.read += 1;
         out.kills += rows.len();
     }
-    progress(todo.len(), todo.len(), None);
+    progress(todo.len(), todo.len(), None, None);
     Ok(out)
 }
 

@@ -524,7 +524,15 @@ function simulateSync(kind: "sync" | "reprocess") {
       steps.push(() => handlers?.onProgress({ kind: "fights", done, total: 24 }));
     }
     for (let done = 0; done <= 2; done++) {
-      steps.push(() => handlers?.onProgress({ kind: "readingDemos", done, total: 2, logId: 4_122_234 }));
+      steps.push(() =>
+        handlers?.onProgress({
+          kind: "readingDemos",
+          done,
+          total: 2,
+          logId: 4_122_234,
+          what: { map: "pl_upward", playedAt: 1789401600, kind: "official", opponent: "Kebab" },
+        }),
+      );
     }
     for (let done = 0; done <= 666; done += 111) {
       steps.push(() => handlers?.onProgress({ kind: "rating", done, total: 666 }));

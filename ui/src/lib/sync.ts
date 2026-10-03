@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { noteError } from "./problems";
 import { errorMessage, type Progress, type SyncDone } from "../api/types";
 import { t } from "./i18n";
+import { formatDate } from "./format";
 import { loadEtf2lNames } from "./etf2lNames";
 
 /**
@@ -273,6 +274,16 @@ export function phaseOf(p: Progress | null): { step: number; of: number; title: 
   }
 }
 
+/** The match a step is reading: "Official vs Kebab · pl_upward · 14 Sept". */
+export function matchOf(p: Progress | null): string | null {
+  if (!p || p.kind !== "readingDemos" || !p.what) return null;
+  const w = p.what;
+  const kind = w.kind === "official" ? t("Official") : w.kind === "scrim" ? t("Scrim") : w.kind === "pug" ? t("Pug") : null;
+  const who = w.opponent ? (kind ? t("{0} vs {1}", { "0": kind, "1": w.opponent }) : t("vs {0}", { "0": w.opponent })) : kind;
+  const parts = [who, w.map, w.playedAt !== null ? formatDate(w.playedAt) : null].filter((x): x is string => !!x);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** One line saying what the sync is doing now. */
 export function labelOf(p: Progress | null): string {
   if (!p) return t("Starting…");
@@ -311,7 +322,7 @@ export function labelOf(p: Progress | null): string {
       // Around 16 s each, so the count moves slowly and the match it is on
       // is the part worth saying.
       if (p.total === 0) return t("Demos already read.");
-      return t("Reading demos {done} of {total}", { done: n(p.done), total: n(p.total) }) + (p.logId !== null ? t(" — log {logId}", { logId: p.logId }) : "");
+      return t("Reading demos {done} of {total}", { done: n(p.done), total: n(p.total) }) + (p.logId !== null && !p.what ? t(" — log {logId}", { logId: p.logId }) : "");
     case "etf2l":
       return p.total === 0 ? t("Checking ETF2L…") : t("ETF2L officials {done} of {total}", { done: p.done, total: p.total });
     case "sourceFailed":

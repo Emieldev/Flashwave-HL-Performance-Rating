@@ -699,7 +699,7 @@ async fn run() -> Result<()> {
             let me = db.get_me().await?.context("no owner set")?;
             let started = std::time::Instant::now();
             let all = command.contains(&"--all");
-            let s = hl_ingest::aim::derive_all(&db, me, all, |done, total, _log_id| {
+            let s = hl_ingest::aim::derive_all(&db, me, all, |done, total, _log_id, _what| {
                 print!("\r  reading demos {done}/{total}          ");
                 let _ = std::io::Write::flush(&mut std::io::stdout());
             })
@@ -2331,7 +2331,7 @@ fn print_progress(p: Progress) {
         Progress::StandIns { done, total } => print!("\rfrom more.tf {done}/{total}          "),
         Progress::Stage { what } => print!("\r{what}...          "),
         Progress::Fights { done, total } => print!("\rfights {done}/{total}          "),
-        Progress::ReadingDemos { done, total, log_id } => match log_id {
+        Progress::ReadingDemos { done, total, log_id, .. } => match log_id {
             Some(id) => print!("\rreading demos {done}/{total}  (log {id})          "),
             None => print!("\rreading demos {done}/{total}          "),
         },

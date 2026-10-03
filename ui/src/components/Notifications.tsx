@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
-import { dismissSync, fractionOf, labelOf, phaseOf, useSyncStatus } from "../lib/sync";
+import { dismissSync, fractionOf, labelOf, matchOf, phaseOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
 import { dismissNewLogs, useNewLogs } from "../lib/newlogs";
 import { formatDate } from "../lib/format";
@@ -198,6 +198,7 @@ function SyncCard() {
             </>
           )}
           <p className="dl-label">{labelOf(sync.progress)}</p>
+          {matchOf(sync.progress) && <p className="dl-sub dl-match">{matchOf(sync.progress)}</p>}
           <div className="dl-bar" aria-hidden>
             <span
               className={fraction === null ? "dl-fill dl-unknown" : "dl-fill"}

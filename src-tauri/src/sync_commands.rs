@@ -148,8 +148,8 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
             .await?;
             // Aim from any newly linked demo. Seconds a demo, and a demo the
             // parser cannot read must not fail the whole sync.
-            match hl_ingest::aim::derive_all(&db, me, false, |done, total, log_id| {
-                let _ = emitter.emit(EV_PROGRESS, Progress::ReadingDemos { done, total, log_id });
+            match hl_ingest::aim::derive_all(&db, me, false, |done, total, log_id, what| {
+                let _ = emitter.emit(EV_PROGRESS, Progress::ReadingDemos { done, total, log_id, what });
             })
             .await
             {

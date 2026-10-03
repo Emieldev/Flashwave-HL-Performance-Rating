@@ -189,6 +189,19 @@ impl Db {
     }
 
     /// `(id, fetched_at, json)` for every stored source of one kind.
+    /// What names a match on a progress line: `(map, played_at, kind,
+    /// opponent)` -- "Official vs Kebab · upward · 14 Sept".
+    pub async fn match_label(&self, log_id: i64) -> Result<Option<(Option<String>, Option<i64>, Option<String>, Option<String>)>> {
+        Ok(sqlx::query_as(
+            "SELECT m.map, m.played_at, c.kind, c.opp_team_name FROM match m
+               LEFT JOIN match_context c ON c.log_id = m.log_id
+              WHERE m.log_id = ?1",
+        )
+        .bind(log_id)
+        .fetch_optional(self.pool())
+        .await?)
+    }
+
     /// The ETF2L match a log was matched to by roster, when it was.
     pub async fn context_match_id(&self, log_id: i64) -> Result<Option<i64>> {
         Ok(sqlx::query_scalar::<_, Option<i64>>("SELECT etf2l_match_id FROM match_context WHERE log_id = ?1")

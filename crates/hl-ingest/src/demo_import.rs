@@ -207,7 +207,7 @@ pub async fn derive(db: &Db, w: &hl_rating::Weights, me: Option<SteamId>, mut pr
     crate::fights::derive_all(db, false, |_, _| {}).await?;
     if let Some(me) = me {
         progress("Reading aim from the demo");
-        if let Err(e) = crate::aim::derive_all(db, me, false, |_, _, _| {}).await {
+        if let Err(e) = crate::aim::derive_all(db, me, false, |_, _, _, _| {}).await {
             tracing::warn!(error = %format!("{e:#}"), "reading aim from an imported demo failed");
         }
     }
