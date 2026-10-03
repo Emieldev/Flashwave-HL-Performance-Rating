@@ -237,11 +237,14 @@ pub async fn fetch_stv(
 ) -> Result<StvFetched> {
     use anyhow::Context;
 
-    let demos_tf_id = db
-        .index_info(log_id)
-        .await?
-        .and_then(|i| i.demos_tf_id)
-        .context("demos.tf has no demo for this match")?;
+    // demos.tf first; ETF2L's own demos for the matches it has none of (Q48).
+    let Some(demos_tf_id) = db.index_info(log_id).await?.and_then(|i| i.demos_tf_id) else {
+        // Boxed: reading and linking a demo is a large future, and nested
+        // here it overflowed the CLI's main-thread stack.
+        return Box::pin(crate::etf2l_demos::fetch(db, sources, tf, log_id, progress))
+            .await
+            .context("demos.tf has no demo for this match, and ETF2L's could not be used");
+    };
     let meta = sources.demostf_meta(demos_tf_id).await?;
 
     // demos.tf names are already filesystem-safe; guard anyway.

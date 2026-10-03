@@ -118,8 +118,19 @@ OPTIONS:
     --db <PATH>            Override the database location
 ";
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    // Every command is an arm of one async block, and in a debug build that
+    // future outgrew the main thread's 1 MB stack (`hl fixtures` overflowed
+    // after the 3 Oct merges): run it on a thread with room to spare.
+    std::thread::Builder::new()
+        .name("hl".into())
+        .stack_size(64 << 20)
+        .spawn(|| tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(run()))?
+        .join()
+        .map_err(|_| anyhow::anyhow!("the command panicked"))?
+}
+
+async fn run() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

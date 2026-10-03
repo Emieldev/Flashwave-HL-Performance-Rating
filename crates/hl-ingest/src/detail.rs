@@ -108,6 +108,9 @@ pub async fn match_detail_from(
         detail.etf2l_match_id = info.etf2l_match_id;
         detail.demos_tf_id = info.demos_tf_id;
     }
+    if detail.demos_tf_id.is_none() {
+        detail.etf2l_demos = crate::etf2l_demos::listed(db, log_id).await.unwrap_or(0);
+    }
     detail.stand_in = db.stand_in(log_id).await?;
     Ok(detail)
 }

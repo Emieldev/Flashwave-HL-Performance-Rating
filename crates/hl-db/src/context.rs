@@ -189,6 +189,27 @@ impl Db {
     }
 
     /// `(id, fetched_at, json)` for every stored source of one kind.
+    /// The ETF2L match a log was matched to by roster, when it was.
+    pub async fn context_match_id(&self, log_id: i64) -> Result<Option<i64>> {
+        Ok(sqlx::query_scalar::<_, Option<i64>>("SELECT etf2l_match_id FROM match_context WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(self.pool())
+            .await?
+            .flatten())
+    }
+
+    /// Every stored log of one ETF2L match, by either link.
+    pub async fn logs_of_etf2l_match(&self, match_id: i64) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT log_id FROM log_index WHERE etf2l_match_id = ?1 AND superseded_by IS NULL
+             UNION SELECT log_id FROM match_context WHERE etf2l_match_id = ?1
+             ORDER BY 1",
+        )
+        .bind(match_id)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
     /// One stored ETF2L response: `(fetched_at, json)`.
     pub async fn etf2l_raw_one(&self, kind: &str, id: i64) -> Result<Option<(i64, String)>> {
         Ok(sqlx::query_as("SELECT fetched_at, json FROM etf2l_raw WHERE kind = ?1 AND id = ?2")

@@ -50,7 +50,9 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
   // again is how it comes back, with the same progress bar as the first
   // time, rather than a second button that does the same thing.
   const hasStv = d.demos.some((x) => x.kind === "stv" && !x.deleted);
-  const canFetch = d.demosTfId !== null && !hasStv;
+  // demos.tf first; ETF2L's own upload for a match demos.tf has none of (Q48).
+  const fromEtf2l = d.demosTfId === null && (d.etf2lDemos ?? 0) > 0;
+  const canFetch = (d.demosTfId !== null || fromEtf2l) && !hasStv;
 
   return (
     <section className="panel demo-panel">
@@ -69,10 +71,14 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
 
       <div className="demo-sources">
         <div className="demo-source" id="demo-linking-download">
-          <strong>{t("SourceTV demo on demos.tf")}</strong>
+          <strong>{fromEtf2l ? t("SourceTV demo on ETF2L") : t("SourceTV demo on demos.tf")}</strong>
           {canFetch ? (
             <>
-              <p className="hint">{t("All 18 players, not just your view. Stopwatch matches are usually split into one demo per half, and demos.tf links one of them, so this may cover only part of the match.")}</p>
+              <p className="hint">
+                {fromEtf2l
+                  ? t("demos.tf has none, but a player uploaded the SourceTV demo to the match's ETF2L page. Every demo there is downloaded and checked against this match's logs (map, players, kills), so each map's demo goes to its own log.")
+                  : t("All 18 players, not just your view. Stopwatch matches are usually split into one demo per half, and demos.tf links one of them, so this may cover only part of the match.")}
+              </p>
               {download ? (
                 <div className="dl-progress">
                   <div className="progress-track">
@@ -91,7 +97,7 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
               )}
             </>
           ) : (
-            <p className="hint">{hasStv ? t("This match's SourceTV demo is on this machine.") : t("demos.tf has no SourceTV demo for this match.")}</p>
+            <p className="hint">{hasStv ? t("This match's SourceTV demo is on this machine.") : t("Neither demos.tf nor ETF2L has a SourceTV demo for this match.")}</p>
           )}
           {error && <p className="error">{error}</p>}
         </div>

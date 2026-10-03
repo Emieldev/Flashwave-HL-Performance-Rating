@@ -697,6 +697,8 @@ export interface MatchDetail {
   league: string | null;
   etf2lMatchId: number | null;
   demosTfId: number | null;
+  /** SourceTV demos on ETF2L's match page, for a match demos.tf has none of (Q48). */
+  etf2lDemos?: number;
   weightsWarning: string | null;
   demos: DemoView[];
   context: MatchContext | null;

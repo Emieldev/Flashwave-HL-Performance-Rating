@@ -126,7 +126,9 @@ pub fn spawn_transfers(db: Db, sources: Arc<Sources>) {
                     }
                     Err(e) => tracing::warn!(team, error = %format!("{e:#}"), "reading a team's transfers failed"),
                 }
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                // Room between teams for the requests you make yourself:
+                // at 2 s ETF2L turned one away about once a minute.
+                tokio::time::sleep(Duration::from_secs(8)).await;
             }
             if read > 0 {
                 tracing::info!(teams = read, transfers = added, "ETF2L transfers read");

@@ -50,6 +50,10 @@ pub struct MatchDetail {
     pub league: Option<String>,
     pub etf2l_match_id: Option<i64>,
     pub demos_tf_id: Option<i64>,
+    /// SourceTV demos ETF2L's match page lists, for a match demos.tf has
+    /// none of (Q48).
+    #[serde(default)]
+    pub etf2l_demos: usize,
     /// Set when a user `weights.toml` exists but could not be used.
     pub weights_warning: Option<String>,
     /// Demos linked to this match; filled in by the caller.
@@ -297,6 +301,7 @@ pub fn build(
         league: None,
         etf2l_match_id: None,
         demos_tf_id: None,
+        etf2l_demos: 0,
         weights_warning: None,
         demos: Vec::new(),
         parts: Vec::new(),

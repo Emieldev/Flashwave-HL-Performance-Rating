@@ -272,12 +272,19 @@ pub fn best_shift(demo: &[(f64, u32, u32)], log: &[(i64, u32, u32)]) -> Option<(
 /// shares most of its players, and at least a handful of its kills line up
 /// with the log's at one shift -- which is also what places the demo on the
 /// log's clock, so aim and every demo panel line up exactly.
-pub async fn link_to_log(
+pub async fn link_to_log(db: &Db, tf: &Path, file: &Path, log_id: i64, me: Option<SteamId>, progress: impl FnMut(&'static str)) -> Result<DemoLinked> {
+    link_to_log_by(db, tf, file, log_id, me, MANUAL, progress).await
+}
+
+/// [`link_to_log`], recording how the demo was found (`method`): by hand,
+/// or from ETF2L's match page (Q48).
+pub async fn link_to_log_by(
     db: &Db,
     tf: &Path,
     file: &Path,
     log_id: i64,
     me: Option<SteamId>,
+    method: &str,
     mut progress: impl FnMut(&'static str),
 ) -> Result<DemoLinked> {
     progress("Copying the demo");
@@ -346,7 +353,7 @@ pub async fn link_to_log(
     let clock = db.log_clock_offset(log_id).await?.unwrap_or(0);
     db.set_demo_start(demo_id, (shift + clock) as f64).await?;
     let share = (matched as f64 / log_kills.len().max(1) as f64).min(1.0);
-    db.add_demo_link(demo_id, log_id, MANUAL, share).await?;
+    db.add_demo_link(demo_id, log_id, method, share).await?;
     // The demo's header names its map: resolve again now, so a match whose
     // log never said which map it was on is drawn at once (Q30).
     if let Err(e) = crate::maps::resolve_all(db).await {
