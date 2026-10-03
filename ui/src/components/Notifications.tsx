@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { dismissDownload, useDownloads, type Download } from "../lib/downloads";
-import { dismissSync, fractionOf, labelOf, useSyncStatus } from "../lib/sync";
+import { dismissSync, fractionOf, labelOf, phaseOf, useSyncStatus } from "../lib/sync";
 import { dismissDemoSeen, useDemoSeen } from "../lib/demowatch";
 import { dismissNewLogs, useNewLogs } from "../lib/newlogs";
 import { formatDate } from "../lib/format";
@@ -165,6 +165,7 @@ function SyncCard() {
   const done = sync.state === "done";
   const failed = sync.state === "error";
   const fraction = sync.state === "running" ? fractionOf(sync.progress) : null;
+  const phase = sync.state === "running" ? phaseOf(sync.progress) : null;
 
   return (
     <div className={`dl ${done ? "dl-done" : failed ? "dl-failed" : "dl-running"}`}>
@@ -180,6 +181,7 @@ function SyncCard() {
         {/* A running sync has no close button: stopping it is not something
             this card can do, and a card that hides itself would only make
             the progress harder to find. */}
+        {phase && <span className="dl-step">{t("Step {0} of {1}", { "0": phase.step, "1": phase.of })}</span>}
         {sync.state !== "running" && (
           <button className="dl-close" onClick={dismissSync} title={t("Dismiss")}>
             ×
@@ -189,6 +191,12 @@ function SyncCard() {
 
       {sync.state === "running" && (
         <>
+          {phase && (
+            <>
+              <p className="dl-phase">{phase.title}</p>
+              {phase.about && <p className="dl-sub dl-about">{phase.about}</p>}
+            </>
+          )}
           <p className="dl-label">{labelOf(sync.progress)}</p>
           <div className="dl-bar" aria-hidden>
             <span

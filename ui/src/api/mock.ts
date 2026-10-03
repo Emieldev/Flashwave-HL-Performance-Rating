@@ -501,16 +501,33 @@ function simulateSync(kind: "sync" | "reprocess") {
     steps.push(() =>
       handlers?.onProgress({ kind: "indexed", trendsRows: 1280, logstfRows: 1492, superseded: 480 }),
     );
+    // In the real order (sync_start): ETF2L before anything is fetched.
+    for (let done = 0; done <= 3; done++) {
+      steps.push(() => handlers?.onProgress({ kind: "etf2l", done, total: 3 }));
+    }
     for (let done = 0; done <= 24; done += 2) {
       steps.push(() =>
         handlers?.onProgress({ kind: "fetching", done, total: 24, logId: 4_122_234 - done }),
       );
     }
+    for (let done = 0; done <= 2; done++) {
+      steps.push(() => handlers?.onProgress({ kind: "parts", done, total: 2 }));
+    }
     for (let done = 0; done <= 24; done += 6) {
       steps.push(() => handlers?.onProgress({ kind: "rawLogs", done, total: 24 }));
     }
-    for (let done = 0; done <= 3; done++) {
-      steps.push(() => handlers?.onProgress({ kind: "etf2l", done, total: 3 }));
+    for (const what of ["Refreshing your profile", "Matching demos.tf", "Reading ETF2L seasons", "Scanning your demos folder", "Resolving each round's map"]) {
+      steps.push(() => handlers?.onProgress({ kind: "stage", what }));
+      steps.push(() => handlers?.onProgress({ kind: "stage", what }));
+    }
+    for (let done = 0; done <= 24; done += 8) {
+      steps.push(() => handlers?.onProgress({ kind: "fights", done, total: 24 }));
+    }
+    for (let done = 0; done <= 2; done++) {
+      steps.push(() => handlers?.onProgress({ kind: "readingDemos", done, total: 2, logId: 4_122_234 }));
+    }
+    for (let done = 0; done <= 666; done += 111) {
+      steps.push(() => handlers?.onProgress({ kind: "rating", done, total: 666 }));
     }
   } else {
     for (let done = 0; done <= 759; done += 69) {
@@ -523,7 +540,8 @@ function simulateSync(kind: "sync" | "reprocess") {
     if (kind === "sync") pending = 0;
     handlers?.onDone({ kind, fetched, failed: 0, stats: fakeStats(pending) });
   });
-  steps.forEach((step, i) => setTimeout(step, 180 * (i + 1)));
+  // Slow enough to read each step on the card.
+  steps.forEach((step, i) => setTimeout(step, 450 * (i + 1)));
 }
 
 export const mockApi: Api = {

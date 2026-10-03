@@ -213,6 +213,66 @@ export function fractionOf(p: Progress | null): number | null {
   }
 }
 
+/** The steps of a sync, in the order it runs them (sync_start). */
+const STEPS = 9;
+
+/** The short stages that share step 6, each with what it is for. */
+function stageAbout(what: string): string {
+  switch (what) {
+    case "Refreshing your profile":
+      return t("Your name and picture, from ETF2L or Steam.");
+    case "Matching demos.tf":
+      return t("Finding the demos.tf demo of each log trends.tf never linked one to.");
+    case "Reading ETF2L seasons":
+      return t("Divisions, tables and results of ETF2L's seasons, for the Teams page.");
+    case "Scanning your demos folder":
+      return t("Linking the demos you recorded to their matches.");
+    case "Resolving each round's map":
+      return t("Working out which map each round was played on.");
+    default:
+      return "";
+  }
+}
+
+/**
+ * Where a sync is and what that step is for (Flashy): "Step 3 of 9",
+ * a name for it, and one sentence on what it does -- so a sync that takes
+ * minutes says why. `null` for a rebuild, which names itself.
+ */
+export function phaseOf(p: Progress | null): { step: number; of: number; title: string; about: string } | null {
+  const at = (step: number, title: string, about: string) => ({ step, of: STEPS, title, about });
+  if (!p) return at(1, t("Finding your logs"), t("Asking trends.tf and logs.tf which logs you are in, to spot the ones not stored yet."));
+  switch (p.kind) {
+    case "indexing":
+    case "indexed":
+      return at(1, t("Finding your logs"), t("Asking trends.tf and logs.tf which logs you are in, to spot the ones not stored yet."));
+    case "etf2l":
+      return at(2, t("Checking ETF2L"), t("Reading your ETF2L officials, so each match can be marked official, scrim or pug."));
+    case "fetching":
+    case "fetchFailed":
+    case "gaveUp":
+      return at(3, t("Downloading new matches"), t("Each new log from logs.tf, rated as it lands."));
+    case "standIns":
+      return at(3, t("Downloading new matches"), t("logs.tf is refusing requests, so new logs come from more.tf's copy of them."));
+    case "parts":
+      return at(4, t("Per-map logs"), t("The per-map logs a combined log was built from, for each map's score."));
+    case "rawLogs":
+      return at(5, t("Server logs"), t("The raw server logs: every kill with its time, classes and positions."));
+    case "stage":
+      return at(6, t("Linking demos, seasons and maps"), stageAbout(p.what));
+    case "fights":
+      return at(7, t("Reading fights"), t("Grouping every kill into the fight it was part of, for trades and fight stats."));
+    case "readingDemos":
+      return at(8, t("Reading demos"), t("Aim, movement and deaths from newly linked demos. About 16 seconds a demo."));
+    case "rating":
+      return at(9, t("Rating"), t("Every match rated again: new matches shift the baselines the ratings are measured against."));
+    case "reprocessing":
+      return null;
+    default:
+      return null;
+  }
+}
+
 /** One line saying what the sync is doing now. */
 export function labelOf(p: Progress | null): string {
   if (!p) return t("Starting…");

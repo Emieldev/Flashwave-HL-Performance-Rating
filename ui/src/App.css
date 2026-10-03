@@ -1051,6 +1051,25 @@ th.num {
   font-size: 0.78rem;
 }
 
+/* A sync's step: "Step 3 of 9", its name, and what it is for. */
+.dl-step {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dl-phase {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.dl-about {
+  line-height: 1.35;
+}
+
 .dl-sub {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
