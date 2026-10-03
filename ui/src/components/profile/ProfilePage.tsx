@@ -8,8 +8,12 @@ import {
   type ContextSplit,
   type GameRef,
   type OppositionBand, type DivisionBand,
+  type PlayerProfile,
   type Profile,
 } from "../../api/types";
+import { Achievements, PlayerHeader, RecentOfficials, SeasonsTable, TeamStays, TrendsCareer } from "../players/PlayerProfile";
+import "../players/players.css";
+import { TeammatesPanel } from "./TeammatesPanel";
 import { capitalize, formatDate, rating, ratingPercent, splitMap } from "../../lib/format";
 import { KIND_LABEL, KIND_PLURAL } from "../ContextBadge";
 import { bounds, usePeriod } from "../../lib/period";
@@ -27,7 +31,7 @@ import { classLabel } from "../analysis/common";
 /** Below this many rated games a profile is shown, but flagged as thin. */
 const THIN_SAMPLE = 20;
 
-export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => void }) {
+export function ProfilePage({ steamid, onOpenMatch }: { steamid: string | null; onOpenMatch: (logId: number) => void }) {
   const [cls, setCls] = useState<string | null>(null);
   const [kind, setKind] = useState<ContextKind | null>(null);
   const period = usePeriod();
@@ -42,15 +46,19 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
   const lastSplit = useRef<ContextSplit[]>([]);
   if (q.data?.profile) lastSplit.current = q.data.profile.contexts;
 
+  const me = useOwnProfile(steamid);
+
   if (q.isPending) return <div className="profile-page"><p className="hint">{t("Loading profile…")}</p></div>;
   if (q.isError) return <div className="profile-page"><p className="error">{errorMessage(q.error)}</p></div>;
 
   const { classes, profile, fights } = q.data;
   const active = cls ?? profile?.class ?? classes[0]?.[0] ?? null;
+  const hero = me ? <PlayerHeader p={me} own aside={profile && <Signature p={profile} />} /> : null;
 
   if (classes.length === 0) {
     return (
       <div className="profile-page">
+        {hero}
         <div className="panel">
           <h2>{t("No ratings yet")}</h2>
           <p className="hint" style={{ marginTop: 6 }}>{t("Press Sync, or Rebuild in Settings.")}</p>
@@ -61,6 +69,10 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
 
   return (
     <div className={q.isPlaceholderData ? "profile-page refetching" : "profile-page"}>
+      {hero}
+      <JumpBar />
+
+      <h2 className="profile-section-title" id="profile-rating">{t("Rating")}</h2>
       <nav className="class-tabs" aria-label={t("Class")}>
         {classes.map(([c, n]) => (
           <button
@@ -107,7 +119,83 @@ export function ProfilePage({ onOpenMatch }: { onOpenMatch: (logId: number) => v
           <SeasonsPanel cls={active} />
         </Fold>
       )}
+
+      {me && (
+        <>
+          <h2 className="profile-section-title" id="profile-career">{t("Career")}</h2>
+          <div className="career-grid">
+            <section className="panel">
+              <h3>{t("Teams by season")}</h3>
+              <SeasonsTable p={me} />
+              <TeamStays accountId={me.accountId} />
+              <h3 className="career-sub">{t("Recent officials")}</h3>
+              <RecentOfficials p={me} count={6} />
+            </section>
+            <section className="panel">
+              <h3>{t("ETF2L officials on trends.tf")}</h3>
+              <TrendsCareer accountId={me.accountId} />
+              <h3 className="career-sub">{tx("Achievements ({0})", { "0": me.medals.length + (me.mvps?.length ?? 0) })}</h3>
+              <Achievements medals={me.medals} mvps={me.mvps ?? []} />
+            </section>
+          </div>
+        </>
+      )}
+
+      <h2 className="profile-section-title" id="profile-teammates">{t("Teammates")}</h2>
+      <section className="panel">
+        <TeammatesPanel />
+      </section>
     </div>
+  );
+}
+
+/** Your own player profile: the one anyone could look up, with you in it. */
+function useOwnProfile(steamid: string | null): PlayerProfile | null {
+  const id = steamid ? accountOf(steamid) : null;
+  const q = useQuery({ queryKey: ["player_profile", id], queryFn: () => api.getPlayerProfile(id!), enabled: id !== null });
+  return q.data ?? null;
+}
+
+/** SteamID64 to the account number the catalogue keys players by. */
+function accountOf(steamid64: string): number | null {
+  try {
+    return Number(BigInt(steamid64) - 76561197960265728n);
+  } catch {
+    return null;
+  }
+}
+
+/** The number you are, on the class you are looking at: beside your name. */
+function Signature({ p }: { p: Profile }) {
+  const delta = p.prevFormAvg === null ? null : p.formAvg - p.prevFormAvg;
+  return (
+    <div className="pp-sig">
+      <span className="pp-sig-label">
+        <ClassIcon cls={p.class} size={18} /> {tx("{0} rating", { "0": classLabel(p.class) })}
+        {p.filter && <span className="muted"> · {t(KIND_PLURAL[p.filter]).toLowerCase()}</span>}
+      </span>
+      <span className="pp-sig-value">{rating(p.careerAvg)}</span>
+      <span className="pp-sig-sub">
+        {tx("form {0}", { "0": rating(p.formAvg) })}
+        {delta !== null && <span className={delta >= 0 ? "kpi-delta up" : "kpi-delta down"}> {delta >= 0 ? "▲" : "▼"}{Math.abs(delta).toFixed(2)}</span>}
+      </span>
+      <span className="pp-sig-sub muted">
+        {tx("{0} rated games", { "0": p.games })}
+        {p.winRate !== null && ` · ${t("{0}% won", { "0": p.winRate.toFixed(0) })}`}
+      </span>
+    </div>
+  );
+}
+
+/** Rating, Career, Teammates: one page, so a way to jump within it. */
+function JumpBar() {
+  const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  return (
+    <nav className="profile-jump" aria-label={t("On this page")}>
+      <button className="linkish" onClick={() => go("profile-rating")}>{t("Rating")}</button>
+      <button className="linkish" onClick={() => go("profile-career")}>{t("Career")}</button>
+      <button className="linkish" onClick={() => go("profile-teammates")}>{t("Teammates")}</button>
+    </nav>
   );
 }
 

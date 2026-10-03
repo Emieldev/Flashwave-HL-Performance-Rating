@@ -76,7 +76,7 @@ async fn read_list(db: &Db, sources: &Sources, path: &str, subject: Option<(i64,
     let mut added = 0;
     let mut page = 1;
     loop {
-        let Some(body) = sources.etf2l_get(&format!("{path}?page={page}")).await? else { break };
+        let Some(body) = sources.etf2l_page(path, page).await? else { break };
         let Some((rows, last_page)) = parse_page(&body, subject) else { break };
         let new = db.put_transfers(&rows).await?;
         added += new;

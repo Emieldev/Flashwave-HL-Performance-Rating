@@ -25,7 +25,7 @@ pub const PLAYER_KEY: &str = "etf2l_player_id";
 /// results, scores and default wins settle within days of being played.
 const SETTLE_S: i64 = 14 * 24 * 3600;
 
-/// Results pages are 20 matches each; this is a guard, not a limit.
+/// Results pages are 100 matches each; this is a guard, not a limit.
 const MAX_RESULT_PAGES: i64 = 100;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -77,7 +77,7 @@ pub async fn fetch(
     let mut page = 1;
     loop {
         let body = sources
-            .etf2l_get(&format!("/player/{player_id}/results?page={page}"))
+            .etf2l_page(&format!("/player/{player_id}/results"), page)
             .await?
             .context("ETF2L results not found")?;
         let v: Value = serde_json::from_str(&body).context("parsing ETF2L results")?;

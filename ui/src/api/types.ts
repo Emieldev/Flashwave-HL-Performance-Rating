@@ -389,6 +389,29 @@ export interface PlayerProfile {
   seasons: PlayerSeason[];
   officials: Official[];
   etf2lId: number | null;
+  /** Signed up on ETF2L, unix seconds. */
+  registered: number | null;
+  /** ETF2L's title for them: "Player", "Admin", ... */
+  etf2lTitle: string | null;
+  /** The ETF2L teams they are on now, every format. */
+  etf2lTeams: Etf2lRoster[];
+  bans: Etf2lBan[];
+}
+
+export interface Etf2lRoster {
+  id: number;
+  name: string;
+  tag: string | null;
+  /** "Highlander", "6v6", "Highlander Fun Team", ... */
+  kind: string | null;
+  country: string | null;
+  avatar: string | null;
+}
+
+export interface Etf2lBan {
+  start: number | null;
+  end: number | null;
+  reason: string | null;
 }
 
 /** A player's career on trends.tf (Q37): Highlander only. */

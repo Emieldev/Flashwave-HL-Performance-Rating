@@ -12,6 +12,7 @@ import { MedalGlyph } from "../players/MedalGlyph";
 import { DivisionBadge, medalTitles, seasonLong, seasonShort } from "../players/PlayerProfile";
 import "../players/players.css";
 import "./teams.css";
+import { YouOnThisTeam, YourTeamsStrip } from "./YourTeams";
 
 /**
  * Teams (Q29, and Flashy's UX passes): every ETF2L Highlander season as a
@@ -109,6 +110,7 @@ function SeasonsGrid({ onSeason, onTeam }: { onSeason: (season: number) => void;
         <h1>{t("Seasons")}</h1>
         <p className="hint">{t("Pick a season for its podiums, its divisions and every team in them.")}</p>
       </header>
+      <YourTeamsStrip onTeam={onTeam} />
       {fixtures.length > 0 && (
         <>
           <h2 className="ts-section">{tx("Coming up ({0})", { "0": fixtures.length })}</h2>
@@ -372,10 +374,16 @@ function TeamScreen({ teamId, onBack, onTeam, backLabel }: { teamId: number; onB
       <BackButton label={backLabel} onClick={onBack} />
       {q.isPending && <p className="hint">{t("Loading team…")}</p>}
       {q.isError && <p className="error">{errorMessage(q.error)}</p>}
-      {q.data === null && <p className="hint">{t("This team is not stored.")}</p>}
+      {q.data === null && (
+        <>
+          <p className="hint">{t("This team's seasons are older than the ones read, so only your own games with it are here.")}</p>
+          <YouOnThisTeam teamId={teamId} named />
+        </>
+      )}
       {q.data && (
         <>
           <TeamHeader v={q.data} honours={h.data} info={info.data} />
+          <YouOnThisTeam teamId={teamId} />
           <div className="panel pp-body">
             <nav className="pp-tabs" role="tablist">
               {(

@@ -1,0 +1,102 @@
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../api/client";
+import type { TeamEra } from "../../api/types";
+import { rating } from "../../lib/format";
+import { openPlayer } from "../../lib/goto";
+import { locale, t, tx } from "../../lib/i18n";
+import { ClassIcon } from "../ClassIcon";
+
+/**
+ * Your own side of the Teams tab (once the Teammates tab's team cards):
+ * every ETF2L team you played for, from your matches -- officials and
+ * scrims -- with your record and rating, and who played most with you.
+ */
+
+function useYourTeams(): TeamEra[] {
+  return useQuery({ queryKey: ["teammates", false], queryFn: () => api.getTeammates(false), staleTime: 5 * 60_000 }).data?.teams ?? [];
+}
+
+const winRate = (x: { wins: number; losses: number }) => (x.wins + x.losses === 0 ? null : (x.wins / (x.wins + x.losses)) * 100);
+
+/** "Jul 2023 – Mar 2024", or one month. */
+function span(e: TeamEra): string {
+  const month = (unix: number) => new Date(unix * 1000).toLocaleDateString(locale(), { month: "short", year: "numeric" });
+  const a = month(e.firstPlayed);
+  const b = month(e.lastPlayed);
+  return a === b ? b : `${a} – ${b}`;
+}
+
+/** A row of cards above the seasons: your teams, newest first. */
+export function YourTeamsStrip({ onTeam }: { onTeam: (teamId: number) => void }) {
+  const teams = useYourTeams().filter((e) => e.games >= 3);
+  if (teams.length === 0) return null;
+  return (
+    <section className="yt-strip" aria-label={t("Your teams")}>
+      <h3>{t("Your teams")}</h3>
+      <div className="yt-cards">
+        {teams.map((e) => {
+          const wr = winRate(e);
+          return (
+            <button key={e.teamId} className="yt-card" onClick={() => onTeam(e.teamId)} title={t("Open {0}", { "0": e.name })}>
+              <span className="yt-name">{e.name || t("Unnamed team")}</span>
+              <span className="hint">{span(e)}</span>
+              <span className="yt-nums">
+                <span>
+                  {e.wins}–{e.losses}
+                  {wr !== null && <span className="muted"> {wr.toFixed(0)}%</span>}
+                </span>
+                <span className="muted">{tx("{0} games", { "0": e.games })}</span>
+                {e.myAvg !== null && <span className="yt-rating">{rating(e.myAvg)}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** On a team's page, when it was yours: how it went, and with whom. */
+export function YouOnThisTeam({ teamId, named }: { teamId: number; named?: boolean }) {
+  const e = useYourTeams().find((x) => x.teamId === teamId);
+  if (!e) return null;
+  const wr = winRate(e);
+  return (
+    <section className="panel yt-you">
+      <div className="yt-you-head">
+        <h3>{named ? e.name : t("You on this team")}</h3>
+        <span className="hint">{span(e)}</span>
+      </div>
+      <dl className="yt-you-stats">
+        <div>
+          <dt>{t("Games")}</dt>
+          <dd>
+            {e.games}
+            {e.officials > 0 && <span className="muted"> · {tx("{officials} official", { officials: e.officials })}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Record")}</dt>
+          <dd>
+            {e.wins}–{e.losses}
+            {wr !== null && <span className="muted"> · {wr.toFixed(0)}%</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Your rating")}</dt>
+          <dd>{e.myAvg === null ? <span className="muted">—</span> : rating(e.myAvg)}</dd>
+        </div>
+      </dl>
+      {e.core.length > 0 && (
+        <div className="yt-core" aria-label={t("Most frequent teammates")}>
+          {e.core.map((c) => (
+            <button key={c.accountId} className="yt-mate" onClick={() => openPlayer(c.accountId)} title={t("{games} games together", { games: c.games })}>
+              {c.mainClass && <ClassIcon cls={c.mainClass} size={16} />}
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}

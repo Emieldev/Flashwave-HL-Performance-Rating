@@ -179,6 +179,34 @@ pub struct Profile {
     /// Newest first.
     pub officials: Vec<Official>,
     pub etf2l_id: Option<i64>,
+    /// When they signed up on ETF2L, unix seconds.
+    pub registered: Option<i64>,
+    /// ETF2L's title for them: "Player", "Admin", ...
+    pub etf2l_title: Option<String>,
+    /// The ETF2L teams they are on now, every format: fun teams included.
+    pub etf2l_teams: Vec<Etf2lRoster>,
+    pub bans: Vec<Etf2lBan>,
+}
+
+/// A team on a player's ETF2L page.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Etf2lRoster {
+    pub id: i64,
+    pub name: String,
+    pub tag: Option<String>,
+    /// "Highlander", "6v6", "Highlander Fun Team", ...
+    pub kind: Option<String>,
+    pub country: Option<String>,
+    pub avatar: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Etf2lBan {
+    pub start: Option<i64>,
+    pub end: Option<i64>,
+    pub reason: Option<String>,
 }
 
 /// Everything the profiles are worked out from, loaded once per request.
@@ -800,11 +828,19 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
     let rated = db.rated_games(hl_rating::MODEL_VERSION, None).await?;
     let mvps: Vec<Mvp> = cat.mvps(&rated).into_iter().filter(|m| m.account_id == account).collect();
     let steamid = SteamId::from_account_id(account);
+    let raw_of = |id: Option<i64>, raws: &[(i64, i64, String)]| id.and_then(|id| raws.iter().find(|(i, ..)| *i == id).map(|(.., json)| json.clone()));
+    let raws = db.etf2l_raw("player").await?;
     let etf2l = match db.etf2l_player(account).await? {
-        Some(p) if now() - p.fetched_at < ETF2L_PLAYER_KEEP_S => Some(p),
+        // Kept a week; a row from before the raw page was kept is read again.
+        Some(p) if now() - p.fetched_at < ETF2L_PLAYER_KEEP_S && raw_of(p.etf2l_id, &raws).is_some() => Some(p),
         held => match fetch_etf2l_player(sources, &steamid.to_steamid64()).await {
-            Ok(Some(p)) => {
+            Ok(Some((p, body))) => {
                 db.put_etf2l_player(account, &p).await?;
+                // The whole answer too, for what the row has no column for:
+                // their teams, title and bans.
+                if let Some(id) = p.etf2l_id {
+                    db.store_etf2l_raw("player", id, &body).await?;
+                }
                 Some(p)
             }
             Ok(None) => held,
@@ -831,6 +867,12 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
     }
     let name = etf2l.as_ref().and_then(|p| p.name.clone()).or_else(|| aliases.first().cloned()).unwrap_or_else(|| steamid.to_steamid64());
     aliases.retain(|a| *a != name);
+    let raw = match raw_of(etf2l.as_ref().and_then(|p| p.etf2l_id), &raws) {
+        Some(json) => Some(json),
+        // Just fetched: read it again, with what was stored since.
+        None => raw_of(etf2l.as_ref().and_then(|p| p.etf2l_id), &db.etf2l_raw("player").await?),
+    };
+    let (etf2l_title, etf2l_teams, bans) = raw.as_deref().map(etf2l_extras).unwrap_or_default();
     Ok(Profile {
         account_id: account,
         steamid64: steamid.to_steamid64(),
@@ -847,22 +889,57 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
         mvps,
         seasons,
         officials,
+        registered: etf2l.as_ref().and_then(|p| p.registered),
         etf2l_id: etf2l.and_then(|p| p.etf2l_id),
+        etf2l_title,
+        etf2l_teams,
+        bans,
     })
+}
+
+/// What a stored ETF2L player page says beyond the profile row.
+fn etf2l_extras(json: &str) -> (Option<String>, Vec<Etf2lRoster>, Vec<Etf2lBan>) {
+    let Ok(v) = serde_json::from_str::<Value>(json) else { return Default::default() };
+    let p = v.get("player").unwrap_or(&v);
+    let text = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
+    let teams = p
+        .get("teams")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some(Etf2lRoster {
+                id: t.get("id")?.as_i64()?,
+                name: text(t, "name")?,
+                tag: text(t, "tag"),
+                kind: text(t, "type"),
+                country: text(t, "country"),
+                avatar: t.pointer("/steam/avatar").and_then(Value::as_str).filter(|a| a.starts_with("https://")).map(str::to_string),
+            })
+        })
+        .collect();
+    let bans = p
+        .get("bans")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|b| Etf2lBan { start: b.get("start").and_then(Value::as_i64), end: b.get("end").and_then(Value::as_i64), reason: text(b, "reason") })
+        .collect();
+    (text(p, "title"), teams, bans)
 }
 
 fn now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
 }
 
-async fn fetch_etf2l_player(sources: &Sources, steamid64: &str) -> Result<Option<Etf2lPlayer>> {
-    let Some(body) = sources.etf2l_get(&format!("/player/{steamid64}")).await? else { return Ok(None) };
+async fn fetch_etf2l_player(sources: &Sources, steamid64: &str) -> Result<Option<(Etf2lPlayer, String)>> {
+    let Some(body) = sources.etf2l_get_interactive(&format!("/player/{steamid64}")).await? else { return Ok(None) };
     let v: Value = serde_json::from_str(&body).context("ETF2L player page")?;
     let p = v.get("player").unwrap_or(&Value::Null);
     if p.is_null() {
         return Ok(None);
     }
-    Ok(Some(Etf2lPlayer {
+    Ok(Some((Etf2lPlayer {
         etf2l_id: p.get("id").and_then(Value::as_i64),
         name: p.get("name").and_then(Value::as_str).map(str::to_string),
         country: p.get("country").and_then(Value::as_str).map(str::to_string),
@@ -870,7 +947,7 @@ async fn fetch_etf2l_player(sources: &Sources, steamid64: &str) -> Result<Option
         avatar: p.pointer("/steam/avatar").and_then(Value::as_str).map(str::to_string),
         registered: p.get("registered").and_then(Value::as_i64),
         fetched_at: now(),
-    }))
+    }, body)))
 }
 
 /// Index the players of league-sample logs that are not indexed yet: their
@@ -1586,8 +1663,11 @@ pub async fn season_banner(db: &Db, sources: &Sources, season: i64, season_name:
     }
     let mut found = None;
     for q in queries {
-        let url = format!("https://etf2l.org/wp-json/wp/v2/posts?search={}&per_page=50&_fields=title,content", q.replace(' ', "%20"));
-        if let Ok(Some(body)) = sources.fetch_text(&url).await {
+        let url = crate::http::url(
+            "https://etf2l.org/wp-json/wp/v2/posts",
+            [("search", q.as_str()), ("per_page", "50"), ("_fields", "title,content")],
+        );
+        if let Ok(Some(body)) = sources.fetch_text_interactive(&url).await {
             found = banner_in(&body, numbered.then_some(season), season_name);
         }
         if found.is_some() {
@@ -1889,6 +1969,26 @@ mod tests {
         let (_, won, officials) = c.player(500, &medals);
         assert!(won.is_empty(), "no medal for a merc appearance");
         assert_eq!(officials.len(), 1, "but the official is theirs");
+    }
+
+    #[test]
+    fn an_etf2l_page_gives_teams_title_and_bans() {
+        // The shape of api-v2's /player answer (Flashy's, October 2026).
+        let json = r#"{"player":{"id":97913,"name":"Flashy","title":"Player","registered":1402247571,"bans":null,
+            "teams":[{"id":35849,"name":"The 9 Stooges","tag":"9S","type":"Highlander Fun Team","country":"Croatia",
+                      "steam":{"avatar":"https://etf2l.org/wp-content/uploads/avatars/657792a02e49d.png"}},
+                     {"id":1,"name":"","tag":"x"}]},"status":{"code":200}}"#;
+        let (title, teams, bans) = etf2l_extras(json);
+        assert_eq!(title.as_deref(), Some("Player"));
+        assert_eq!(teams.len(), 1, "a team with no name is skipped");
+        assert_eq!(teams[0].tag.as_deref(), Some("9S"));
+        assert_eq!(teams[0].kind.as_deref(), Some("Highlander Fun Team"));
+        assert!(teams[0].avatar.is_some());
+        assert!(bans.is_empty());
+
+        let banned = r#"{"player":{"bans":[{"start":1600000000,"end":1600600000,"reason":"VAC"}]}}"#;
+        assert_eq!(etf2l_extras(banned).2, vec![Etf2lBan { start: Some(1_600_000_000), end: Some(1_600_600_000), reason: Some("VAC".into()) }]);
+        assert_eq!(etf2l_extras("not json"), (None, vec![], vec![]));
     }
 
     #[test]

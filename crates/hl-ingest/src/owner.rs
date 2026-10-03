@@ -78,7 +78,7 @@ async fn from_etf2l(db: &Db, me: SteamId) -> Result<Option<(Option<String>, Opti
 
 /// Name and avatar link from Steam's public profile XML.
 async fn from_steam(sources: &Sources, me: SteamId) -> Result<Option<(Option<String>, Option<String>)>> {
-    let url = format!("https://steamcommunity.com/profiles/{}/?xml=1", me.to_steamid64());
+    let url = crate::http::url(&format!("https://steamcommunity.com/profiles/{}/", me.to_steamid64()), [("xml", "1")]);
     let Some(xml) = sources.fetch_text(&url).await? else { return Ok(None) };
     let name = xml_value(&xml, "steamID");
     let avatar = xml_value(&xml, "avatarFull").filter(|a| a.starts_with("https://"));

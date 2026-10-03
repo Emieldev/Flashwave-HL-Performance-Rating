@@ -577,3 +577,137 @@
 .tend-legend i { display: inline-block; width: 14px; vertical-align: middle; margin: 0 4px 0 10px; }
 .tend-n { text-align: right; font-variant-numeric: tabular-nums; }
 .tend-stand { margin: 8px 0 0; font-size: 0.8rem; }
+
+/* --- your own profile: identity first, then rating, career, teammates --- */
+
+.profile-section-title {
+  margin: 14px 0 -4px;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  scroll-margin-top: 72px;
+}
+
+.profile-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.profile-jump {
+  display: flex;
+  gap: 18px;
+  font-size: 0.88rem;
+  margin-top: -6px;
+}
+
+.profile-jump .linkish {
+  color: var(--muted);
+}
+
+.profile-jump .linkish:hover {
+  color: var(--accent-text);
+}
+
+.career-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.career-grid h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.career-grid .career-sub {
+  margin-top: 22px;
+}
+
+@media (max-width: 1000px) {
+  .career-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- teammates, on the profile --- */
+
+.mates {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 120ms ease;
+}
+
+.mates.refetching {
+  opacity: 0.6;
+}
+
+.mates-controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mates-controls .hint {
+  max-width: 640px;
+}
+
+.mates-toggles {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mate-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mate-name .dot {
+  margin: 0;
+}
+
+.mate-noclass {
+  display: inline-block;
+  width: 16px;
+}
+
+.mate-teams {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mates-more {
+  align-self: flex-start;
+}
+
+/* In the career column the medal sits beside two lines, not four columns. */
+.career-grid .pp-achievements li {
+  grid-template-columns: 64px 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 2px 12px;
+}
+
+.career-grid .pp-achievements li > :first-child {
+  grid-row: 1 / span 3;
+}
+
+.career-grid .pp-achievements li > .muted {
+  font-size: 0.84rem;
+}

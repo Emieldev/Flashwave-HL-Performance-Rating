@@ -25,7 +25,7 @@ const KEEP_S: i64 = 24 * 3600;
 /// league game when it is linked to a league match, so scrims and pugs are
 /// left out (Flashy: "only official matches, scrims do not count").
 pub fn page_url(steamid64: &str) -> String {
-    format!("https://trends.tf/player/{steamid64}/?format=highlander&league=etf2l")
+    crate::http::url(&format!("https://trends.tf/player/{steamid64}/"), [("format", "highlander"), ("league", "etf2l")])
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

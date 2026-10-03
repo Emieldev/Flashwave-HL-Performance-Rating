@@ -224,7 +224,7 @@ pub async fn fetch_seasons(
     // season it comes before): the last numbered season met, walking back.
     let mut after: Option<i64> = None;
     for page in 1..=MAX_LIST_PAGES {
-        let Some(body) = sources.etf2l_get(&format!("/competition/list?page={page}")).await? else { break };
+        let Some(body) = sources.etf2l_page("/competition/list", page).await? else { break };
         // ETF2L answers a busy moment with an HTML page: the walk ends
         // there, and what it found so far is still read.
         let Ok(v) = serde_json::from_str::<Value>(&body) else {
@@ -313,7 +313,7 @@ pub async fn fetch_seasons(
         .await?;
         out.competitions += 1;
         for page in 1..=20 {
-            let Some(body) = sources.etf2l_get(&format!("/competition/{id}/results?page={page}")).await? else { break };
+            let Some(body) = sources.etf2l_page(&format!("/competition/{id}/results"), page).await? else { break };
             let Ok(v) = serde_json::from_str::<Value>(&body) else {
                 tracing::warn!(competition = id, page, "ETF2L results page was not JSON; next refresh reads it");
                 break;
