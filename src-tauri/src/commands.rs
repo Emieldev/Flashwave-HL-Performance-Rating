@@ -48,6 +48,19 @@ pub async fn app_status(state: State<'_, AppState>) -> CmdResult<AppStatus> {
     })
 }
 
+/// How this copy is updated: `"self"` when the updater can replace it (the
+/// Windows installer, or an AppImage, which Linux runs from one file), and
+/// `"manual"` for a Linux package, which belongs to the system's package
+/// manager: there the app points at the download instead.
+#[tauri::command]
+pub fn update_kind() -> &'static str {
+    if cfg!(windows) || std::env::var_os("APPIMAGE").is_some() {
+        "self"
+    } else {
+        "manual"
+    }
+}
+
 #[tauri::command]
 pub async fn get_config(state: State<'_, AppState>) -> CmdResult<AppConfig> {
     Ok(state.db.get_config().await?)

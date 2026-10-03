@@ -1,3 +1,4 @@
+import { PingPanel, ReflectPanel } from "./DemoStats";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
@@ -109,6 +110,14 @@ export function MatchPage({ logId, onBack }: { logId: number; onBack: () => void
               where there is no STV rather than missing without a word. */}
           <Fold id="spychecks">
             {hasStv ? <Spychecks d={q.data} /> : <StvLocked d={q.data} kind="spychecks" />}
+          </Fold>
+          {/* Ping and reflects: any demo with a timeline, STV or the
+              owner's own; nothing at all without one. */}
+          <Fold id="ping">
+            <PingPanel d={q.data} />
+          </Fold>
+          <Fold id="reflects">
+            <ReflectPanel d={q.data} />
           </Fold>
           {(hasStv || isPayload) && (
             <Fold id="cart">

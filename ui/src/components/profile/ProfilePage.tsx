@@ -282,7 +282,7 @@ function Tendencies({ cls }: { cls: string }) {
               {top.length > 0 && (
                 <ul className="tend-bars">
                   {top.map((f) => (
-                    <li key={f.zone} title={tx("{0} kills, {1} deaths", { "0": f.kills, "1": f.deaths })}>
+                    <li key={f.zone} title={t("{0} kills, {1} deaths", { "0": f.kills, "1": f.deaths })}>
                       <span className="tend-zone">{f.zone}</span>
                       <span className="tend-track" aria-hidden>
                         <i className="tend-k" style={{ width: `${(100 * f.kills) / most}%` }} />

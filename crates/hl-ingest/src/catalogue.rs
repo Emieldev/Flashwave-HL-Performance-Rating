@@ -764,7 +764,7 @@ pub async fn profile(db: &Db, sources: &Sources, account: u32) -> Result<Profile
     let classes = db.main_class_games().await?;
     let (played_classes, main_class) = main_of(classes.get(&account));
     let mut aliases: Vec<String> = Vec::new();
-    for (_, roster) in cat.rosters.iter() {
+    for roster in cat.rosters.values() {
         for (a, _, n) in roster {
             if *a == account && !n.is_empty() && !aliases.contains(n) {
                 aliases.push(n.clone());
@@ -1167,7 +1167,7 @@ pub async fn player_stats(db: &Db, account: u32) -> Result<PlayerStats> {
             groups_recent: use_recent,
         });
     }
-    classes.sort_by(|a, b| b.games.cmp(&a.games));
+    classes.sort_by_key(|c| std::cmp::Reverse(c.games));
 
     // Ranks: every season they played officials in, among the division they
     // played, on every class they played enough that season.

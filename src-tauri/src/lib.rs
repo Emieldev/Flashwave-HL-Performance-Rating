@@ -152,6 +152,22 @@ pub fn run() {
                             }
                         }
                     }
+                    // The league snapshot this version ships (Q43): the officials'
+                    // results, rosters and ratings, so the player lookup works
+                    // before the league has been downloaded. Once per snapshot.
+                    match hl_ingest::snapshot::apply_built_in(&db).await {
+                        Ok(a) if a.rescore => {
+                            // Its scale replaced the one measured here: rate
+                            // this install's own games on it.
+                            let (weights, _) = hl_rating::Weights::load(&weights_path);
+                            match hl_ingest::rate_all(&db, cfg.steamid, &weights, |_| {}).await {
+                                Ok(s) => tracing::info!(rated = s.rated, "rated on the league snapshot's scale"),
+                                Err(e) => tracing::warn!(error = %format!("{e:#}"), "rating on the snapshot's scale failed"),
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(error = %format!("{e:#}"), "league snapshot not imported"),
+                    }
                     // A new rating model has no ratings until something rates:
                     // do it now rather than leave the profile empty until a sync.
                     if db.rating_count(hl_rating::MODEL_VERSION).await.unwrap_or(1) == 0 {
@@ -197,6 +213,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
             commands::get_config,
+            commands::update_kind,
             commands::set_steamid,
             commands::inspect_tf_path,
             commands::detect_tf_path,
@@ -239,6 +256,7 @@ pub fn run() {
             sync_commands::get_match_analysis,
             sync_commands::get_aim,
             sync_commands::get_spychecks,
+            sync_commands::get_demo_stats,
             sync_commands::get_cart,
             sync_commands::played_filters,
             sync_commands::get_parts,

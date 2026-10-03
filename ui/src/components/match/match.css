@@ -1562,3 +1562,14 @@
 .mom-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; box-shadow: 0 0 0 1px var(--panel); cursor: default; }
 .mom-blu { background: var(--blu); }
 .mom-red { background: var(--red); }
+
+/* Q44: ping over the match, one small line per player. */
+.ping-spark {
+  display: block;
+}
+
+.ping-spark path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}

@@ -48,9 +48,18 @@ fn open_exclusive(path: &Path) -> std::io::Result<File> {
 
 #[cfg(not(windows))]
 fn open_exclusive(path: &Path) -> std::io::Result<File> {
-    // Elsewhere this is advisory: the file's presence is the signal, and a
-    // crash can leave it behind. Windows is the only platform this ships on.
-    OpenOptions::new().create_new(true).write(true).open(path)
+    // Linux: an exclusive lock on the open file (flock), which the kernel
+    // drops when the process ends, however it ends. The file's presence
+    // means nothing, so a crash cannot leave the app locked out; only a
+    // process that is still running holds it.
+    let file = OpenOptions::new().create(true).truncate(false).write(true).open(path)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            Err(std::io::Error::new(std::io::ErrorKind::WouldBlock, "held by another process"))
+        }
+        Err(std::fs::TryLockError::Error(e)) => Err(e),
+    }
 }
 
 /// Take the lock, or say who has it.
@@ -124,7 +133,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(db.parent().unwrap());
     }
 
-    #[cfg(windows)]
+    /// What a crash leaves: the lock file, with nobody holding it. The next
+    /// start must get in, on Linux as on Windows.
+    #[test]
+    fn a_leftover_lock_file_does_not_lock_anyone_out() {
+        let db = temp("leftover");
+        std::fs::write(path(&db), "").unwrap();
+        assert!(!in_use(&db), "nobody holds it");
+        std::fs::write(path(&db), "").unwrap();
+        assert!(hold(&db).is_ok(), "and the app starts");
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
     #[test]
     fn two_holders_are_refused() {
         let db = temp("two");

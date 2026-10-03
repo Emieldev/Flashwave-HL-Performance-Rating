@@ -45,6 +45,18 @@ pub async fn rate_all(
     let league = crate::league_rating::performances(db, w).await?;
     tracing::info!(own = perfs.len(), league = league.len(), "rating pool");
 
+    // An install rating on the league snapshot's scale (Q43) keeps it while
+    // its own pool is the smaller: measuring a few hundred of its own games
+    // would undo the league's "1.00".
+    if let Some(snapshot) = crate::snapshot::pool(db).await? {
+        if ((perfs.len() + league.len()) as i64) < snapshot {
+            if let Some(summary) = rate_on_stored_scale(db, me, w, total, &perfs, &league).await? {
+                progress(Progress::Rating { done: total, total });
+                return Ok(summary);
+            }
+        }
+    }
+
     // Pass 2: the pools. The owner is in them now (Flashy): with the league
     // in the pool they are one player among thousands, where in their own
     // matches alone they were half of their class's pool and were left out
@@ -112,6 +124,52 @@ pub async fn rate_all(
     progress(Progress::Rating { done: total, total });
 
     Ok(RateSummary { logs: total, performances: perfs.len(), rated: rows.len(), mine })
+}
+
+/// Score this install's games, and whatever league logs it holds, against
+/// the baselines and scale already stored (the league snapshot's), without
+/// measuring new ones. `None` when there is nothing stored to score against.
+async fn rate_on_stored_scale(
+    db: &Db,
+    me: Option<SteamId>,
+    w: &Weights,
+    total: usize,
+    perfs: &[(i64, hl_rating::Performance)],
+    league: &[(i64, hl_rating::Performance)],
+) -> Result<Option<RateSummary>> {
+    let baseline = load_baseline(db).await?;
+    let Some(scale) = load_scale(db).await? else { return Ok(None) };
+    if baseline.is_empty() {
+        return Ok(None);
+    }
+    let mut rows = Vec::with_capacity(perfs.len());
+    let mut mine = 0;
+    for (log_id, perf) in perfs {
+        let Some(r) = rate(perf, &baseline, w) else { continue };
+        if me.is_some_and(|m| m.account_id() == perf.account_id) {
+            mine += 1;
+        }
+        let r = r.scaled(&scale);
+        rows.push(RatingRow {
+            log_id: *log_id,
+            account_id: perf.account_id,
+            class: r.class.as_str(),
+            score: r.score,
+            minutes: r.minutes,
+            parts_json: serde_json::to_string(&r.parts)?,
+        });
+    }
+    db.replace_ratings(MODEL_VERSION, &rows).await?;
+    // The snapshot's league ratings stay; logs downloaded here join them.
+    let league_rows: Vec<(i64, u32, &str, f64, f64, String)> = league
+        .iter()
+        .filter_map(|(log_id, p)| {
+            let r = rate(p, &baseline, w)?.scaled(&scale);
+            Some((*log_id, p.account_id, r.class.as_str(), r.score, r.minutes, hl_rating::guide::group_scores_json(&r.parts)))
+        })
+        .collect();
+    db.put_league_ratings(MODEL_VERSION, &league_rows).await?;
+    Ok(Some(RateSummary { logs: total, performances: perfs.len(), rated: rows.len(), mine }))
 }
 
 /// Rate a few logs now, against the baselines already stored.

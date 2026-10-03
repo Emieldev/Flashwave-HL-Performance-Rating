@@ -6,6 +6,7 @@
 pub mod aim;
 pub mod cart;
 pub mod deep;
+pub mod demostats;
 pub mod header;
 pub mod link;
 pub mod parse;

@@ -99,6 +99,33 @@ In the order it is queued (the detail lives in [PLAN.md](PLAN.md) §13):
 2. Run it. Windows may show **"Windows protected your PC"** because the installer is not code-signed (signing costs money every year). Click **More info → Run anyway**.
 3. The installer adds Flashwave.tf to the Start menu. It needs Microsoft WebView2, which Windows 10 and 11 already have; if not, the installer fetches it.
 
+## Install (Linux)
+
+Each release carries a Linux build too, made on GitHub a few minutes after the
+Windows one. Two kinds, the same app:
+
+- **AppImage** (`Flashwave.tf_<version>_amd64.AppImage`): one file that runs on
+  most distributions. Make it executable and start it:
+  `chmod +x Flashwave.tf_*.AppImage && ./Flashwave.tf_*.AppImage`.
+  It updates itself, like the Windows build.
+- **.deb** (`Flashwave.tf_<version>_amd64.deb`), for Debian, Ubuntu and Mint:
+  `sudo apt install ./Flashwave.tf_*.deb`. The app tells you when a new
+  version is out and opens the download page; install the new `.deb` the
+  same way.
+
+Built on Ubuntu 22.04, so it needs a system at least that new (WebKitGTK 4.1).
+The TF2 folder is found in the usual Steam places, the Flatpak and the Snap
+included; if yours is elsewhere, pick it in Settings. Your data lives in
+`~/.local/share/gg.highlander.rating/`.
+
+Linux is new: tell us in Issues or on Discord if something looks wrong there.
+
+**The league comes with it.** Every ETF2L Highlander official's results,
+rosters, medals and league ratings are built into each release as a snapshot,
+so looking a player up works from the first start. The match logs behind
+them are not included; the app fetches newer officials itself when the
+league download is on (Settings).
+
 ## Working on it safely
 
 The app holds its database while its window is open, and every command line
@@ -139,7 +166,8 @@ and movement views, and only for the person who recorded them.
 
 ## Your data
 
-The database lives at `%APPDATA%\gg.highlander.rating\hl.sqlite3`, with the
+The database lives at `%APPDATA%\gg.highlander.rating\hl.sqlite3` on Windows
+(`~/.local/share/gg.highlander.rating/hl.sqlite3` on Linux), with the
 newest five copies in a `backups` folder beside it. A copy is made before
 every sync and rebuild, and Settings lists them; to restore one, close the app
 and rename the copy over `hl.sqlite3`.
@@ -183,14 +211,9 @@ you want it to hand.
 
 ### Releasing
 
-Pushing a version tag builds the Windows installers on GitHub and attaches them to a draft release:
-
-```
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-Bump `version` in `src-tauri/tauri.conf.json` and in the root `Cargo.toml` (`[workspace.package]`) first. Review the draft on the Releases page, then publish it.
+Windows releases are built and signed locally with `npm run release`; the
+Linux build follows on GitHub once the release is published. The whole
+procedure, and the key it needs, is in [docs/releasing.md](docs/releasing.md).
 
 ### Frontend without Rust
 

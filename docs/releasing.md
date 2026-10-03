@@ -55,6 +55,22 @@ updater's `latest.json`.
    (`hl guide --json > ui/src/api/fixtures/rating_guide.json`); the app's
    own page reads the live model and needs nothing.
 
+2b. **Make the league snapshot.** The app ships every official's results,
+   rosters and league ratings (`league/snapshot.sqlite3.gz`, PLAN Q43), so the
+   player lookup works on a new install. It is made from your database, rated
+   for this release's model -- on a copy, never the live file:
+
+   ```powershell
+   cargo run --release -p hl-cli -- copy "$env:TEMP\hl-snapshot-src.sqlite3"
+   cargo run --release -p hl-cli -- --db "$env:TEMP\hl-snapshot-src.sqlite3" rate
+   cargo run --release -p hl-cli -- --db "$env:TEMP\hl-snapshot-src.sqlite3" snapshot
+   ```
+
+   (`hl copy` needs the app closed. With it open, copy the newest file in
+   `backups` instead; it is a closed, consistent copy.) Commit the new
+   `league/snapshot.sqlite3.gz`. `npm run release` refuses to build when the
+   snapshot is for another rating model than the build.
+
 3. **Build it signed:**
 
    ```bash
@@ -89,7 +105,14 @@ updater's `latest.json`.
    lives in the title and the app's badge only. (0.7.0 shipped saying
    "beta" by mistake; its release page and update card were corrected.)
 
-6. **Check what the updater will actually see** -- give GitHub's cache a
+6. **Let the Linux build land.** Publishing the release pushes the tag, which
+   starts the *Linux release* workflow on GitHub (`.github/workflows/release.yml`).
+   About 15 minutes later the release has the AppImage and the `.deb`, and,
+   if the key is in the repository's secrets (below), `latest.json` has a
+   `linux-x86_64` entry beside the Windows one. Check it on the Actions tab;
+   if it failed, run it again by hand from there.
+
+7. **Check what the updater will actually see** -- give GitHub's cache a
    minute:
 
    ```bash
@@ -98,6 +121,28 @@ updater's `latest.json`.
 
    It must say the new version. If it says the old one, the release is not
    marked Latest.
+
+## Linux
+
+Linux cannot be built on the Windows PC, so GitHub builds it (Ubuntu 22.04,
+for the widest reach) from the tag. For AppImage installs to update
+themselves the AppImage must be signed with the same key as the Windows
+installer, which means giving GitHub a copy of it:
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY < "$USERPROFILE/.flashwave-keys/flashwave.key"
+```
+
+That is a real decision, not a formality: the key has no password, and a
+GitHub secret is readable by any workflow that runs in this repository. Put
+it there only if you are content that whoever can change the workflows here
+could sign an update. Without it the Linux files are still built and
+attached, unsigned; `latest.json` gets no Linux entry, the app on Linux
+finds no update and says nothing, and Linux users update by downloading.
+
+A `.deb` never installs updates itself, signed or not: the package manager
+owns its files. The app shows the update and its button opens the release
+page instead.
 
 ## How the client finds it
 

@@ -66,7 +66,7 @@ function UpdateCard() {
         <>
           <p className="dl-label">{tx("Version {version}", { version: u.version })}</p>
           {u.notes && <p className="dl-sub up-notes">{u.notes.replace(/\s+/g, " ").slice(0, 160)}</p>}
-          <button className="dl-go" onClick={() => void installUpdate()}>{t("Download and install")}</button>
+          <button className="dl-go" onClick={() => void installUpdate()}>{u.manual ? t("Open the download page") : t("Download and install")}</button>
         </>
       )}
 

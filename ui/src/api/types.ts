@@ -1509,6 +1509,60 @@ export interface SpyPlayer {
   found: number;
 }
 
+/** Q44, Q45: ping and reflects from a match's demo timelines. */
+export interface MatchDemoStats {
+  demos: number;
+  /** Read from STV demos (everyone, every projectile), else POV ones. */
+  stv: boolean;
+  /** Timelines from before ping and reflects were recorded. */
+  tooOld: number;
+  pings: PlayerPing[];
+  pyros: PyroLine[];
+  reflects: ReflectRow[];
+}
+
+export interface PlayerPing {
+  accountId: number;
+  name: string;
+  avg: number;
+  median: number;
+  min: number;
+  max: number;
+  /** [from s, to s, peak ms] */
+  spikes: Array<[number, number, number]>;
+  /** [s, ms] */
+  points: Array<[number, number]>;
+}
+
+export interface PyroLine {
+  accountId: number;
+  name: string;
+  reflects: number;
+  hits: number;
+  misses: number;
+  sentBack: number;
+  unknown: number;
+  kills: number;
+  damage: number;
+  threats: number;
+  judged: number;
+}
+
+export type ReflectOutcome = "hit" | "miss" | "sentBack" | "unknown";
+
+export interface ReflectRow {
+  demoId: number;
+  atS: number;
+  jumpTick: number;
+  by: number | null;
+  what: string;
+  outcome: ReflectOutcome;
+  victims: number[];
+  damage: number;
+  killed: boolean;
+  threat: boolean | null;
+}
+
 export interface SpyCheck {
   demoId: number;
   /** Seconds into the demo. */

@@ -645,6 +645,13 @@ pub struct AimResponse {
     pub career_life: Option<hl_db::LifeTotals>,
 }
 
+/// Q44, Q45: every player's ping and every Pyro's reflects, from the match's
+/// kept demo timelines. `None` when it has none to read.
+#[tauri::command]
+pub async fn get_demo_stats(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_ingest::demostats::DemoStats>> {
+    Ok(hl_ingest::demostats::for_log(&state.db, log_id).await?)
+}
+
 /// Q27: hits on fully cloaked Spies, from the match's kept STV timelines.
 /// `None` when it has none to read.
 #[tauri::command]

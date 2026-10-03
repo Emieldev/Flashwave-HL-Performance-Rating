@@ -312,7 +312,7 @@ impl Db {
     pub async fn league_rateable(&self) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar(&format!(
             "SELECT l.log_id FROM league_log l
-             WHERE l.picked = 1 AND l.json_source IS NOT NULL
+             WHERE l.picked = 1 AND l.json_source IS NOT NULL AND l.json_source != 'snapshot'
                AND l.log_id NOT IN ({})
              ORDER BY l.log_id",
             crate::OWNER_COVERED
@@ -328,7 +328,7 @@ impl Db {
     pub async fn league_unrated(&self, version: &str, limit: i64) -> Result<Vec<i64>> {
         Ok(sqlx::query_scalar(&format!(
             "SELECT l.log_id FROM league_log l
-             WHERE l.picked = 1 AND l.json_source IS NOT NULL
+             WHERE l.picked = 1 AND l.json_source IS NOT NULL AND l.json_source != 'snapshot'
                AND l.log_id NOT IN ({})
                AND NOT EXISTS (SELECT 1 FROM league_rating r WHERE r.model_version = ?1 AND r.log_id = l.log_id)
              ORDER BY l.log_id LIMIT ?2",
@@ -336,6 +336,23 @@ impl Db {
         ))
         .bind(version)
         .bind(limit)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
+    /// Sample logs held here (JSON downloaded) with no league rating under
+    /// `version`: the owner's own officials, which are rated as the owner's
+    /// games, and any not rated yet. What the league snapshot rates as
+    /// league games before it ships (Q43).
+    pub async fn league_logs_without_rating(&self, version: &str) -> Result<Vec<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT l.log_id FROM league_log l
+             WHERE l.json_source IS NOT NULL AND l.json_source != 'snapshot'
+               AND EXISTS (SELECT 1 FROM league_log_json j WHERE j.log_id = l.log_id)
+               AND NOT EXISTS (SELECT 1 FROM league_rating r WHERE r.model_version = ?1 AND r.log_id = l.log_id)
+             ORDER BY l.log_id",
+        )
+        .bind(version)
         .fetch_all(self.pool())
         .await?)
     }

@@ -33,6 +33,16 @@ $key = (Get-Content $keyPath -Raw).Trim()
 $version = (Get-Content (Join-Path $root "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json).version
 Write-Host "Building Flashwave.tf $version (signed)" -ForegroundColor Cyan
 
+# The league snapshot inside the app must be for this build's rating model,
+# or new installs get no player lookup at all (docs/releasing.md, step 2b).
+if (-not $SkipBuild) {
+    Push-Location $root
+    & cargo run -q -p hl-cli -- snapshot --check
+    $checked = $LASTEXITCODE
+    Pop-Location
+    if ($checked -ne 0) { Write-Error "The league snapshot is out of date. Make a new one (docs/releasing.md, step 2b), then run this again." }
+}
+
 # The key has no password, but tauri still tries to decrypt it, and without
 # being told "no password" it sits on a prompt a non-interactive build can
 # never answer. Telling it means an environment variable that exists and is

@@ -140,7 +140,7 @@ export function PlayerPopCard({ target, divisions, onClose }: { target: CardTarg
       ref={ref}
       className="pc-card"
       role="dialog"
-      aria-label={tx("{0}'s card", { "0": target.name })}
+      aria-label={t("{0}'s card", { "0": target.name })}
       style={{ width: WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? 0 }}
     >
       {/* 1. Who */}

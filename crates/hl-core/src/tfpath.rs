@@ -166,21 +166,29 @@ pub fn detect() -> Option<TfPathInfo> {
 fn steam_libraries() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
-    for var in ["ProgramFiles(x86)", "ProgramFiles"] {
-        if let Ok(base) = std::env::var(var) {
-            roots.push(PathBuf::from(base).join("Steam"));
+    #[cfg(windows)]
+    {
+        for var in ["ProgramFiles(x86)", "ProgramFiles"] {
+            if let Ok(base) = std::env::var(var) {
+                roots.push(PathBuf::from(base).join("Steam"));
+            }
+        }
+
+        // Manual installs sitting at the root of a secondary drive.
+        for letter in 'C'..='Z' {
+            let drive = PathBuf::from(format!("{letter}:\\"));
+            if !drive.is_dir() {
+                continue;
+            }
+            roots.push(drive.join("Steam"));
+            roots.push(drive.join("SteamLibrary"));
+            roots.push(drive.join("Games").join("Steam"));
         }
     }
 
-    // Manual installs sitting at the root of a secondary drive.
-    for letter in 'C'..='Z' {
-        let drive = PathBuf::from(format!("{letter}:\\"));
-        if !drive.is_dir() {
-            continue;
-        }
-        roots.push(drive.join("Steam"));
-        roots.push(drive.join("SteamLibrary"));
-        roots.push(drive.join("Games").join("Steam"));
+    #[cfg(not(windows))]
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.extend(linux_roots(Path::new(&home)));
     }
 
     // Libraries declared by Steam itself.
@@ -191,6 +199,23 @@ fn steam_libraries() -> Vec<PathBuf> {
     roots.sort();
     roots.dedup();
     roots
+}
+
+/// Where Steam lives on Linux, under the home folder: the native install
+/// (and the two links Steam keeps to it), the Flatpak and the Snap. TF2
+/// runs natively there and records the same demos into the same `tf`.
+#[cfg_attr(windows, allow(dead_code))]
+fn linux_roots(home: &Path) -> Vec<PathBuf> {
+    [
+        ".local/share/Steam",
+        ".steam/steam",
+        ".steam/root",
+        ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+        "snap/steam/common/.local/share/Steam",
+    ]
+    .iter()
+    .map(|p| home.join(p))
+    .collect()
 }
 
 /// Pull `"path"  "D:\\SteamLibrary"` entries out of `libraryfolders.vdf`.
@@ -216,6 +241,32 @@ fn parse_library_folders(steam_root: &Path) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linux_steam_roots_cover_native_flatpak_and_snap() {
+        let roots = linux_roots(Path::new("/home/flashy"));
+        for want in [
+            "/home/flashy/.local/share/Steam",
+            "/home/flashy/.steam/steam",
+            "/home/flashy/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+            "/home/flashy/snap/steam/common/.local/share/Steam",
+        ] {
+            assert!(roots.contains(&PathBuf::from(want)), "{want} missing");
+        }
+    }
+
+    #[test]
+    fn library_folders_read_linux_paths_too() {
+        let root = std::env::temp_dir().join(format!("hl-test-vdf-linux-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("steamapps")).unwrap();
+        std::fs::write(
+            root.join("steamapps/libraryfolders.vdf"),
+            "\"libraryfolders\"\n{\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"/mnt/games/SteamLibrary\"\n\t}\n}\n",
+        )
+        .unwrap();
+        assert_eq!(parse_library_folders(&root), vec![PathBuf::from("/mnt/games/SteamLibrary")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn rejects_a_path_that_is_not_a_directory() {

@@ -40,6 +40,7 @@ import type {
   SeasonsView,
   AimResponse,
   SpyReport,
+  MatchDemoStats,
   CalloutFile,
   PositionsView,
   MapTendencies,
@@ -96,6 +97,8 @@ export interface SyncHandlers {
 const realApi = {
   appStatus: () => invoke<AppStatus>("app_status"),
   getConfig: () => invoke<AppConfig>("get_config"),
+  /** "self": the updater installs it. "manual": a Linux package, updated from the download page. */
+  updateKind: () => invoke<"self" | "manual">("update_kind"),
   setSteamId: (input: string) => invoke<AppConfig>("set_steamid", { input }),
   detectTfPath: () => invoke<TfPathInfo | null>("detect_tf_path"),
   inspectTfPath: (path: string) => invoke<TfPathInfo>("inspect_tf_path", { path }),
@@ -184,6 +187,8 @@ const realApi = {
   getAim: (logId: number, player?: number) => invoke<AimResponse>("get_aim", { logId, player }),
   /** Null when the match has no STV timeline to read (Q27). */
   getSpychecks: (logId: number) => invoke<SpyReport | null>("get_spychecks", { logId }),
+  /** Q44, Q45: ping and reflects; null when no demo of the match has a timeline. */
+  getDemoStats: (logId: number) => invoke<MatchDemoStats | null>("get_demo_stats", { logId }),
   /** Null for a match with no cart to read (Q11). */
   getCart: (logId: number, map?: string) => invoke<CartView | null>("get_cart", { logId, map: map ?? null }),
   /** Q29: one season's division tables; the newest when no season is given. */

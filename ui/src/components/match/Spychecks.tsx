@@ -122,7 +122,7 @@ function SpyList({ title, rows, most }: { title: string; rows: Row[]; most: numb
   );
 }
 
-function Name({ name, team, isMe }: { name: string; team: Team | null; isMe: boolean }) {
+export function Name({ name, team, isMe }: { name: string; team: Team | null; isMe: boolean }) {
   return (
     <span className="spy-name">
       {team && <span className={`spy-team spy-team-${team.toLowerCase()}`}>{teamLabel(team)}</span>}

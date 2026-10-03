@@ -477,6 +477,9 @@ mod tests {
             health: None,
             building: false,
             sapped: false,
+            by: None,
+            what: None,
+            vel: None,
         };
         let mut objects = vec![cart(0, 0)];
         // Rolling 50 units a second from 10 s to 20 s, then parked beside
