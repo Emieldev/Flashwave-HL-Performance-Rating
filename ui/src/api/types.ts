@@ -249,6 +249,8 @@ export interface PlayerSeason {
   won: number;
   lost: number;
   place: number | null;
+  /** Only ever a merc for this team that season. */
+  merc?: boolean;
 }
 
 export interface Medal {

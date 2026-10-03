@@ -60,6 +60,8 @@ pub struct PlayerSeason {
     pub lost: u32,
     /// 1, 2 or 3 when the team took a medal that season.
     pub place: Option<u8>,
+    /// Only ever a merc for this team that season: not on its roster.
+    pub merc: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -187,6 +189,8 @@ pub struct Catalogue {
     tiers: HashMap<(i64, String), i64>,
     tier_by_name: HashMap<String, i64>,
     newest_season: i64,
+    /// `(match, account)`: played as a merc, for a team they were not on.
+    mercs: std::collections::HashSet<(i64, u32)>,
 }
 
 /// The rounds a medal is read from.
@@ -225,7 +229,8 @@ impl Catalogue {
         let tier_by_name = votes.into_iter().filter_map(|(d, v)| Some((d, v.into_iter().max_by_key(|(_, n)| *n)?.0))).collect();
         // The newest numbered season: 134 (AFA 2025) is older than 35.
         let newest_season = matches.values().map(|m| m.season).filter(|s| *s < crate::leagues::OFF_SEASON).max().unwrap_or(0);
-        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season })
+        let mercs = db.catalogue_mercs().await?.into_iter().collect();
+        Ok(Catalogue { matches, rosters, teams: db.etf2l_teams().await?, tiers, tier_by_name, newest_season, mercs })
     }
 
     fn team(&self, id: i64) -> Team {
@@ -579,11 +584,18 @@ impl Catalogue {
         let mut officials: Vec<Official> = Vec::new();
         // (season, team) -> (division counts, played, won, lost)
         let mut seasons: HashMap<(i64, i64), (HashMap<(String, Option<i64>), u32>, u32, u32, u32)> = HashMap::new();
+        // (season, team) they were on the roster for -- not only a merc in.
+        // A team's medal is its roster's (twatter: three medals from one
+        // sub appearance each for other teams).
+        let mut rostered: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
         for (match_id, roster) in &self.rosters {
             let Some(&(_, Some(team), _)) = roster.iter().find(|(a, _, _)| *a == account) else { continue };
             let Some(m) = self.matches.get(match_id) else { continue };
             if !Self::played(m) {
                 continue;
+            }
+            if !self.mercs.contains(&(*match_id, account)) {
+                rostered.insert((m.season, team));
             }
             let (division, tier) = self.division_of(m);
             let (f, a, won) = Self::result_for(m, team);
@@ -630,7 +642,7 @@ impl Catalogue {
             .map(|((season, team), (divs, played, won, lost))| {
                 // The division they played most for this team that season.
                 let ((division, tier), _) = divs.into_iter().max_by_key(|(_, n)| *n).unwrap_or(((String::new(), None), 0));
-                let place = medals.iter().filter(|((s, _), _)| *s == season).find_map(|((_, d), list)| {
+                let place = medals.iter().filter(|((s, _), _)| *s == season && rostered.contains(&(season, team))).find_map(|((_, d), list)| {
                     list.iter().find(|(_, t, _)| *t == team).map(|(p, _, how)| (*p, d.clone(), how.clone()))
                 });
                 if let Some((p, d, how)) = &place {
@@ -644,7 +656,8 @@ impl Catalogue {
                         how: how.clone(),
                     });
                 }
-                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0) }
+                let merc = !rostered.contains(&(season, team));
+                PlayerSeason { season, season_name: season_name(season), division, tier, team: self.team(team), played, won, lost, place: place.map(|p| p.0), merc }
             })
             .collect();
         out.sort_by(|a, b| season_order(b.season).cmp(&season_order(a.season)).then(b.played.cmp(&a.played)));
@@ -1376,6 +1389,24 @@ mod tests {
     }
 
     #[test]
+    fn a_merc_does_not_take_home_the_teams_medal() {
+        // Team 11 wins the final; account 500 played one official for it as
+        // a merc, account 11 is on its roster.
+        let mut c = cat(vec![
+            m(1, 33, "regular", Some("Open"), "Open", Some("Week 1"), 11, 12, 6, 0),
+            m(3, 33, "Playoffs", None, "Open", Some("Grand Final"), 11, 13, 6, 0),
+        ]);
+        c.rosters.get_mut(&1).unwrap().push((500, Some(11), "merc".into()));
+        c.mercs.insert((1, 500));
+        let medals = c.medals();
+        let (_, won, _) = c.player(11, &medals);
+        assert_eq!(won.len(), 1, "the roster's medal");
+        let (_, won, officials) = c.player(500, &medals);
+        assert!(won.is_empty(), "no medal for a merc appearance");
+        assert_eq!(officials.len(), 1, "but the official is theirs");
+    }
+
+    #[test]
     fn every_way_etf2l_named_a_playoff_round_is_read() {
         use RoundKind::*;
         for (r, k) in [
@@ -1438,7 +1469,7 @@ mod tests {
             }
         }
         let tiers = matches.iter().filter_map(|x| Some(((x.season, x.division.clone()?), x.tier?))).collect();
-        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new() }
+        Catalogue { newest_season: matches.iter().map(|x| x.season).max().unwrap_or(0), matches: matches.into_iter().map(|x| (x.match_id, x)).collect(), rosters, teams: HashMap::new(), tiers, tier_by_name: HashMap::new(), mercs: Default::default() }
     }
 
     #[test]
