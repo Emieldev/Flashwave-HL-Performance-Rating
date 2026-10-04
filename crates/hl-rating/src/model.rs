@@ -33,7 +33,9 @@ use std::collections::HashMap;
 /// class, 3,900 of them ETF2L officials.
 /// v10: the Spy reweighted with the Spy mains: medic picks up, caps and
 /// backstabs out.
-pub const MODEL_VERSION: &str = "v10";
+/// v11: the cap's respawn cost out of every class; Medic ubers, Heavy kills
+/// in context and Spy deaths out (the class-by-class review).
+pub const MODEL_VERSION: &str = "v11";
 
 /// How far one standard deviation moves the rating.
 ///

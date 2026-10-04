@@ -640,6 +640,8 @@ export interface PlayerRow {
   cpc: number;
   /** Health packs picked up. */
   medkits: number;
+  /** Seconds of respawn this player's caps cost their own dead (v11: shown, not rated). */
+  spawnDelayS?: number | null;
   rating: Rating | null;
   isMe: boolean;
 }
