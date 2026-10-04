@@ -105,6 +105,7 @@ COMMANDS:
                            ETF2L transfers: a team's roster history, a player's
                            teams with dates, read every team's (medal winners
                            first), and the medals withheld for leaving early
+    reread <LOG_ID>        Read one match again: its demos, then aim and fights
     teammates [--all] [--json]
                            Your teams and regular teammates (officials and scrims unless --all)
     profile [CLASS] [--official|--scrim|--pug] [--json]
@@ -1173,6 +1174,17 @@ async fn run() -> Result<()> {
             let me = db.get_me().await?;
             let got = hl_ingest::demo_import::link_to_log(&db, std::path::Path::new(&tf), std::path::Path::new(path), log_id.parse()?, me, |s| eprintln!("  {s}")).await?;
             println!("linked {} (demo {}): {} of {} log kills line up, {} players in both", got.file_name, got.demo_id, got.kills_matched, got.log_kills, got.players_shared);
+            Ok(())
+        }
+
+        ["reread", log_id] => {
+            // One match read again with this version: its demos from their
+            // files, then aim and fights, as the match page's button does.
+            // On a copy, with --db.
+            let db = Db::connect(&db_path).await?;
+            let me = db.get_me().await?;
+            let r = hl_ingest::demo_import::reread_log(&db, me, log_id.parse()?, |s| eprintln!("  {s}")).await?;
+            println!("read again: {} demo(s), {} missing; aim {}, fights {}", r.demos, r.missing, r.aim, r.fights);
             Ok(())
         }
 

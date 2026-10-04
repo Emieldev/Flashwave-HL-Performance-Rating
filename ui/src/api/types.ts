@@ -1072,6 +1072,16 @@ export interface OfficialInfo {
 }
 
 /** Both teams of a classified match, for the match header. */
+/** What reading a match again did. */
+export interface ReRead {
+  /** Demos read again from their files. */
+  demos: number;
+  /** Linked demos whose file is gone; what was read from them is kept. */
+  missing: number;
+  fights: boolean;
+  aim: boolean;
+}
+
 export interface MatchSides {
   /** Your side. */
   team: SideTeam | null;

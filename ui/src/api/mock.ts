@@ -32,6 +32,7 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  ReRead,
   Fixture,
   NewLogs,
   MatchSides,
@@ -282,6 +283,8 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
 });
 
 let newestLooks = 0;
+
+let rereadListeners: Array<(s: { logId: number; step: string }) => void> = [];
 
 const MOCK_HITS: CatalogueHit[] = [
   { accountId: 139131191, name: "Flashy", highest: { name: "Mid", tier: 2 }, mainClass: "sniper", medals: [1, 0, 0], officials: 25, lastSeen: 1_790_532_000 },
@@ -1114,6 +1117,19 @@ export const mockApi: Api = {
     return delay<PositionsView | null>({ map: f.map, zones: f.zones.length, draft: f.draft, players });
   },
 
+  rereadMatch: async () => {
+    for (const step of ["Reading the demo", "Reading the demo", "Reading aim from the demo", "Reading the server log"]) {
+      rereadListeners.forEach((h) => h({ logId: 0, step }));
+      await delay(null, 700);
+    }
+    return { demos: 2, missing: 0, aim: true, fights: true } satisfies ReRead;
+  },
+  onRereadStep: async (h: (s: { logId: number; step: string }) => void) => {
+    rereadListeners.push(h);
+    return () => {
+      rereadListeners = rereadListeners.filter((x) => x !== h);
+    };
+  },
   linkDemo: (_logId: number, path: string) =>
     delay<DemoLinked>(
       { demoId: 99, fileName: path.split(/[\\/]/).pop() ?? path, stv: true, killsMatched: 241, logKills: 262, playersShared: 18, path },

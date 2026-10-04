@@ -34,6 +34,7 @@ import type {
   StvProgress,
   SyncDone,
   Teammates,
+  ReRead,
   MatchSides,
   TfPathInfo,
   Owner,
@@ -286,6 +287,10 @@ const realApi = {
   importDemo: (path: string) => invoke<DemoImported>("import_demo", { path }),
   /** A demo dropped on a match page, linked to that match once it checks out. */
   linkDemo: (logId: number, path: string) => invoke<DemoLinked>("link_demo", { logId, path }),
+  rereadMatch: (logId: number) => invoke<ReRead>("reread_match", { logId }),
+  /** Each step of a match being read again, as it starts. */
+  onRereadStep: async (h: (s: { logId: number; step: string }) => void): Promise<UnlistenFn> =>
+    listen<{ logId: number; step: string }>("reread://step", (e) => h(e.payload)),
 
   /** STV download events. Returns a function that unsubscribes all three. */
   onStv: async (h: StvHandlers): Promise<UnlistenFn> => {

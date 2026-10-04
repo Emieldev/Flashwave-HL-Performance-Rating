@@ -1251,6 +1251,19 @@ pub async fn link_demo(state: State<'_, AppState>, log_id: i64, path: String) ->
     }
 }
 
+/// Read one match again with this version: its demos from their files, then
+/// aim and fights. Holds the sync's turn, as linking a demo does.
+#[tauri::command]
+pub async fn reread_match(app: AppHandle, state: State<'_, AppState>, log_id: i64) -> CmdResult<hl_ingest::demo_import::ReRead> {
+    let _guard = BusyGuard::acquire(&state.busy).ok_or_else(|| CmdError::new("busy", "A sync is running; read the match again when it has finished."))?;
+    let me = state.db.get_me().await?;
+    // Each step as it starts: an STV takes a while, and the button says which.
+    let step = |what: &'static str| {
+        let _ = app.emit("reread://step", serde_json::json!({ "logId": log_id, "step": what }));
+    };
+    Ok(hl_ingest::demo_import::reread_log(&state.db, me, log_id, step).await?)
+}
+
 /// Q18: a match from a demo alone, for a server that wrote no log. Runs the
 /// passes a sync would for it, so it holds the sync's turn while it does.
 #[tauri::command]
