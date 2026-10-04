@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { LeagueSamplePanel } from "./LeagueSamplePanel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -6,6 +6,8 @@ import { api, inTauri } from "../api/client";
 import { errorMessage, type AppStatus, type Cleaned, type DemoIndexSummary } from "../api/types";
 import { formatDate } from "../lib/format";
 import { HistoryPanel } from "./HistoryPanel";
+import { SettingsContext, SettingsSection } from "./settings/SettingsSection";
+import { SettingsIcon, type IconName } from "./settings/icons";
 import { MapsPanel } from "./MapsPanel";
 import { ImportPanel } from "./ImportPanel";
 import { startRebuild, useSyncStatus } from "../lib/sync";
@@ -17,6 +19,9 @@ import { checkForUpdate, installUpdate, restartNow, useUpdate } from "../lib/upd
 import { RELEASES } from "../lib/changelog";
 import { Markdown } from "./Markdown";
 import { clearProblems, markProblemsSeen, report, useProblems } from "../lib/problems";
+
+/** The groups of Settings, in order, for the side menu and the page. */
+type Group = { id: string; title: string; sections: { id: string; title: string; icon: IconName }[] };
 
 export function Settings({
   status,
@@ -30,65 +35,244 @@ export function Settings({
   const sync = useSyncStatus();
   const busy = sync.state === "running";
 
+  // Flashy's UX pass: a search, a side menu, and sections that fold.
+  const [query, setQuery] = useState("");
+  const [foldAll, setFoldAll] = useState({ n: 0, closed: false });
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
+  const [matched, setMatched] = useState<Record<string, boolean>>({});
+  const report = useCallback((id: string, m: boolean) => setMatched((x) => (x[id] === m ? x : { ...x, [id]: m })), []);
+  const shared = useMemo(() => ({ query, foldAll, report, focus }), [query, foldAll, report, focus]);
+
+  const groups: Group[] = [
+    {
+      id: "general",
+      title: t("General"),
+      sections: [
+        { id: "updates", title: tr("Updates"), icon: "update" },
+        { id: "language", title: t("Language"), icon: "globe" },
+        { id: "names", title: tr("Player names"), icon: "user" },
+        { id: "theme", title: t("Theme"), icon: "palette" },
+        { id: "problems", title: t("Problems"), icon: "alert" },
+      ],
+    },
+    {
+      id: "matches",
+      title: t("Matches and data"),
+      sections: [
+        { id: "history", title: t("How far back"), icon: "clock" },
+        { id: "import", title: t("Logs that didn't import"), icon: "fileX" },
+        { id: "etf2l", title: t("ETF2L and match types"), icon: "shield" },
+        { id: "rawlogs", title: t("Raw logs"), icon: "list" },
+        { id: "maps", title: t("Maps"), icon: "map" },
+      ],
+    },
+    {
+      id: "demos",
+      title: t("Demos"),
+      sections: [
+        { id: "demos", title: t("Demos"), icon: "film" },
+        { id: "downloaded", title: t("Downloaded demos"), icon: "drive" },
+      ],
+    },
+    {
+      id: "storage",
+      title: t("Your data"),
+      sections: [
+        { id: "setup", title: t("Setup"), icon: "gear" },
+        { id: "data", title: t("Data"), icon: "database" },
+        { id: "backups", title: t("Backups"), icon: "archive" },
+      ],
+    },
+    { id: "about", title: t("About"), sections: [{ id: "changelog", title: tr("Changelog"), icon: "scroll" }] },
+    ...(import.meta.env.DEV ? [{ id: "dev", title: t("Developer"), sections: [{ id: "league", title: t("League sample"), icon: "network" as IconName }] }] : []),
+  ];
+  const nothing = query.trim() !== "" && Object.values(matched).every((m) => !m);
+  // A group's heading only while one of its sections is showing.
+  const shows = (gid: string) => query.trim() === "" || (groups.find((g) => g.id === gid)?.sections.some((x) => matched[x.id] !== false) ?? true);
+
   return (
-    <div className="content">
-      <UpdatesPanel version={status.version} />
-      <ProblemsPanel version={status.version} />
-      <LanguagePanel />
-      <NamesPanel />
-      <MapsPanel />
-      <ThemePanel />
-      <HistoryPanel />
-      <ImportPanel />
-      <Etf2lPanel />
-      {/* The mass log downloader: the developer's tool, dev builds only. */}
-      {import.meta.env.DEV && <LeagueSamplePanel />}
-      <RawlogPanel />
-      <DemosPanel />
-      <DownloadedDemosPanel />
-      <div className="panel">
-        <h2>{t("Setup")}</h2>
-        <dl className="kv" style={{ marginTop: 14 }}>
-          <dt>{tr("SteamID")}</dt>
-          <dd>
-            <code>{status.config.steamid}</code>
-          </dd>
-          <dt>{tr("TF2 folder")}</dt>
-          <dd>
-            {status.config.tfPath ? (
-              <code>{status.config.tfPath}</code>
-            ) : (
-              <span className="muted">{tr("Not set: demo jumps and downloads are off. Everything else works.")}</span>
+    <SettingsContext.Provider value={shared}>
+      <div className="content settings-page">
+        <header className="settings-top">
+          <h1>{t("Settings")}</h1>
+          <label className="settings-search">
+            <SettingsIcon name="search" />
+            <input
+              type="search"
+              value={query}
+              placeholder={t("Search settings")}
+              aria-label={t("Search settings")}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+            />
+          </label>
+          <div className="settings-fold">
+            <button className="linkish" onClick={() => setFoldAll((f) => ({ n: f.n + 1, closed: true }))}>
+              {t("Collapse all")}
+            </button>
+            <button className="linkish" onClick={() => setFoldAll((f) => ({ n: f.n + 1, closed: false }))}>
+              {t("Expand all")}
+            </button>
+          </div>
+        </header>
+
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label={t("Settings sections")}>
+            {groups.map((g) => (
+              <div key={g.id} className="settings-nav-group">
+                <span className="settings-nav-title">{g.title}</span>
+                {g.sections.map((x) => (
+                  <button key={x.id} className={matched[x.id] === false ? "settings-nav-item dim" : "settings-nav-item"} onClick={() => setFocus((f) => ({ id: x.id, n: (f?.n ?? 0) + 1 }))}>
+                    <SettingsIcon name={x.icon} size={16} />
+                    <span>{x.title}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
+
+          <div className="settings-main">
+            {nothing && <p className="hint settings-none">{t("No setting matches “{0}”.", { "0": query.trim() })}</p>}
+
+            {shows("general") && <h2 className="settings-group">{t("General")}</h2>}
+            <SettingsSection id="updates" icon="update" title={tr("Updates")} keywords="version release github install"
+              summary={tr("Version {version}; checked at every start", { version: status.version })}
+              info={t("The app asks GitHub for a newer release once when it starts. Installing downloads it and asks you to restart: nothing is swapped while the app has your database open.")}>
+              <UpdatesPanel version={status.version} />
+            </SettingsSection>
+            <SettingsSection id="language" icon="globe" title={t("Language")} keywords="language translation lang"
+              summary={t("The app's language, and its translation files")}
+              info={t("Translations other than English are drafts until a native speaker checks them; anything untranslated shows in English. Each language is a plain .lang file: fix a line, press Reload, and send the file on Discord to share it.")}>
+              <LanguagePanel />
+            </SettingsSection>
+            <SettingsSection id="names" icon="user" title={tr("Player names")} keywords="names etf2l alias"
+              summary={t("Names as in the log, or as on ETF2L")}
+              info={t("ETF2L names come from the official rosters already read, so they cost no requests. Anyone who never played an official keeps the name from the log.")}>
+              <NamesPanel />
+            </SettingsSection>
+            <SettingsSection id="theme" icon="palette" title={t("Theme")} keywords="theme colours dark"
+              summary={t("The app's colours")}>
+              <ThemePanel />
+            </SettingsSection>
+            <SettingsSection id="problems" icon="alert" title={t("Problems")} keywords="errors bug report discord"
+              summary={t("What went wrong since the app started")}
+              info={t("Failed downloads, unreadable files and the like, since you opened the app. Copy the report into Discord when asking for help.")}>
+              <ProblemsPanel version={status.version} />
+            </SettingsSection>
+
+            {shows("matches") && <h2 className="settings-group">{t("Matches and data")}</h2>}
+            <SettingsSection id="history" icon="clock" title={t("How far back")} keywords="history years old scrims pugs"
+              summary={t("Which of your older matches are downloaded")}
+              info={t("Officials always count, however old. Older scrims and pugs are only listed: they cost nothing until you open one.")}>
+              <HistoryPanel />
+            </SettingsSection>
+            <SettingsSection id="import" icon="fileX" title={t("Logs that didn't import")} keywords="failed import log add logs.tf"
+              summary={t("Logs that failed, and adding one by hand")}
+              info={t("A log that could not be downloaded or read is listed here with the reason. Paste a log id or logs.tf link to fetch one right away.")}>
+              <ImportPanel />
+            </SettingsSection>
+            <SettingsSection id="etf2l" icon="shield" title={t("ETF2L and match types")} keywords="etf2l official scrim pug"
+              summary={t("Your officials, and how each match is sorted")} hideIntro
+              info={t("Read on every sync. Each Highlander match is then an official (on ETF2L), a scrim (most of your side are your regular teammates or roster) or a pug.")}>
+              <Etf2lPanel />
+            </SettingsSection>
+            <SettingsSection id="rawlogs" icon="list" title={t("Raw logs")} keywords="server log kills positions"
+              summary={t("Every kill, with its time, classes and positions")} hideIntro
+              info={t("The server log behind each logs.tf page. With it each kill is valued on its own: by the victim's class, the map, and whether they were defending. Read on every sync.")}>
+              <RawlogPanel />
+            </SettingsSection>
+            <SettingsSection id="maps" icon="map" title={t("Maps")} keywords="maps images callouts overview"
+              summary={t("Map images and callouts for the kill maps")} hideIntro
+              info={t("The default top-down images are more.tf's. Import your own for any map and line it up; callouts export as a file to share, and a .callouts.json dropped on the window imports.")}>
+              <MapsPanel />
+            </SettingsSection>
+
+            {shows("demos") && <h2 className="settings-group">{t("Demos")}</h2>}
+            <SettingsSection id="demos" icon="film" title={t("Demos")} keywords="demos folder archive stv pov"
+              summary={t("Where your demos are found, and how they link")} hideIntro
+              info={t("Demos in tf, tf/demos and tf/demos/stv, and in any other folders you add, are matched to their logs by map and time.")}>
+              <DemosPanel />
+            </SettingsSection>
+            <SettingsSection id="downloaded" icon="drive" title={t("Downloaded demos")} keywords="downloaded delete space stv"
+              summary={t("SourceTV demos the app fetched, and clearing them")} hideIntro
+              info={t("Each is read once; after that it only takes space and can be downloaded again any time. Your own recordings are never touched.")}>
+              <DownloadedDemosPanel />
+            </SettingsSection>
+
+            {shows("storage") && <h2 className="settings-group">{t("Your data")}</h2>}
+            <SettingsSection id="setup" icon="gear" title={t("Setup")} keywords="steamid tf2 folder path"
+              summary={t("Your SteamID and TF2 folder")}
+              info={t("The TF2 folder is what demo jumps and downloads need; everything else works without it.")}>
+              <div className="panel">
+                <h2>{t("Setup")}</h2>
+                <dl className="kv" style={{ marginTop: 14 }}>
+                  <dt>{tr("SteamID")}</dt>
+                  <dd>
+                    <code>{status.config.steamid}</code>
+                  </dd>
+                  <dt>{tr("TF2 folder")}</dt>
+                  <dd>
+                    {status.config.tfPath ? (
+                      <code>{status.config.tfPath}</code>
+                    ) : (
+                      <span className="muted">{tr("Not set: demo jumps and downloads are off. Everything else works.")}</span>
+                    )}
+                  </dd>
+                </dl>
+                <button className="linkish" style={{ marginTop: 14 }} onClick={onReconfigure}>{tr("Change these")}</button>
+              </div>
+            </SettingsSection>
+            <SettingsSection id="data" icon="database" title={t("Data")} keywords="rebuild database reprocess"
+              summary={t("Rebuild every match from what is stored")}
+              info={t("Works everything out again from the logs already stored, without downloading anything. Worth running after an update that changes how matches are read.")}>
+              <div className="panel">
+                <h2>{t("Data")}</h2>
+                <div className="row" style={{ marginTop: 4 }}>
+                  <button onClick={() => void startRebuild()} disabled={busy}>
+                    {busy ? tr("Working…") : tr("Rebuild from stored data")}
+                  </button>
+                </div>
+                <dl className="kv" style={{ marginTop: 16 }}>
+                  <dt>{tr("Database")}</dt>
+                  <dd className="path-row">
+                    <code>{status.dbPath}</code>
+                    {/* Every log, rating and demo link is in this one file, and it is
+                        the only thing here that cannot be fetched again. */}
+                    <button className="linkish" onClick={() => void api.revealPath(status.dbPath)}>{tr("Show in Explorer")}</button>
+                  </dd>
+                  <dt>{tr("Version")}</dt>
+                  <dd>{status.version}</dd>
+                </dl>
+              </div>
+            </SettingsSection>
+            <SettingsSection id="backups" icon="archive" title={t("Backups")} keywords="backup restore copy database"
+              summary={t("Copies of your database, taken before every sync")} hideIntro
+              info={t("The newest five are kept beside the database. To restore one, close the app and rename it over hl.sqlite3. Uninstalling can delete them, so keep a copy on another drive too.")}>
+              <BackupsPanel />
+            </SettingsSection>
+
+            {shows("about") && <h2 className="settings-group">{t("About")}</h2>}
+            <SettingsSection id="changelog" icon="scroll" title={tr("Changelog")} keywords="changelog release notes version"
+              summary={t("What changed in each release")} hideIntro
+              info={t("Newest first. The notes are in English.")}>
+              <ChangelogPanel />
+            </SettingsSection>
+
+            {/* The mass log downloader: the developer's tool, dev builds only. */}
+            {import.meta.env.DEV && (
+              <>
+                {shows("dev") && <h2 className="settings-group">{t("Developer")}</h2>}
+                <SettingsSection id="league" icon="network" title={t("League sample")} keywords="league sample downloader"
+                  summary={t("Every ETF2L official, downloaded in the background")} hideIntro
+                  info={t("Every ETF2L Highlander official of the last six years, playoffs and cups included, downloaded slowly while the app is open and kept apart from your own matches. It lets ratings be read against the whole league.")}>
+                  <LeagueSamplePanel />
+                </SettingsSection>
+              </>
             )}
-          </dd>
-        </dl>
-        <button className="linkish" style={{ marginTop: 14 }} onClick={onReconfigure}>{tr("Change these")}</button>
-      </div>
-
-      <div className="panel">
-        <h2>{t("Data")}</h2>
-        <p className="hint" style={{ marginTop: 6 }}>{tr("Rebuilds every match from stored logs. No downloading.")}</p>
-        <div className="row" style={{ marginTop: 14 }}>
-          <button onClick={() => void startRebuild()} disabled={busy}>
-            {busy ? tr("Working…") : tr("Rebuild from stored data")}
-          </button>
+          </div>
         </div>
-        <dl className="kv" style={{ marginTop: 16 }}>
-          <dt>{tr("Database")}</dt>
-          <dd className="path-row">
-            <code>{status.dbPath}</code>
-            {/* Every log, rating and demo link is in this one file, and it is
-                the only thing here that cannot be fetched again. */}
-            <button className="linkish" onClick={() => void api.revealPath(status.dbPath)}>{tr("Show in Explorer")}</button>
-          </dd>
-          <dt>{tr("Version")}</dt>
-          <dd>{status.version}</dd>
-        </dl>
       </div>
-
-      <BackupsPanel />
-      <ChangelogPanel />
-    </div>
+    </SettingsContext.Provider>
   );
 }
 
@@ -306,7 +490,7 @@ function LanguagePanel() {
 
       <h3 style={{ marginTop: 18 }}>{tr("Translation files")}</h3>
       <p className="hint" style={{ marginTop: 6 }}>
-        {tr("Every language is a plain .lang file. Fix a line or translate a new one, press Reload to see it here, and send the file on Discord to have it included for everyone.")}
+        {tr("Fix a line or start a new language, then press Reload to see it.")}
       </p>
       <div className="row" style={{ marginTop: 10, gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => void edit()} disabled={busy}>
@@ -358,10 +542,7 @@ function NamesPanel() {
           {tr("ETF2L names")}
         </button>
       </div>
-      <p className="hint" style={{ marginTop: 8 }}>
-        {tr("ETF2L names come from the official rosters the app has already read, so they cost no extra requests. Players who never played an ETF2L official keep the name from the log.")}{" "}
-        {tr("{n} players have an ETF2L name.", { n: count.toLocaleString() })}
-      </p>
+      <p className="hint" style={{ marginTop: 8 }}>{tr("{n} players have an ETF2L name.", { n: count.toLocaleString() })}</p>
     </div>
   );
 }
