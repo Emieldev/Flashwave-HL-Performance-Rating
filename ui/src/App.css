@@ -1710,7 +1710,7 @@ th .sort.active {
 }
 
 /* ---- Settings: search, side menu, folding sections (Flashy's UX pass) ---- */
-.settings-page { max-width: 1180px; }
+.settings-page { max-width: 1440px; }
 .settings-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .settings-top h1 { margin: 0; font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.03em; font-size: 1.6rem; }
 .settings-search {
@@ -1721,7 +1721,7 @@ th .sort.active {
 .settings-search input { flex: 1; border: 0; background: transparent; color: var(--text); padding: 9px 0; font: inherit; outline: none; }
 .settings-fold { display: flex; gap: 14px; margin-left: auto; font-size: 0.85rem; }
 
-.settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 22px; align-items: start; }
+.settings-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 20px; align-items: start; }
 .settings-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 120px); overflow-y: auto; }
 .settings-nav-group { display: flex; flex-direction: column; gap: 2px; }
 .settings-nav-title { font: 700 0.72rem var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 0 8px 4px; }
@@ -1771,14 +1771,14 @@ th .sort.active {
   padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45); font-size: 0.82rem; line-height: 1.45; color: var(--text); text-transform: none;
 }
-.set-body { padding: 0 16px 16px 60px; }
+/* The full width under the header: the Maps and League sample tables need it. */
+.set-body { padding: 2px 18px 18px; }
 .set-body[hidden] { display: none; }
 /* The panel inside keeps its controls; this section's header replaces its own. */
-.set-body > .panel { border: 0; background: none; box-shadow: none; padding: 0; margin: 0; }
+.set-body > .panel { border: 0; background: none; box-shadow: none; padding: 0; margin: 0; min-width: 0; overflow-x: auto; }
 .set-body > .panel > h2:first-child { display: none; }
 .set-section.hide-intro .set-body > .panel > h2:first-child + p.hint { display: none; }
 .set-body > .panel > :nth-child(2) { margin-top: 0 !important; }
 @media (max-width: 700px) {
-  .set-body { padding-left: 16px; }
   .set-summary { white-space: normal; }
 }
