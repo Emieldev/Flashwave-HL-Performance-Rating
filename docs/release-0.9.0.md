@@ -113,8 +113,8 @@ league that ships inside the app is rated with v11 too.
 **SHA-256**
 
 ```
-TODO-fill-from-the-build  Flashwave.tf_0.9.0_x64-setup.exe
-TODO-fill-from-the-build  Flashwave.tf_0.9.0_x64_en-US.msi
+9353854E135BE9B77CA479E97A8B6FE9A294F9D6EE5358F393DE3DECFA488E65  Flashwave.tf_0.9.0_x64-setup.exe
+1DF460DE9FEFE402AF3ADC3F166CCA77A710CE2ACB868E520FAF8AEFACADB596  Flashwave.tf_0.9.0_x64_en-US.msi
 ```
 
 The Linux files are built on GitHub; their hashes are on the release page
