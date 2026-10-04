@@ -205,6 +205,30 @@ impl Sources {
         Ok(first(&body, "logid")?.map(|id| (id, "trends.tf")))
     }
 
+    /// Logs every one of these players is in, newest first, as logs.tf lists
+    /// them: `(id, title, map, date, players)`.
+    pub async fn logstf_with_players(&self, steamid64s: &[String], limit: u32) -> Result<Vec<(i64, String, String, i64, i64)>> {
+        let players = steamid64s.join(",");
+        let limit = limit.to_string();
+        let search = url("https://logs.tf/api/v1/log", [("player", players.as_str()), ("limit", limit.as_str())]);
+        let body = self.logstf_gated(self.logstf.get_text(&search)).await?;
+        let v: Value = serde_json::from_str(&body).context("parsing logs.tf's search")?;
+        Ok(v["logs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| {
+                Some((
+                    l["id"].as_i64()?,
+                    l["title"].as_str().unwrap_or("").to_string(),
+                    l["map"].as_str().unwrap_or("").to_string(),
+                    l["date"].as_i64()?,
+                    l["players"].as_i64().unwrap_or(0),
+                ))
+            })
+            .collect())
+    }
+
     /// The player's most recent logs, newest first: `(log id, Highlander)`.
     /// logs.tf counts a log's players (16 to 22 is a Highlander match, with
     /// its stand-ins and swaps); trends.tf, asked while logs.tf refuses us,

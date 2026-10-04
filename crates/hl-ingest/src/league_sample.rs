@@ -236,12 +236,68 @@ pub enum Step {
     Json { log_id: i64, source: &'static str },
     Raw { log_id: i64, found: bool },
     Roster { match_id: i64 },
+    /// A played official trends.tf linked no log to, searched for on logs.tf.
+    Searched { match_id: i64, found: usize },
     /// logs.tf is refusing us and there is nothing more.tf can do meanwhile.
     Waiting,
     /// Everything picked is here; nothing to do until the next discovery.
     Done,
     /// A request failed in a way worth backing off from.
     Failed { what: String },
+}
+
+/// How long after an official its logs are looked for: a day, for uploads.
+const SEARCH_AFTER_S: i64 = 24 * 3600;
+/// How far from ETF2L's time a log may be and still be the match's.
+const SEARCH_WINDOW_S: i64 = 36 * 3600;
+
+/// The logs of an official that trends.tf never linked: logs.tf's logs with
+/// a rostered player of each team in them, Highlander-sized, on a real map,
+/// within a day and a half of the match. Stored and picked like trends.tf's;
+/// the search is remembered either way, so it is made once.
+pub async fn search_match_logs(db: &Db, sources: &Sources, match_id: i64, time: i64, a: u32, b: u32) -> Result<usize> {
+    let ids = [hl_core::SteamId::from_account_id(a).to_steamid64(), hl_core::SteamId::from_account_id(b).to_steamid64()];
+    let logs = sources.logstf_with_players(&ids, 40).await?;
+    let found = matching_logs(&logs, time);
+    let rows: Vec<LeagueLogRow> = found
+        .iter()
+        .map(|(id, title, map, date, _)| LeagueLogRow { log_id: *id, etf2l_match_id: match_id, map: map.as_str(), played_at: *date, duration_s: None, title: Some(title.as_str()) })
+        .collect();
+    db.upsert_league_logs(&rows).await?;
+    db.pick_league_logs(&found.iter().map(|l| l.0).collect::<Vec<_>>()).await?;
+    let note = serde_json::json!({ "found": found.iter().map(|l| l.0).collect::<Vec<_>>(), "players": ids }).to_string();
+    db.store_etf2l_raw("log_search", match_id, &note).await?;
+    Ok(found.len())
+}
+
+/// Which of logs.tf's results are the match's: Highlander-sized (16 to 22
+/// players), on one real map (a combined log is left to its parts), within
+/// [`SEARCH_WINDOW_S`] of the match.
+///
+/// A player's own re-upload of both halves sits beside the server's two
+/// ("pollos vs mnht w4" beside serveme's RED vs BLU and BLU vs RED), and
+/// would count the map twice. So per map at most one log a half -- two on
+/// a stopwatch map, one on king of the hill -- the server's own uploads
+/// first.
+fn matching_logs(logs: &[(i64, String, String, i64, i64)], time: i64) -> Vec<(i64, String, String, i64, i64)> {
+    let near: Vec<&(i64, String, String, i64, i64)> =
+        logs.iter().filter(|(_, _, map, date, players)| (16..=22).contains(players) && played_map(map) && (date - time).abs() <= SEARCH_WINDOW_S).collect();
+    let auto = |title: &str| {
+        let t = title.to_ascii_lowercase();
+        ["serveme.tf", "tf2center", "quickserver", "red vs blu", "blu vs red"].iter().any(|x| t.contains(x))
+    };
+    let mut by_map: BTreeMap<String, Vec<&(i64, String, String, i64, i64)>> = BTreeMap::new();
+    for l in near {
+        by_map.entry(hl_core::maps::map_name(&l.2)).or_default().push(l);
+    }
+    let mut out = Vec::new();
+    for (map, mut group) in by_map {
+        group.sort_by_key(|l| (!auto(&l.1), std::cmp::Reverse(l.3)));
+        let halves = if map.starts_with("koth_") { 1 } else { 2 };
+        out.extend(group.into_iter().take(halves).cloned());
+    }
+    out.sort_by_key(|l| std::cmp::Reverse(l.3));
+    out
 }
 
 /// Do one unit of work. The caller waits between calls: this is the pace.
@@ -268,6 +324,16 @@ pub async fn step(db: &Db, sources: &Sources, mut doing: impl FnMut(&str) + Send
     }
 
     if !sources.logstf_resting() {
+        // An official trends.tf linked nothing to: look on logs.tf itself
+        // (Flashy: S36 Premiership's Snipers went unranked for want of them).
+        let since = now() - MAX_YEARS * YEAR_S;
+        if let Some(&(match_id, time, a, b)) = db.league_matches_without_logs(since, now() - SEARCH_AFTER_S, 1).await?.first() {
+            doing(&format!("Looking on logs.tf for the logs of ETF2L match {match_id}"));
+            return Ok(match search_match_logs(db, sources, match_id, time, a as u32, b as u32).await {
+                Ok(found) => Step::Searched { match_id, found },
+                Err(e) => Step::Failed { what: format!("logs.tf search for match {match_id}: {e:#}") },
+            });
+        }
         // logs.tf: JSON first, then more.tf's stand-ins again, then raw logs.
         let json = db.league_json_todo(1, true, MAX_JSON_ATTEMPTS).await?.first().copied();
         if let Some(log_id) = json {
@@ -407,6 +473,40 @@ pub async fn status(db: &Db, sources: &Sources) -> Result<Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_officials_logs_are_the_per_map_ones_near_it() {
+        // ETF2L match 92955, ChudsX6 vs TWICE, 20 Sept 2026: logs.tf's search
+        // for a player of each team (the combined log, a 6v6 log, and one a
+        // week later are not the match's).
+        let t = 1789931700;
+        let logs = vec![
+            (4123879, "prem w4: chuds vs twice".to_string(), "swiftwater".to_string(), t + 5400, 18),
+            (4123875, "serveme.tf #1564157 BLU vs RED".to_string(), "pl_swiftwater_final1".to_string(), t + 5040, 18),
+            (4123860, "serveme.tf #1564157 RED vs BLU".to_string(), "pl_swiftwater_final1".to_string(), t + 3600, 18),
+            (4123001, "6s".to_string(), "cp_process_final".to_string(), t + 600, 12),
+            (4130000, "scrim".to_string(), "pl_upward_f12".to_string(), t + 7 * 86400, 18),
+        ];
+        let ids: Vec<i64> = matching_logs(&logs, t).iter().map(|l| l.0).collect();
+        assert_eq!(ids, vec![4123875, 4123860]);
+    }
+
+    #[test]
+    fn a_players_own_upload_of_both_halves_is_not_counted_again() {
+        // ETF2L match 92918, My New Highlander Team vs pollos: the server's
+        // two halves and a player's upload of the whole map; and one koth map
+        // uploaded twice.
+        let t = 1789672560;
+        let logs = vec![
+            (4122251, "pollos vs mnht w4".to_string(), "pl_swiftwater_final1".to_string(), t + 3600, 18),
+            (4122246, "serveme.tf #1563622 RED vs BLU".to_string(), "pl_swiftwater_final1".to_string(), t + 3590, 18),
+            (4122226, "serveme.tf #1563622 BLU vs RED".to_string(), "pl_swiftwater_final1".to_string(), t + 1800, 18),
+            (4122204, "serveme.tf #1563679 BLU vs RED".to_string(), "koth_proot_b5b".to_string(), t + 400, 18),
+            (4122203, "proot".to_string(), "koth_proot_b5b".to_string(), t + 410, 18),
+        ];
+        let ids: Vec<i64> = matching_logs(&logs, t).iter().map(|l| l.0).collect();
+        assert_eq!(ids, vec![4122246, 4122226, 4122204]);
+    }
 
     #[test]
     fn only_real_maps_count() {

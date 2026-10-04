@@ -148,6 +148,39 @@ impl Db {
         Ok(())
     }
 
+    /// Played officials with no log at all -- trends.tf linked none to them,
+    /// and neither is one of the owner's -- whose rosters are read and which
+    /// were never searched for on logs.tf: `(match, time, a player of each
+    /// team)`, newest first.
+    pub async fn league_matches_without_logs(&self, since: i64, until: i64, limit: i64) -> Result<Vec<(i64, i64, i64, i64)>> {
+        Ok(sqlx::query_as(
+            "SELECT m.match_id, m.time,
+                    (SELECT p.account_id FROM etf2l_season_player p WHERE p.match_id = m.match_id AND p.team_id = m.clan1_id LIMIT 1) AS a,
+                    (SELECT p.account_id FROM etf2l_season_player p WHERE p.match_id = m.match_id AND p.team_id = m.clan2_id LIMIT 1) AS b
+               FROM etf2l_season_match m
+              WHERE m.default_win = 0 AND COALESCE(m.r1, 0) + COALESCE(m.r2, 0) > 0
+                AND m.time BETWEEN ?1 AND ?2
+                AND NOT EXISTS (SELECT 1 FROM league_log l WHERE l.etf2l_match_id = m.match_id)
+                AND NOT EXISTS (SELECT 1 FROM log_index i WHERE i.etf2l_match_id = m.match_id)
+                AND NOT EXISTS (SELECT 1 FROM etf2l_raw r WHERE r.kind = 'log_search' AND r.id = m.match_id)
+                AND a IS NOT NULL AND b IS NOT NULL
+              ORDER BY m.time DESC LIMIT ?3",
+        )
+        .bind(since)
+        .bind(until)
+        .bind(limit)
+        .fetch_all(self.pool())
+        .await?)
+    }
+
+    /// Pick these logs too, beside what the last choice picked.
+    pub async fn pick_league_logs(&self, log_ids: &[i64]) -> Result<()> {
+        for id in log_ids {
+            sqlx::query("UPDATE league_log SET picked = 1 WHERE log_id = ?1").bind(id).execute(self.pool()).await?;
+        }
+        Ok(())
+    }
+
     /// Picked logs with no JSON yet, newest first; `include_stand_ins` also
     /// offers those only more.tf has given, to ask logs.tf again.
     pub async fn league_json_todo(&self, limit: i64, include_stand_ins: bool, max_attempts: i64) -> Result<Vec<i64>> {

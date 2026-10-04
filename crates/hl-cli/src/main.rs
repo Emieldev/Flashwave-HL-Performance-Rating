@@ -1577,6 +1577,21 @@ async fn run() -> Result<()> {
             Ok(())
         }
 
+        ["league-search", rest @ ..] => {
+            // Look on logs.tf for officials trends.tf linked no log to.
+            let n: i64 = rest.first().map(|n| n.parse()).transpose()?.unwrap_or(10);
+            let db = Db::connect(&db_path).await?;
+            let sources = Sources::new()?;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64;
+            let todo = db.league_matches_without_logs(now - 6 * 365 * 86400, now - 86400, n).await?;
+            println!("{} officials to search", todo.len());
+            for (match_id, time, a, b) in todo {
+                let found = hl_ingest::league_sample::search_match_logs(&db, &sources, match_id, time, a as u32, b as u32).await?;
+                println!("  match {match_id} ({}): {found} logs", fmt_date(time));
+            }
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;

@@ -204,6 +204,13 @@ pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: Sha
                         a.log(format!("Who played ETF2L match {match_id}"), true);
                         ("waiting", STEP_GAP)
                     }
+                    Ok(Step::Searched { match_id, found }) => {
+                        a.log(
+                            if found > 0 { format!("Found {found} logs for ETF2L match {match_id} on logs.tf") } else { format!("logs.tf has no logs for ETF2L match {match_id}") },
+                            found > 0,
+                        );
+                        ("waiting", STEP_GAP)
+                    }
                     Ok(Step::Waiting) => {
                         a.log("logs.tf is resting and there is nothing more.tf can give meanwhile".into(), true);
                         ("resting", WAITING_GAP)
