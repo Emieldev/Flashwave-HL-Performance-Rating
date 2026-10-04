@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type Fixture, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamInfo, type TeamTransfers, type TeamView } from "../../api/types";
 import { formatDate, formatMonth, formatStay, rating } from "../../lib/format";
-import { openPlayer } from "../../lib/goto";
+import { onOpenTeam, openPlayer, takePendingTeam } from "../../lib/goto";
 import { locale, t, tx } from "../../lib/i18n";
 import { ClassIcon } from "../ClassIcon";
 import { Country } from "../Country";
@@ -26,8 +26,13 @@ type View = { kind: "seasons" } | { kind: "season"; season: number } | { kind: "
 const PLACE = ["gold", "silver", "bronze"] as const;
 
 export function TeamsPage() {
-  const [view, setView] = useState<View>({ kind: "seasons" });
+  // A team asked for from elsewhere (a match header) opens straight on it.
+  const [view, setView] = useState<View>(() => {
+    const pending = takePendingTeam();
+    return pending === null ? { kind: "seasons" } : { kind: "team", teamId: pending, from: { kind: "seasons" } };
+  });
   const openTeam = (teamId: number) => setView((from) => ({ kind: "team", teamId, from: from.kind === "team" ? from.from : from }));
+  useEffect(() => onOpenTeam((teamId) => setView({ kind: "team", teamId, from: { kind: "seasons" } })), []);
   let body;
   if (view.kind === "team") {
     body = <TeamScreen teamId={view.teamId} onBack={() => setView(view.from)} onTeam={openTeam} backLabel={view.from.kind === "season" ? t("Season") : t("All seasons")} />;

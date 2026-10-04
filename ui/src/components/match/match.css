@@ -12,6 +12,11 @@
 /* --- page --- */
 
 .match-page {
+  /* TF2's colours, as on the Teams tab: the HUD's tan, RED and BLU. */
+  --tf2-tan: #cf7336;
+  --tf2-cream: #ebe3cb;
+  --tf2-red: #b8383b;
+  --tf2-blu: #5885a2;
   padding: 16px var(--gutter) 40px;
   display: flex;
   flex-direction: column;
@@ -1572,4 +1577,69 @@
   fill: none;
   stroke: var(--accent);
   stroke-width: 1.5;
+}
+
+
+/* --- the match hero: two teams across the score, the map behind --- */
+
+.mx-hero { position: relative; overflow: hidden; padding: 0; border-top: 3px solid var(--tf2-tan); display: flex; flex-direction: column; }
+.mx-art { position: absolute; inset: -20%; background-size: cover; background-position: center; opacity: 0.09; filter: grayscale(0.4) blur(1px); transform: rotate(-6deg); pointer-events: none; }
+.mx-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background:
+  linear-gradient(90deg, color-mix(in srgb, var(--side-l) 22%, transparent), transparent 32%, transparent 68%, color-mix(in srgb, var(--side-r) 22%, transparent)); }
+.mx-red-left { --side-l: var(--tf2-red); --side-r: var(--tf2-blu); }
+.mx-blue-left { --side-l: var(--tf2-blu); --side-r: var(--tf2-red); }
+.mx-top, .mx-board, .mx-foot { position: relative; }
+
+.mx-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 14px 22px 0; }
+.mx-eyebrow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.mx-badges { display: inline-flex; gap: 6px; }
+
+.mx-board { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 18px 22px 20px; }
+.mx-side { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.mx-side-right { flex-direction: row-reverse; text-align: right; }
+.mx-logo { flex: none; width: 92px; height: 92px; border-radius: 16px; overflow: hidden; display: grid; place-items: center; padding: 0;
+  background: var(--sunken); border: 2px solid color-mix(in srgb, var(--side-c) 70%, var(--border)); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+button.mx-logo { cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease; }
+button.mx-logo:hover, button.mx-logo:focus-visible { transform: translateY(-2px); border-color: var(--tf2-tan); }
+.mx-logo img { width: 100%; height: 100%; object-fit: cover; }
+.mx-logo-letter { font: 700 2.6rem/1 var(--font-display); color: color-mix(in srgb, var(--side-c) 80%, var(--text)); }
+.mx-side-red { --side-c: var(--tf2-red); }
+.mx-side-blue { --side-c: var(--tf2-blu); }
+.mx-who { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mx-side-right .mx-who { align-items: flex-end; }
+.mx-tags { display: inline-flex; gap: 6px; }
+.mx-colour { font: 700 0.7rem var(--font-display); letter-spacing: 0.12em; padding: 2px 8px; border-radius: 999px; color: #fff; }
+.mx-colour-red { background: var(--tf2-red); }
+.mx-colour-blue { background: var(--tf2-blu); }
+.mx-you { font: 700 0.7rem var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--tf2-tan); color: var(--tf2-tan); }
+.mx-name { font: 700 clamp(1.3rem, 2.2vw, 1.9rem)/1.1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-hi);
+  background: none; border: 0; padding: 0; text-align: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.mx-name { cursor: pointer; }
+button.mx-name:hover, button.mx-name:focus-visible { color: var(--tf2-tan); }
+.mx-facts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 0.86rem; color: var(--muted); }
+.mx-side-right .mx-facts { justify-content: flex-end; }
+
+.mx-center { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 200px; text-align: center; }
+.mx-result { font: 700 0.78rem var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; padding: 2px 12px; border-radius: 999px; }
+.mx-result-W { color: var(--ok); background: rgba(var(--ok-rgb), 0.12); border: 1px solid rgba(var(--ok-rgb), 0.4); }
+.mx-result-L { color: var(--bad); background: rgba(var(--bad-rgb), 0.12); border: 1px solid rgba(var(--bad-rgb), 0.4); }
+.mx-result-T { color: var(--muted); border: 1px solid var(--border); }
+.mx-score { display: flex; align-items: baseline; gap: 14px; font: 700 4.2rem/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.mx-score .team-red { color: color-mix(in srgb, var(--tf2-red) 70%, var(--text-hi)); }
+.mx-score .team-blue { color: color-mix(in srgb, var(--tf2-blu) 70%, var(--text-hi)); }
+.mx-colon { color: var(--faint); font-size: 3rem; transform: translateY(-0.2em); }
+.mx-map { display: inline-flex; align-items: center; gap: 6px; font: 600 1rem var(--font-display); text-transform: uppercase; letter-spacing: 0.06em; }
+.mx-maps { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.mx-map-chip { font-size: 0.82rem; padding: 2px 10px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--border); }
+
+.mx-meetings { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; padding: 0 22px 16px; }
+.mx-foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 10px 22px; border-top: 1px solid var(--border); background: rgba(0, 0, 0, 0.16); }
+.mx-title { font-style: italic; }
+
+@media (max-width: 900px) {
+  .mx-board { grid-template-columns: 1fr; justify-items: center; }
+  .mx-side, .mx-side-right { flex-direction: row; text-align: left; }
+  .mx-side-right .mx-who { align-items: flex-start; }
+  .mx-side-right .mx-facts { justify-content: flex-start; }
+  .mx-logo { width: 64px; height: 64px; }
 }

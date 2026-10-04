@@ -1071,6 +1071,25 @@ export interface OfficialInfo {
   defaultWin: boolean;
 }
 
+/** Both teams of a classified match, for the match header. */
+export interface MatchSides {
+  /** Your side. */
+  team: SideTeam | null;
+  opp: SideTeam | null;
+  season: number | null;
+  seasonName: string | null;
+  /** When ETF2L had the official scheduled. */
+  scheduled: number | null;
+}
+
+export interface SideTeam {
+  /** ETF2L's team id; null for a scrim side known only by name. */
+  id: number | null;
+  name: string;
+  country: string | null;
+  avatar: string | null;
+}
+
 export interface MatchContext {
   kind: ContextKind;
   etf2lMatchId: number | null;

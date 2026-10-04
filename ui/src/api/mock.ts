@@ -32,6 +32,9 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  Fixture,
+  NewLogs,
+  MatchSides,
   Stay,
   TeamInfo,
   TeamTransfers,
@@ -1006,6 +1009,20 @@ export const mockApi: Api = {
     ),
   getSeasonPodiums: () => delay(seasonPodiums33 as unknown as Podium[]),
   getTeamHonours: () => delay(teamHonours35600 as unknown as TeamHonours),
+  // The TWS official's sides, as `get_match_sides` gave them on a backup
+  // (3 October 2026); every other match is a scrim of DD14's.
+  getMatchSides: (logId: number) =>
+    delay<MatchSides | null>(
+      logId === 4109131
+        ? {
+            team: { id: 37805, name: "DD14", country: "France", avatar: "https://etf2l.org/wp-content/uploads/avatars/6a18b9b147176.png" },
+            opp: { id: 37921, name: "ЭТО МОЁ БОЛОТО", country: "Russia", avatar: "https://etf2l.org/wp-content/uploads/avatars/6aa4884eab429.jpg" },
+            season: 36,
+            seasonName: "Autumn 2026",
+            scheduled: 1_787_512_500,
+          }
+        : { team: { id: 37805, name: "DD14", country: "France", avatar: "https://etf2l.org/wp-content/uploads/avatars/6a18b9b147176.png" }, opp: null, season: null, seasonName: null, scheduled: null },
+    ),
   // SBQRRA's transfers and Flashy's teams from ETF2L, 3 October 2026.
   getTeamTransfers: () => delay(teamTransfers35600 as unknown as TeamTransfers),
   getTeamInfo: () => delay(teamInfo35600 as unknown as TeamInfo),

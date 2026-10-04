@@ -1402,6 +1402,12 @@ pub async fn get_player_teams(state: State<'_, AppState>, account_id: u32) -> Cm
     Ok(hl_ingest::transfers::player_teams(&state.db, &state.sources, account_id).await?)
 }
 
+/// Both teams of a classified match, with ETF2L's logos: the match header.
+#[tauri::command]
+pub async fn get_match_sides(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_db::MatchSides>> {
+    Ok(state.db.match_sides(log_id).await?)
+}
+
 /// A team's medals and its seasons.
 #[tauri::command]
 pub async fn get_team_honours(state: State<'_, AppState>, team_id: i64) -> CmdResult<hl_ingest::catalogue::TeamHonours> {
