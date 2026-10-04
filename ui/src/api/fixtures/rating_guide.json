@@ -1,5 +1,5 @@
 {
-  "modelVersion": "v10",
+  "modelVersion": "v11",
   "ratingSpread": 0.25,
   "minMinutes": 5.0,
   "classes": [
@@ -12,27 +12,17 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.2,
+          "share": 0.25000000000000006,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.2,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         },
         {
           "key": "impact_kills",
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.1875,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -42,7 +32,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.1875,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -52,7 +42,7 @@
           "label": "Caps",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.12500000000000003,
           "group": "objective",
           "source": "log",
           "description": "Points you capped, per 10 minutes."
@@ -62,7 +52,7 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.1,
+          "share": 0.12500000000000003,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -72,7 +62,7 @@
           "label": "Medic picks",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.06250000000000001,
           "group": "teamplay",
           "source": "log",
           "description": "Enemy Medics you killed. A dead Medic loses his team the uber, and usually the next fight."
@@ -82,7 +72,7 @@
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.06250000000000001,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
@@ -98,7 +88,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.3333333333333333,
+          "share": 0.35,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -108,7 +98,7 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.23809523809523808,
+          "share": 0.25,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -118,7 +108,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.19047619047619047,
+          "share": 0.2,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -128,20 +118,10 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.19047619047619047,
+          "share": 0.2,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.047619047619047616,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         }
       ]
     },
@@ -154,7 +134,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.3,
+          "share": 0.33,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -164,7 +144,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.19,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -174,7 +154,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.19,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -184,27 +164,17 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.15,
+          "share": 0.17,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.15,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         },
         {
           "key": "medic_picks",
           "label": "Medic picks",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.12,
           "group": "teamplay",
           "source": "log",
           "description": "Enemy Medics you killed. A dead Medic loses his team the uber, and usually the next fight."
@@ -220,7 +190,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.35,
+          "share": 0.38888888888888884,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -230,7 +200,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.2,
+          "share": 0.22222222222222224,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -240,7 +210,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.16666666666666666,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -250,27 +220,17 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.1,
+          "share": 0.11111111111111112,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.1,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         },
         {
           "key": "untraded",
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.05555555555555556,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
@@ -280,7 +240,7 @@
           "label": "Fight swing, shared",
           "unit": "win % per 10 min",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.05555555555555556,
           "group": "fragging",
           "source": "serverLog",
           "description": "Fight swing, with each kill's worth shared among everyone who damaged the victim in the 5 seconds before: the damage that set up a kill earns part of it, and the last shot keeps at least half."
@@ -296,7 +256,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.3,
+          "share": 0.33,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -306,7 +266,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.2,
+          "share": 0.29,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -316,7 +276,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.21,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -326,30 +286,10 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.15,
+          "share": 0.17,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.15,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
-        },
-        {
-          "key": "situation_kills",
-          "label": "Kills in context",
-          "unit": "per 10 min",
-          "higherIsBetter": true,
-          "share": 0.05,
-          "group": "fragging",
-          "source": "serverLog",
-          "description": "Your kills, each scaled by the numbers when it happened: a kill at even numbers is worth more than a clean-up four players up."
         }
       ]
     },
@@ -362,7 +302,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.3,
+          "share": 0.3529411764705882,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -372,7 +312,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.1764705882352941,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -382,27 +322,17 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.15,
+          "share": 0.1764705882352941,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.15,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         },
         {
           "key": "fight_swing_shared",
           "label": "Fight swing, shared",
           "unit": "win % per 10 min",
           "higherIsBetter": true,
-          "share": 0.1,
+          "share": 0.11764705882352941,
           "group": "fragging",
           "source": "serverLog",
           "description": "Fight swing, with each kill's worth shared among everyone who damaged the victim in the 5 seconds before: the damage that set up a kill earns part of it, and the last shot keeps at least half."
@@ -412,7 +342,7 @@
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.058823529411764705,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
@@ -422,7 +352,7 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.05,
+          "share": 0.058823529411764705,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -432,7 +362,7 @@
           "label": "Caps into a defence",
           "unit": "defenders per 10 min",
           "higherIsBetter": true,
-          "share": 0.05,
+          "share": 0.058823529411764705,
           "group": "objective",
           "source": "serverLog",
           "description": "Points you capped, each counted by the enemies alive to stop it. Walking onto a point after a wipe adds nothing."
@@ -448,7 +378,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.23809523809523808,
+          "share": 0.25,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -458,27 +388,17 @@
           "label": "Healing",
           "unit": "per min",
           "higherIsBetter": true,
-          "share": 0.14285714285714285,
+          "share": 0.22,
           "group": "medic",
           "source": "log",
           "description": "Healing done, per minute."
-        },
-        {
-          "key": "ubers",
-          "label": "Ubers",
-          "unit": "per 10 min",
-          "higherIsBetter": true,
-          "share": 0.14285714285714285,
-          "group": "medic",
-          "source": "log",
-          "description": "Ubers used, per 10 minutes."
         },
         {
           "key": "untraded_deaths",
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.14285714285714285,
+          "share": 0.15,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -488,40 +408,30 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.09523809523809523,
+          "share": 0.14,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
-        },
-        {
-          "key": "drops",
-          "label": "Drops",
-          "unit": "per 10 min",
-          "higherIsBetter": false,
-          "share": 0.09523809523809523,
-          "group": "medic",
-          "source": "log",
-          "description": "Ubers you died holding, per 10 minutes. Fewer is better."
         },
         {
           "key": "caps_contested",
           "label": "Caps into a defence",
           "unit": "defenders per 10 min",
           "higherIsBetter": true,
-          "share": 0.09523809523809523,
+          "share": 0.14,
           "group": "objective",
           "source": "serverLog",
           "description": "Points you capped, each counted by the enemies alive to stop it. Walking onto a point after a wipe adds nothing."
         },
         {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
+          "key": "drops",
+          "label": "Drops",
+          "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.047619047619047616,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
+          "share": 0.1,
+          "group": "medic",
+          "source": "log",
+          "description": "Ubers you died holding, per 10 minutes. Fewer is better."
         }
       ]
     },
@@ -534,7 +444,7 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.30000000000000004,
+          "share": 0.375,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
@@ -544,7 +454,7 @@
           "label": "Deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.30000000000000004,
+          "share": 0.3,
           "group": "survival",
           "source": "log",
           "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
@@ -554,7 +464,7 @@
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.20000000000000004,
+          "share": 0.2,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -564,20 +474,10 @@
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.10000000000000002,
+          "share": 0.125,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
-        },
-        {
-          "key": "caps_spawn_delay",
-          "label": "Spawns delayed by your caps",
-          "unit": "seconds per 10 min",
-          "higherIsBetter": false,
-          "share": 0.10000000000000002,
-          "group": "objective",
-          "source": "serverLog",
-          "description": "Seconds your caps cost your own dead teammates by pushing back their respawn a whole wave (8 s or more). Only on KOTH and 5CP: on payload and attack/defend a capture moves the attackers' spawn up. Fewer is better."
         }
       ]
     },
@@ -590,27 +490,17 @@
           "label": "Impact kills",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.2631578947368421,
+          "share": 0.3125,
           "group": "fragging",
           "source": "serverLog",
           "description": "Your kills, each worth what the class you killed is worth: a Medic or a Demoman counts for more than a Scout. Adjusted for the map, and on attack/defend for which side the victim was on."
-        },
-        {
-          "key": "deaths",
-          "label": "Deaths",
-          "unit": "per 10 min",
-          "higherIsBetter": false,
-          "share": 0.15789473684210525,
-          "group": "survival",
-          "source": "log",
-          "description": "How often you died, per 10 minutes. Fewer is better: every death is a player down for a respawn."
         },
         {
           "key": "untraded_deaths",
           "label": "Untraded deaths",
           "unit": "per 10 min",
           "higherIsBetter": false,
-          "share": 0.15789473684210525,
+          "share": 0.1875,
           "group": "survival",
           "source": "serverLog",
           "description": "Deaths your team did not avenge within 3 seconds. A death that was traded at least took someone with it. Fewer is better."
@@ -620,7 +510,7 @@
           "label": "Impact assists",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.10526315789473685,
+          "share": 0.12500000000000003,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Your assists, valued the same way as kills but at a share of a kill's worth: the damage or the spam that made someone else's kill."
@@ -630,7 +520,7 @@
           "label": "Medic picks",
           "unit": "per 10 min",
           "higherIsBetter": true,
-          "share": 0.10526315789473685,
+          "share": 0.12500000000000003,
           "group": "teamplay",
           "source": "log",
           "description": "Enemy Medics you killed. A dead Medic loses his team the uber, and usually the next fight."
@@ -640,7 +530,7 @@
           "label": "Kills not traded",
           "unit": "% of kills",
           "higherIsBetter": true,
-          "share": 0.10526315789473685,
+          "share": 0.12500000000000003,
           "group": "teamplay",
           "source": "serverLog",
           "description": "The share of your kills after which your team did not lose someone within 3 seconds. A kill that is instantly traded back won nothing."
@@ -650,7 +540,7 @@
           "label": "Fight KAST, engaged",
           "unit": "% of fights",
           "higherIsBetter": true,
-          "share": 0.10526315789473685,
+          "share": 0.12500000000000003,
           "group": "teamplay",
           "source": "serverLog",
           "description": "Fight KAST, but surviving only counts if you fired a shot: hiding through a fight does not."
