@@ -392,6 +392,71 @@ pub async fn link_to_log_by(
     })
 }
 
+/// What reading a match again did.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReRead {
+    /// Demos read again from their files.
+    pub demos: usize,
+    /// Linked demos whose file is gone (deleted to save space, or moved):
+    /// what was read from them before is kept as it was.
+    pub missing: usize,
+    /// The server log's fights were derived again.
+    pub fights: bool,
+    /// Aim, deaths and routes were derived again.
+    pub aim: bool,
+}
+
+/// Read one match again with this version of the app: every linked demo
+/// from its file (its timeline: spychecks, ping, reflects, the cart and
+/// positions all read from that), then aim, deaths and routes from the new
+/// timelines, then the fights from the stored server log. For after an
+/// update that reads more, or reads better, than the one that first did.
+pub async fn reread_log(db: &Db, me: Option<SteamId>, log_id: i64, mut progress: impl FnMut(&'static str)) -> Result<ReRead> {
+    let mut out = ReRead::default();
+    for demo in db.demos_for_log(log_id).await? {
+        let path = PathBuf::from(&demo.path);
+        if demo.deleted || !path.is_file() {
+            out.missing += 1;
+            continue;
+        }
+        progress("Reading the demo");
+        // The owner's own demo follows the owner; an STV follows nobody.
+        let owner = if demo.kind == "stv" { String::new() } else { me.map(|m| m.to_steamid3()).unwrap_or_default() };
+        let rate = demo.tick_rate.unwrap_or(66.67);
+        let stored = tokio::task::spawn_blocking(move || -> Result<_> {
+            let (_, stored) = hl_demos::aim::pass_recording(&path, &owner, rate, Some(hl_demos::timeline::DEFAULT_STRIDE), &mut |_| {})?;
+            stored.context("the demo gave no timeline")
+        })
+        .await??;
+        db.put_timeline(demo.demo_id, &timeline_row(&stored)).await?;
+        out.demos += 1;
+    }
+    if let Some(me) = me.filter(|_| out.demos > 0) {
+        progress("Reading aim from the demo");
+        crate::aim::derive_log(db, me, log_id).await?;
+        out.aim = true;
+    }
+    progress("Reading the server log");
+    out.fights = crate::fights::derive_log(db, log_id).await?;
+    Ok(out)
+}
+
+fn timeline_row(stored: &hl_demos::timeline::Stored) -> TimelineRow {
+    TimelineRow {
+        version: stored.version,
+        tick_rate: stored.tick_rate,
+        stride: i64::from(stored.stride),
+        head: stored.head.clone(),
+        samples: stored.samples.clone(),
+        changes: stored.changes.clone(),
+        objects: stored.objects.clone(),
+        events: stored.events.clone(),
+        raw_bytes: stored.raw_bytes as i64,
+        stored_bytes: stored.stored_bytes() as i64,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

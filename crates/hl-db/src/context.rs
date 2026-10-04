@@ -87,6 +87,31 @@ pub struct OfficialInfo {
     pub default_win: bool,
 }
 
+/// The two teams of a classified match, as the match page's header shows
+/// them: ETF2L's names, logos and countries where the teams are stored, and
+/// the season of an official.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchSides {
+    /// The owner's side.
+    pub team: Option<SideTeam>,
+    pub opp: Option<SideTeam>,
+    pub season: Option<i64>,
+    pub season_name: Option<String>,
+    /// When ETF2L had the official scheduled, unix seconds.
+    pub scheduled: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SideTeam {
+    /// ETF2L's team id; `None` for a scrim side known only by name.
+    pub id: Option<i64>,
+    pub name: String,
+    pub country: Option<String>,
+    pub avatar: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextCounts {
@@ -454,6 +479,37 @@ impl Db {
         .fetch_optional(self.pool())
         .await?;
         Ok(row.as_ref().and_then(context_from_row))
+    }
+
+    /// Both sides of a classified match, for the match page's header.
+    pub async fn match_sides(&self, log_id: i64) -> Result<Option<MatchSides>> {
+        let row = sqlx::query(
+            "SELECT c.team_id, COALESCE(ta.name, c.team_name) AS team_name, ta.country AS team_country, ta.avatar AS team_avatar,
+                    c.opp_team_id, COALESCE(tb.name, c.opp_team_name) AS opp_name, tb.country AS opp_country, tb.avatar AS opp_avatar,
+                    comp.season, comp.season_name, e.time AS scheduled
+             FROM match_context c
+             LEFT JOIN etf2l_team ta         ON ta.team_id = c.team_id
+             LEFT JOIN etf2l_team tb         ON tb.team_id = c.opp_team_id
+             LEFT JOIN etf2l_match e         ON e.match_id = c.etf2l_match_id
+             LEFT JOIN etf2l_competition comp ON comp.competition_id = e.competition_id
+             WHERE c.log_id = ?1",
+        )
+        .bind(log_id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(|r| {
+            let side = |id: &str, name: &str, country: &str, avatar: &str| {
+                let name: Option<String> = r.get(name);
+                name.filter(|n| !n.is_empty()).map(|name| SideTeam { id: r.get(id), name, country: r.get(country), avatar: r.get(avatar) })
+            };
+            MatchSides {
+                team: side("team_id", "team_name", "team_country", "team_avatar"),
+                opp: side("opp_team_id", "opp_name", "opp_country", "opp_avatar"),
+                season: r.get("season"),
+                season_name: r.get("season_name"),
+                scheduled: r.get("scheduled"),
+            }
+        }))
     }
 
     pub async fn context_counts(&self, etf2l_player_key: &str) -> Result<ContextCounts> {

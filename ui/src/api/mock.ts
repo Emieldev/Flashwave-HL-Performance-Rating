@@ -32,6 +32,10 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  ReRead,
+  Fixture,
+  NewLogs,
+  MatchSides,
   Stay,
   TeamInfo,
   TeamTransfers,
@@ -279,6 +283,8 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
 });
 
 let newestLooks = 0;
+
+let rereadListeners: Array<(s: { logId: number; step: string }) => void> = [];
 
 const MOCK_HITS: CatalogueHit[] = [
   { accountId: 139131191, name: "Flashy", highest: { name: "Mid", tier: 2 }, mainClass: "sniper", medals: [1, 0, 0], officials: 25, lastSeen: 1_790_532_000 },
@@ -1006,6 +1012,20 @@ export const mockApi: Api = {
     ),
   getSeasonPodiums: () => delay(seasonPodiums33 as unknown as Podium[]),
   getTeamHonours: () => delay(teamHonours35600 as unknown as TeamHonours),
+  // The TWS official's sides, as `get_match_sides` gave them on a backup
+  // (3 October 2026); every other match is a scrim of DD14's.
+  getMatchSides: (logId: number) =>
+    delay<MatchSides | null>(
+      logId === 4109131
+        ? {
+            team: { id: 37805, name: "DD14", country: "France", avatar: "https://etf2l.org/wp-content/uploads/avatars/6a18b9b147176.png" },
+            opp: { id: 37921, name: "ЭТО МОЁ БОЛОТО", country: "Russia", avatar: "https://etf2l.org/wp-content/uploads/avatars/6aa4884eab429.jpg" },
+            season: 36,
+            seasonName: "Autumn 2026",
+            scheduled: 1_787_512_500,
+          }
+        : { team: { id: 37805, name: "DD14", country: "France", avatar: "https://etf2l.org/wp-content/uploads/avatars/6a18b9b147176.png" }, opp: null, season: null, seasonName: null, scheduled: null },
+    ),
   // SBQRRA's transfers and Flashy's teams from ETF2L, 3 October 2026.
   getTeamTransfers: () => delay(teamTransfers35600 as unknown as TeamTransfers),
   getTeamInfo: () => delay(teamInfo35600 as unknown as TeamInfo),
@@ -1097,6 +1117,19 @@ export const mockApi: Api = {
     return delay<PositionsView | null>({ map: f.map, zones: f.zones.length, draft: f.draft, players });
   },
 
+  rereadMatch: async () => {
+    for (const step of ["Reading the demo", "Reading the demo", "Reading aim from the demo", "Reading the server log"]) {
+      rereadListeners.forEach((h) => h({ logId: 0, step }));
+      await delay(null, 700);
+    }
+    return { demos: 2, missing: 0, aim: true, fights: true } satisfies ReRead;
+  },
+  onRereadStep: async (h: (s: { logId: number; step: string }) => void) => {
+    rereadListeners.push(h);
+    return () => {
+      rereadListeners = rereadListeners.filter((x) => x !== h);
+    };
+  },
   linkDemo: (_logId: number, path: string) =>
     delay<DemoLinked>(
       { demoId: 99, fileName: path.split(/[\\/]/).pop() ?? path, stv: true, killsMatched: 241, logKills: 262, playersShared: 18, path },

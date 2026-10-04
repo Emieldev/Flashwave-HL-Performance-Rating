@@ -478,27 +478,8 @@ pub async fn derive_all(
     let round_maps = db.all_round_map_names().await?;
     for (i, log_id) in todo.iter().copied().enumerate() {
         progress(i, todo.len());
-        let Some(zip) = db.rawlog(log_id).await? else { continue };
-        let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
-        let gs = GameState::build(&raw);
-        let rounds = round_maps.get(&log_id);
-        let log_map = raw.map_loads.first().map(|(_, m)| m.clone());
-        // A raw log often has a Round_Start more than logs.tf has rounds (a
-        // restart at the start), so the last one has no number of its own:
-        // it takes the map of the nearest round before it.
-        let map_of = |n: u32| {
-            let m = rounds?;
-            let n = i64::from(n);
-            m.get(&n).or_else(|| m.iter().filter(|(k, _)| **k <= n).max_by_key(|(k, _)| **k).map(|(_, v)| v)).or_else(|| m.values().next()).cloned()
-        };
-        let f = analyse_on(&raw, &gs, &|n| map_of(n).or_else(|| log_map.clone()));
-        let rows: Vec<hl_db::FightRow> = f.players.iter().map(row).collect();
-        let situations: Vec<(i64, i8, i8)> = crate::situation::kill_states(&raw, &gs, &f.tags)
-            .into_iter()
-            .enumerate()
-            .filter_map(|(seq, s)| s.map(|(k, _)| (seq as i64, k.diff, k.adv)))
-            .collect();
-        group.push(hl_db::FightsWrite { log_id, rows, situations, credits: kill_credits(&raw) });
+        let Some(write) = derive_one(db, log_id, round_maps.get(&log_id)).await? else { continue };
+        group.push(write);
         derived += 1;
         if group.len() == GROUP {
             db.replace_fights_many(VERSION, &group).await?;
@@ -510,6 +491,43 @@ pub async fn derive_all(
     }
     progress(todo.len(), todo.len());
     Ok(DeriveSummary { derived, total: ids.len() })
+}
+
+/// Derive one match's fights again from its raw log and store them: the
+/// match page's "Read again". False when the match has no raw log.
+pub async fn derive_log(db: &hl_db::Db, log_id: i64) -> anyhow::Result<bool> {
+    let round_maps = db.all_round_map_names().await?;
+    let Some(write) = derive_one(db, log_id, round_maps.get(&log_id)).await? else { return Ok(false) };
+    db.replace_fights_many(VERSION, &[write]).await?;
+    Ok(true)
+}
+
+/// One raw log's fights, ready to store; `None` without a raw log.
+async fn derive_one(
+    db: &hl_db::Db,
+    log_id: i64,
+    rounds: Option<&std::collections::HashMap<i64, String>>,
+) -> anyhow::Result<Option<hl_db::FightsWrite>> {
+    let Some(zip) = db.rawlog(log_id).await? else { return Ok(None) };
+    let raw = crate::rawlog::parse(&crate::rawlog::unzip(&zip)?);
+    let gs = GameState::build(&raw);
+    let log_map = raw.map_loads.first().map(|(_, m)| m.clone());
+    // A raw log often has a Round_Start more than logs.tf has rounds (a
+    // restart at the start), so the last one has no number of its own:
+    // it takes the map of the nearest round before it.
+    let map_of = |n: u32| {
+        let m = rounds?;
+        let n = i64::from(n);
+        m.get(&n).or_else(|| m.iter().filter(|(k, _)| **k <= n).max_by_key(|(k, _)| **k).map(|(_, v)| v)).or_else(|| m.values().next()).cloned()
+    };
+    let f = analyse_on(&raw, &gs, &|n| map_of(n).or_else(|| log_map.clone()));
+    let rows: Vec<hl_db::FightRow> = f.players.iter().map(row).collect();
+    let situations: Vec<(i64, i8, i8)> = crate::situation::kill_states(&raw, &gs, &f.tags)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(seq, s)| s.map(|(k, _)| (seq as i64, k.diff, k.adv)))
+        .collect();
+    Ok(Some(hl_db::FightsWrite { log_id, rows, situations, credits: kill_credits(&raw) }))
 }
 
 /// One player's counts as `Db::fight_counts` gives them back, for logs whose

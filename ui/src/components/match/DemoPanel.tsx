@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, inTauri } from "../../api/client";
-import { errorMessage, type DemoLinked, type DemoView, type MatchDetail } from "../../api/types";
+import { errorMessage, type DemoLinked, type DemoView, type MatchDetail, type ReRead } from "../../api/types";
 import { copy } from "../../lib/toast";
 import { beginDownload, failDownload, useDownload } from "../../lib/downloads";
 import { locale, t, tx } from "../../lib/i18n";
@@ -63,6 +63,7 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
             <p className="hint">{tx("Open the demo once, then click any marker on the round timeline to copy its{0}{1}. Jumps land 5 seconds early, so you see the lead-up.", { "0": " ", "1": <code>{t("demo_gototick")}</code> })}</p>
           )}
         </div>
+        <ReadAgain d={d} />
       </header>
 
       {d.demos.map((demo) => (
@@ -104,6 +105,64 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
         <DropZone d={d} />
       </div>
     </section>
+  );
+}
+
+/**
+ * Read this match again with this version of the app: its demos from their
+ * files, then aim and the server log's fights. After an update that reads
+ * demos better, the match catches up without a whole rebuild.
+ */
+function ReadAgain({ d }: { d: MatchDetail }) {
+  const qc = useQueryClient();
+  const [step, setStep] = useState<string | null>(null);
+  const [done, setDone] = useState<ReRead | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void api.onRereadStep((s) => setStep(s.step)).then((f) => (off = f));
+    return () => off?.();
+  }, []);
+
+  async function run() {
+    setError(null);
+    setDone(null);
+    setStep(t("Starting"));
+    try {
+      const r = await api.rereadMatch(d.logId);
+      setDone(r);
+      // Everything on the page that reads the demos or the fights.
+      for (const key of ["match", "spychecks", "demostats", "cart", "analysis", "positions", "parts"]) {
+        void qc.invalidateQueries({ queryKey: [key, d.logId] });
+      }
+      // Keyed by player or map as well, and read across matches too.
+      for (const key of ["aim", "paths", "mapview", "profile"]) {
+        void qc.invalidateQueries({ queryKey: [key] });
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setStep(null);
+    }
+  }
+
+  return (
+    <div className="read-again">
+      <button onClick={() => void run()} disabled={step !== null} title={t("Read this match's demos and server log again with this version of the app, after an update")}>
+        {step !== null ? <span className="read-again-spin" aria-hidden /> : <span aria-hidden>↻</span>} {step !== null ? t(step) : t("Read again")}
+      </button>
+      {done && (
+        <span className="hint">
+          {done.demos > 0
+            ? tx("{0} demo{1} read again", { "0": done.demos, "1": done.demos === 1 ? "" : "s" })
+            : t("No demo file to read")}
+          {done.missing > 0 && t(" · {0} file{1} gone, kept as read", { "0": done.missing, "1": done.missing === 1 ? "" : "s" })}
+          {done.fights && t(" · fights redone")}
+        </span>
+      )}
+      {error && <span className="error">{error}</span>}
+    </div>
   );
 }
 

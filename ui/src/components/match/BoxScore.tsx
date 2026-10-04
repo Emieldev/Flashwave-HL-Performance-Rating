@@ -113,7 +113,9 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
           <tbody>
             {rows.map((p) => (
               <tr key={p.accountId} className={`row-${p.team.toLowerCase()}${p.isMe ? " me-row" : ""}`}>
-                <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</td>
+                <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>
+                  <span className={`mx-colour mx-colour-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</span>
+                </td>
                 <td className="nowrap player-name">
                   <span {...nameProps(card.open({ accountId: p.accountId, name: p.name, cls: p.classes[0]?.[0] ?? null, isMe: p.isMe }))} title={tr("Their card")}>
                     {p.name}
