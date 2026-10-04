@@ -81,6 +81,15 @@ more points for where a respawn wave fell.
 - **League officials** that trends.tf never linked a log to are found on
   logs.tf by a player of each team.
 
+## Settings
+
+- **Reworked**: a search box, a side menu, and sections that fold, each with
+  an explanation of what it does.
+- **Other demo folders** (an archive, demo reviews) are scanned with their
+  subfolders; an unplugged drive keeps its demos.
+- Wide tables (Maps, League sample) use the full width and scroll instead of
+  being cut off.
+
 ## Faster and friendlier
 
 - **Offline**, a profile or season screen says so in about 2 seconds, not
