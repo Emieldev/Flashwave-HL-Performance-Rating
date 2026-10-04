@@ -1410,7 +1410,7 @@ export const mockApi: Api = {
   getDemoFolders: () => delay([...demoFolders]),
   setDemoFolders: (folders: string[]) => {
     demoFolders = folders;
-    return delay<DemoIndexSummary>({ scanned: 120 + 40 * folders.length, unreadable: 0, removed: 0, logsPlaced: 30, links: 30, demosLinked: 30 });
+    return delay<DemoIndexSummary>({ scanned: 120 + 40 * folders.length, unreadable: 0, removed: 0, logsPlaced: 30, links: 30, demosLinked: 30, matchesWithDemo: 30, markers: 12 });
   },
   syncCancel: () => {
     if (!busy) return delay(false);
