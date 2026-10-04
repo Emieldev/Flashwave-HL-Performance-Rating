@@ -5,7 +5,7 @@
  */
 const EVENT = "hl:goto";
 
-export type Destination = "rating" | "players";
+export type Destination = "rating" | "players" | "teams";
 
 const PLAYER_EVENT = "hl:player";
 let pendingPlayer: number | null = null;
@@ -32,6 +32,33 @@ export function onOpenPlayer(open: (accountId: number) => void): () => void {
   };
   window.addEventListener(PLAYER_EVENT, handler);
   return () => window.removeEventListener(PLAYER_EVENT, handler);
+}
+
+const TEAM_EVENT = "hl:team";
+let pendingTeam: number | null = null;
+
+/** The Teams tab, on one team's page (from a match header). */
+export function openTeam(teamId: number) {
+  pendingTeam = teamId;
+  goTo("teams");
+  window.dispatchEvent(new CustomEvent<number>(TEAM_EVENT, { detail: teamId }));
+}
+
+/** For the Teams tab: the team asked for before it was first shown. */
+export function takePendingTeam(): number | null {
+  const id = pendingTeam;
+  pendingTeam = null;
+  return id;
+}
+
+/** For the Teams tab: a team asked for while it is mounted. */
+export function onOpenTeam(open: (teamId: number) => void): () => void {
+  const handler = (e: Event) => {
+    pendingTeam = null;
+    open((e as CustomEvent<number>).detail);
+  };
+  window.addEventListener(TEAM_EVENT, handler);
+  return () => window.removeEventListener(TEAM_EVENT, handler);
 }
 
 export function goTo(page: Destination) {

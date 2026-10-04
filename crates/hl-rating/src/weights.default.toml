@@ -239,6 +239,21 @@ ours   = [1, 1, 1, 1, 1, 1, 1, 0.75, 0.5]
 # - The respawn-wave cost of a cap (Q25) now earns a place in every class it
 #   was measured for; v7 left it out of four on 690 matchups.
 # ---------------------------------------------------------------------------
+# v11 (4 Oct 2026, Flashy; the class-by-class review): the respawn-wave cost
+# of a cap (Q25) is out of every model. It only exists on KOTH and 5CP, so a
+# rating with it meant one thing on payload and another off it, and it is
+# mostly a consequence -- you cap while your team is dead because your team
+# lost the fight. Out, it costs 0.0-0.4 points of picking the winner. It stays
+# a stat on the profile and match page, in seconds. Also out, because they add
+# nothing once the rest is known and the newest games pick better without
+# them: Medic ubers, Heavy kills in context, Spy deaths. Scout caps and Medic
+# drops stay: the first cost 1.2 points held out when removed, the second is a
+# judgement (see [model.medic]). What is left is rescaled in proportion, as
+# the rating does for any missing stat; where that would give dying more than
+# half the model (Sniper, Pyro, Heavy, Medic), dying is held at half and the
+# rest goes to what the player does. Keeping each class's dying share fixed
+# instead was tried and picked the winner 0.4 worse.
+# ---------------------------------------------------------------------------
 
 # Cross-validated 75.9%, against 72.9% for v6 and 68.0% for v1.
 #
@@ -255,12 +270,10 @@ ours   = [1, 1, 1, 1, 1, 1, 1, 0.75, 0.5]
 # 0.05 going to kills. Flank deaths and valued kills are gone: with 6x the
 # matchups they add nothing deaths and impact kills do not already say.
 [model.sniper]
-impact_kills     = 0.30
+impact_kills     = 0.375
 deaths           = 0.30
-untraded         = 0.10
+untraded         = 0.125
 untraded_deaths  = 0.20
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay = 0.10
 
 # Cross-validated 74.5%, against 70.7% on `generic`.
 #
@@ -280,18 +293,12 @@ caps             = 0.10
 deaths           = 0.20
 untraded         = 0.05
 untraded_deaths  = 0.10
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay = 0.20
 
 # Cross-validated 73.2%, against 72.2% on `generic` -- the smallest gain of
 # the nine, and the plainest model. The Soldier's contribution to winning is
 # the ordinary one: kill people, set up kills, stay up. Nothing class-shaped
 # survived the fit, and nothing was added to make the table look fuller.
 [model.soldier]
-# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
-# player's caps cost their own dead, fewer is better. Picks the winner
-# +0.5 / +1.0 points (full / held out) at 0.05.
-caps_spawn_delay = 0.05
 impact_kills    = 0.35
 impact_assists  = 0.20
 deaths          = 0.20
@@ -308,13 +315,11 @@ untraded_deaths = 0.25
 # before / after S34) 77.3 / 77.1 / 77.8 against 76.8 / 76.4 / 77.6 on the same matchups.
 # Assists still as heavy as kills; contested caps give way to the spawn cost.
 [model.pyro]
-impact_kills     = 0.15
-impact_assists   = 0.15
-medic_picks      = 0.10
-deaths           = 0.30
-untraded_deaths  = 0.15
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay = 0.15
+impact_kills     = 0.19
+impact_assists   = 0.19
+medic_picks      = 0.12
+deaths           = 0.33
+untraded_deaths  = 0.17
 
 # Cross-validated 75.6%, against 72.0% on `generic`.
 #
@@ -335,8 +340,6 @@ deaths             = 0.35
 untraded           = 0.05
 untraded_deaths    = 0.10
 fight_swing_shared = 0.05
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay   = 0.10
 
 # Cross-validated 76.8%, against 72.0% on `generic`.
 #
@@ -350,14 +353,12 @@ caps_spawn_delay   = 0.10
 # before / after S34) 79.0 / 79.5 / 78.0 against 74.9 / 74.8 / 75.1 -- the largest gain on the same matchups.
 # The old model had no deaths at all, only untraded ones, and no assists; the
 # league says a Heavy who stays up and feeds his team's kills wins.
+# v11 (4 Oct 2026): kills in context out; impact kills already value them.
 [model.heavy]
-impact_kills     = 0.20
-impact_assists   = 0.15
-deaths           = 0.30
-untraded_deaths  = 0.15
-situation_kills  = 0.05
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay = 0.15
+impact_kills     = 0.29
+impact_assists   = 0.21
+deaths           = 0.33
+untraded_deaths  = 0.17
 
 # Cross-validated 73.4%, against 71.8% on `generic`.
 #
@@ -382,8 +383,6 @@ untraded           = 0.05
 untraded_deaths    = 0.05
 caps_contested     = 0.05
 fight_swing_shared = 0.10
-# Q25: seconds of respawn waves this player's caps cost their own dead.
-caps_spawn_delay   = 0.15
 
 # Cross-validated 75.4%, against 71.1% for the old hand-written model and
 # 62.6% on `generic` -- the class `generic` failed hardest, which is what you
@@ -398,17 +397,16 @@ caps_spawn_delay   = 0.15
 # about a Medic after a lost round, and a rating that cannot see them is not
 # a Medic rating. So ubers and drops are in at 0.15 and 0.10, dying is held
 # to half the model, and the 1.6 points are the price.
+# v11 (4 Oct 2026): ubers out, drops kept. Ubers repeat what deaths and
+# healing say (a Medic who lives builds them), and the newest games pick
+# better without them; drops are the game's own verdict on a Medic and stay
+# by the same judgement as above (Flashy: "an integral part of the game").
 [model.medic]
-# Q25 (boSe, ivg; PLAN §18b): seconds of missed respawn waves this
-# player's caps cost their own dead, fewer is better. Picks the winner
-# +0.4 / +1.0 points (full / held out) at 0.05.
-caps_spawn_delay = 0.05
-impact_assists  = 0.10
-heal            = 0.15
-ubers           = 0.15
+impact_assists  = 0.14
+heal            = 0.22
 drops           = 0.10
 # Q17: captures weighed by enemies alive. See [model.scout].
-caps_contested  = 0.10
+caps_contested  = 0.14
 deaths          = 0.25
 untraded_deaths = 0.15
 
@@ -435,11 +433,12 @@ untraded_deaths = 0.15
 # their 0.10 goes to impact kills. Picks the winner 75.8 / 76.4 / 74.0
 # against v9's 75.5 / 76.0 / 74.0 on 5,323 league matchups. This drops the
 # v9 judgement that kept backstabs: the Spy mains and the data now agree.
+# v11 (4 Oct 2026): deaths out. A Spy's death that is traded is part of the
+# job; the untraded ones stay. The rest rescales in proportion.
 [model.spy]
 impact_kills       = 0.25
 impact_assists     = 0.10
 medic_picks        = 0.10
-deaths             = 0.15
 untraded           = 0.10
 untraded_deaths    = 0.15
 fight_kast_engaged = 0.10

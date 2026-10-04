@@ -9,14 +9,17 @@ import { PlayerPopCard, nameProps, usePlayerCard } from "../players/PlayerPopCar
 
 const CLASS_ORDER = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
 
-type Key = "team" | "name" | "k" | "a" | "d" | "da" | "dapm" | "kad" | "kd" | "dt" | "dtpm" | "hp" | "bs" | "hs" | "as" | "cap" | "rating";
+type Key = "team" | "name" | "k" | "a" | "d" | "da" | "dapm" | "kad" | "kd" | "dt" | "dtpm" | "hp" | "bs" | "hs" | "as" | "cap" | "spawn" | "rating";
+
+/** The log's flags, and whether anyone's caps cost their team a respawn. */
+type Flags = LogFlags & { spawn: boolean };
 
 type Col = {
   key: Key;
   label: string;
   title: string;
   /** The value sorted on and shown; `null` when the log did not record it. */
-  value: (p: PlayerRow, f: LogFlags) => number | null;
+  value: (p: PlayerRow, f: Flags) => number | null;
   fmt?: (v: number) => string;
 };
 
@@ -38,6 +41,13 @@ const COLS: Col[] = [
   { key: "as", label: "AS", title: k("Airshots"), value: (p, f) => (f.airshots ? p.airshots : null) },
   { key: "cap", label: k("CAP"), title: k("Points captured"), value: (p, f) => (f.cp ? p.cpc : null) },
   {
+    key: "spawn",
+    label: k("RSP"),
+    title: k("Seconds of respawn your caps cost your own dead teammates: capping resets the wave, so whoever was waiting waits longer. KOTH and 5CP only. Shown, not rated."),
+    value: (p, f) => (f.spawn ? (p.spawnDelayS ?? null) : null),
+    fmt: (v) => `${v}s`,
+  },
+  {
     key: "rating",
     label: k("Rating"),
     title: k("Rating on the main class against the players you face: 1.00 is an average game. Not rated under 5 minutes."),
@@ -55,6 +65,8 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
   const divisions = useMatchDivisions(d.logId);
   // Click a name: their card (Q40).
   const card = usePlayerCard();
+  // The respawn column only where someone's caps cost one: KOTH and 5CP.
+  const flags: Flags = useMemo(() => ({ ...d.flags, spawn: d.players.some((p) => (p.spawnDelayS ?? 0) > 0) }), [d.flags, d.players]);
   const [sort, setSort] = useState<{ key: Key; desc: boolean }>({ key: "team", desc: false });
   const rows = useMemo(() => {
     const byTeamClass = (a: PlayerRow, b: PlayerRow) =>
@@ -66,7 +78,7 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
     else if (sort.key === "name") out.sort((a, b) => a.name.localeCompare(b.name));
     else if (col) {
       // Unrecorded values sink to the bottom whichever way the column is sorted.
-      const v = (p: PlayerRow) => col.value(p, d.flags);
+      const v = (p: PlayerRow) => col.value(p, flags);
       out.sort((a, b) => {
         const x = v(a);
         const y = v(b);
@@ -76,7 +88,7 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
     }
     if (sort.desc) out.reverse();
     return out;
-  }, [d, sort]);
+  }, [d, sort, flags]);
 
   const click = (key: Key) =>
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: false }));
@@ -113,7 +125,9 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
           <tbody>
             {rows.map((p) => (
               <tr key={p.accountId} className={`row-${p.team.toLowerCase()}${p.isMe ? " me-row" : ""}`}>
-                <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</td>
+                <td className={`sb-team sb-team-${p.team.toLowerCase()}`}>
+                  <span className={`mx-colour mx-colour-${p.team.toLowerCase()}`}>{teamLabel(p.team)}</span>
+                </td>
                 <td className="nowrap player-name">
                   <span {...nameProps(card.open({ accountId: p.accountId, name: p.name, cls: p.classes[0]?.[0] ?? null, isMe: p.isMe }))} title={tr("Their card")}>
                     {p.name}
@@ -129,7 +143,7 @@ export function BoxScore({ d, reading }: { d: MatchDetail; reading?: ReactNode }
                   ))}
                 </td>
                 {COLS.map((c) => {
-                  const v = c.value(p, d.flags);
+                  const v = c.value(p, flags);
                   return (
                     <td key={c.key} className={c.key === "rating" ? "num sb-rating" : "num"}>
                       {v === null ? <span className="muted">–</span> : c.fmt ? c.fmt(v) : String(Math.round(v))}

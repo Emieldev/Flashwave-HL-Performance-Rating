@@ -1277,6 +1277,19 @@ pub async fn link_demo(state: State<'_, AppState>, log_id: i64, path: String) ->
     }
 }
 
+/// Read one match again with this version: its demos from their files, then
+/// aim and fights. Holds the sync's turn, as linking a demo does.
+#[tauri::command]
+pub async fn reread_match(app: AppHandle, state: State<'_, AppState>, log_id: i64) -> CmdResult<hl_ingest::demo_import::ReRead> {
+    let _guard = BusyGuard::acquire(&state.busy).ok_or_else(|| CmdError::new("busy", "A sync is running; read the match again when it has finished."))?;
+    let me = state.db.get_me().await?;
+    // Each step as it starts: an STV takes a while, and the button says which.
+    let step = |what: &'static str| {
+        let _ = app.emit("reread://step", serde_json::json!({ "logId": log_id, "step": what }));
+    };
+    Ok(hl_ingest::demo_import::reread_log(&state.db, me, log_id, step).await?)
+}
+
 /// Q18: a match from a demo alone, for a server that wrote no log. Runs the
 /// passes a sync would for it, so it holds the sync's turn while it does.
 #[tauri::command]
@@ -1426,6 +1439,12 @@ pub async fn get_team_info(state: State<'_, AppState>, team_id: i64) -> CmdResul
 #[tauri::command]
 pub async fn get_player_teams(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::transfers::Stay>> {
     Ok(hl_ingest::transfers::player_teams(&state.db, &state.sources, account_id).await?)
+}
+
+/// Both teams of a classified match, with ETF2L's logos: the match header.
+#[tauri::command]
+pub async fn get_match_sides(state: State<'_, AppState>, log_id: i64) -> CmdResult<Option<hl_db::MatchSides>> {
+    Ok(state.db.match_sides(log_id).await?)
 }
 
 /// A team's medals and its seasons.

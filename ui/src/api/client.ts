@@ -34,6 +34,8 @@ import type {
   StvProgress,
   SyncDone,
   Teammates,
+  ReRead,
+  MatchSides,
   TfPathInfo,
   Owner,
   Season,
@@ -203,6 +205,7 @@ const realApi = {
   getSeasonBanner: (season: number, seasonName: string, large = false) => invoke<string | null>("get_season_banner", { season, seasonName, large }),
   getSeasonPodiums: (season: number) => invoke<Podium[]>("get_season_podiums", { season }),
   getTeamHonours: (teamId: number) => invoke<TeamHonours>("get_team_honours", { teamId }),
+  getMatchSides: (logId: number) => invoke<MatchSides | null>("get_match_sides", { logId }),
   getTeamEtf2l: (teamId: number) => invoke<TeamEtf2l>("get_team_etf2l", { teamId }),
   getTeamTransfers: (teamId: number) => invoke<TeamTransfers>("get_team_transfers", { teamId }),
   getTeamInfo: (teamId: number) => invoke<TeamInfo>("get_team_info", { teamId }),
@@ -284,6 +287,10 @@ const realApi = {
   importDemo: (path: string) => invoke<DemoImported>("import_demo", { path }),
   /** A demo dropped on a match page, linked to that match once it checks out. */
   linkDemo: (logId: number, path: string) => invoke<DemoLinked>("link_demo", { logId, path }),
+  rereadMatch: (logId: number) => invoke<ReRead>("reread_match", { logId }),
+  /** Each step of a match being read again, as it starts. */
+  onRereadStep: async (h: (s: { logId: number; step: string }) => void): Promise<UnlistenFn> =>
+    listen<{ logId: number; step: string }>("reread://step", (e) => h(e.payload)),
 
   /** STV download events. Returns a function that unsubscribes all three. */
   onStv: async (h: StvHandlers): Promise<UnlistenFn> => {

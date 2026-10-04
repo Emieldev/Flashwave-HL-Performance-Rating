@@ -33,8 +33,8 @@ mod timeline;
 mod transfers;
 
 pub use context::{
-    ContextCounts, ContextGameRow, ContextRow, Etf2lMatchRow, MatchContext, MateRow, OfficialInfo,
-    OfficialRow, OwnGameRow,
+    ContextCounts, ContextGameRow, ContextRow, Etf2lMatchRow, MatchContext, MatchSides, MateRow, OfficialInfo,
+    OfficialRow, OwnGameRow, SideTeam,
 };
 pub use aim::{AimFilter, AimRow, AimTotals, DeathRow, LifeTotals, PathRow};
 pub use fights::{ClassGame, FightFilter, FightRow, FightTotals, FightsWrite, SeasonOfficial, FIGHT_COLUMNS};

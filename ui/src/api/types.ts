@@ -640,6 +640,8 @@ export interface PlayerRow {
   cpc: number;
   /** Health packs picked up. */
   medkits: number;
+  /** Seconds of respawn this player's caps cost their own dead (v11: shown, not rated). */
+  spawnDelayS?: number | null;
   rating: Rating | null;
   isMe: boolean;
 }
@@ -1069,6 +1071,35 @@ export interface OfficialInfo {
   /** ETF2L's score from your side, when your side is known. */
   score: [number, number] | null;
   defaultWin: boolean;
+}
+
+/** Both teams of a classified match, for the match header. */
+/** What reading a match again did. */
+export interface ReRead {
+  /** Demos read again from their files. */
+  demos: number;
+  /** Linked demos whose file is gone; what was read from them is kept. */
+  missing: number;
+  fights: boolean;
+  aim: boolean;
+}
+
+export interface MatchSides {
+  /** Your side. */
+  team: SideTeam | null;
+  opp: SideTeam | null;
+  season: number | null;
+  seasonName: string | null;
+  /** When ETF2L had the official scheduled. */
+  scheduled: number | null;
+}
+
+export interface SideTeam {
+  /** ETF2L's team id; null for a scrim side known only by name. */
+  id: number | null;
+  name: string;
+  country: string | null;
+  avatar: string | null;
 }
 
 export interface MatchContext {
