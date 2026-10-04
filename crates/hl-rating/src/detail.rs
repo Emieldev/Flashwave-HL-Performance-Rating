@@ -179,6 +179,10 @@ pub struct PlayerRow {
     /// Rating on the player's main class; `None` if too short to rate.
     pub rating: Option<Rating>,
     pub is_me: bool,
+    /// Seconds of respawn this player's caps cost their own dead teammates
+    /// (Q25), from the server log; `None` without one. Shown, not rated
+    /// (v11): on payload and attack/defend it is always 0.
+    pub spawn_delay_s: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -487,6 +491,7 @@ fn players(log: &NormalizedLog, me: Option<SteamId>, rater: &Rater<'_>) -> Vec<P
                 medkits: s.medkits,
                 rating: rater.of(p, &log.flags),
                 is_me: me == Some(p.id),
+                spawn_delay_s: rater.impacts.get(&p.id.account_id()).and_then(|i| i.fights.as_ref()).map(|f| f.caps_spawn_delay),
             }
         })
         .collect();

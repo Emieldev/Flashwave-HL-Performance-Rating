@@ -32,6 +32,8 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  Fixture,
+  NewLogs,
   Stay,
   TeamInfo,
   TeamTransfers,
