@@ -85,6 +85,47 @@ pub fn scan(tf: &Path) -> (Vec<DemoFile>, Vec<(PathBuf, String)>) {
     (found, failed)
 }
 
+/// How deep into another demo folder the scan goes: an archive of
+/// `demoreviews/2024/s34/week3` is four.
+const EXTRA_DEPTH: usize = 8;
+
+/// Every `.dem` in another folder of yours (Flashy: an archive on another
+/// drive, a demoreviews folder), subfolders included. These are copies of
+/// demos recorded at the time, so the file's date is when recording stopped
+/// -- for a SourceTV demo too, which in `tf/demos/stv` would be a download
+/// time -- and that is what places them on the clock.
+pub fn scan_folder(tf: &Path, dir: &Path) -> (Vec<DemoFile>, Vec<(PathBuf, String)>) {
+    let mut found = Vec::new();
+    let mut failed = Vec::new();
+    let mut todo = vec![(dir.to_path_buf(), 0usize)];
+    while let Some((d, depth)) = todo.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if depth < EXTRA_DEPTH {
+                    todo.push((path, depth + 1));
+                }
+                continue;
+            }
+            if !path.extension().is_some_and(|x| x.eq_ignore_ascii_case("dem")) {
+                continue;
+            }
+            match read_demo(tf, &path) {
+                Ok(mut f) => {
+                    if f.start_utc.is_none() && f.header.playback_s > 0.0 {
+                        f.start_utc = Some(f.mtime as f64 - f.header.playback_s as f64);
+                    }
+                    found.push(f)
+                }
+                Err(e) => failed.push((path, format!("{e:#}"))),
+            }
+        }
+    }
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    (found, failed)
+}
+
 pub fn read_demo(tf: &Path, path: &Path) -> Result<DemoFile> {
     let mut buf = [0u8; HEADER_LEN];
     std::fs::File::open(path)

@@ -229,6 +229,13 @@ impl Db {
     /// there: the timeline is everything the file held, and dropping the row
     /// would cut it off from the matches it belongs to.
     pub async fn prune_demos(&self, keep_paths: &[String]) -> Result<u64> {
+        self.prune_demos_except(keep_paths, &[]).await
+    }
+
+    /// [`prune_demos`](Self::prune_demos), leaving alone every demo under
+    /// one of `offline`: a folder on a drive that is not plugged in right
+    /// now is not a folder whose demos were deleted.
+    pub async fn prune_demos_except(&self, keep_paths: &[String], offline: &[String]) -> Result<u64> {
         let existing: Vec<(i64, String, Option<i64>)> =
             sqlx::query(
                 "SELECT d.demo_id, d.path,
@@ -243,7 +250,7 @@ impl Db {
         let keep: std::collections::HashSet<&str> = keep_paths.iter().map(String::as_str).collect();
         let mut removed = 0;
         for (id, path, demos_tf_id) in existing {
-            if keep.contains(path.as_str()) {
+            if keep.contains(path.as_str()) || offline.iter().any(|dir| path.starts_with(dir.as_str())) {
                 continue;
             }
             // Fetchable again, or kept as a timeline: marked, not dropped.

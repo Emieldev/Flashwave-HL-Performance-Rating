@@ -844,6 +844,32 @@ pub async fn scan_demos(app: AppHandle, state: State<'_, AppState>) -> CmdResult
     Ok(summary)
 }
 
+/// Your other demo folders (Flashy): an archive, demoreviews.
+#[tauri::command]
+pub async fn get_demo_folders(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
+    Ok(hl_ingest::extra_demo_dirs(&state.db).await?)
+}
+
+/// Keep these as your other demo folders, then rescan: every demo in them,
+/// subfolders included, is matched to its log like those in `tf/demos`.
+#[tauri::command]
+pub async fn set_demo_folders(app: AppHandle, state: State<'_, AppState>, folders: Vec<String>) -> CmdResult<hl_ingest::DemoIndexSummary> {
+    let mut keep: Vec<String> = Vec::new();
+    for f in folders.into_iter().map(|f| f.trim().to_string()).filter(|f| !f.is_empty()) {
+        if !std::path::Path::new(&f).is_dir() {
+            return Err(CmdError::new("not_found", &format!("{f} is not a folder.")));
+        }
+        if !keep.contains(&f) {
+            keep.push(f);
+        }
+    }
+    hl_ingest::set_extra_demo_dirs(&state.db, &keep).await?;
+    let tf = tf_path(&state).await?;
+    let summary = hl_ingest::index_demos(&state.db, &tf).await?;
+    let _ = app.emit(EV_DEMOS_INDEXED, &summary);
+    Ok(summary)
+}
+
 #[tauri::command]
 pub async fn demo_stats(state: State<'_, AppState>) -> CmdResult<hl_db::DemoStats> {
     Ok(state.db.demo_stats().await?)

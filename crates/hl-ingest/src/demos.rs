@@ -33,8 +33,39 @@ pub struct DemoIndexSummary {
     pub markers: i64,
 }
 
+/// Where the other demo folders are kept: a JSON list of paths.
+const EXTRA_DIRS: &str = "extra_demo_dirs";
+
+/// Your other demo folders, as chosen in Settings.
+pub async fn extra_demo_dirs(db: &Db) -> Result<Vec<String>> {
+    Ok(db.get_setting(EXTRA_DIRS).await?.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default())
+}
+
+pub async fn set_extra_demo_dirs(db: &Db, dirs: &[String]) -> Result<()> {
+    db.set_setting(EXTRA_DIRS, &serde_json::to_string(dirs)?).await
+}
+
 pub async fn index_demos(db: &Db, tf: &Path) -> Result<DemoIndexSummary> {
-    let (files, failed) = hl_demos::scan(tf);
+    let (mut files, mut failed) = hl_demos::scan(tf);
+    // And your other folders (Flashy): an archive, demoreviews. A file seen
+    // twice, a folder inside tf among them, is one demo.
+    // A folder that is not there now -- a drive unplugged -- keeps what was
+    // found in it last time, rather than having it all pruned.
+    let mut offline: Vec<String> = Vec::new();
+    for dir in extra_demo_dirs(db).await? {
+        if !Path::new(&dir).is_dir() {
+            tracing::info!(%dir, "demo folder not reachable; keeping what was found in it");
+            offline.push(dir);
+            continue;
+        }
+        let (more, bad) = hl_demos::scan::scan_folder(tf, Path::new(&dir));
+        for f in more {
+            if !files.iter().any(|x| x.path == f.path) {
+                files.push(f);
+            }
+        }
+        failed.extend(bad);
+    }
     for (path, error) in &failed {
         tracing::warn!(path = %path.display(), %error, "skipping unreadable demo");
     }
@@ -63,7 +94,7 @@ pub async fn index_demos(db: &Db, tf: &Path) -> Result<DemoIndexSummary> {
         .await?;
         keep.push(path);
     }
-    let removed = db.prune_demos(&keep).await?;
+    let removed = db.prune_demos_except(&keep, &offline).await?;
 
     let clocks = place_logs(db).await?;
     let spans: Vec<DemoSpan> = db

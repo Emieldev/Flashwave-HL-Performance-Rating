@@ -491,6 +491,7 @@ let pending = 24;
 
 /** Walks through every progress stage the real sync emits, quickly. */
 let syncTimers: number[] = [];
+let demoFolders: string[] = ["E:/TF2 archive/demoreviews"];
 
 function simulateSync(kind: "sync" | "reprocess") {
   busy = true;
@@ -1372,6 +1373,11 @@ export const mockApi: Api = {
   // The browser build: a new log turns up on the third look.
   newestLog: () => delay({ logId: 4200000, source: "logs.tf", known: ++newestLooks < 3 }),
 
+  getDemoFolders: () => delay([...demoFolders]),
+  setDemoFolders: (folders: string[]) => {
+    demoFolders = folders;
+    return delay<DemoIndexSummary>({ scanned: 120 + 40 * folders.length, unreadable: 0, removed: 0, logsPlaced: 30, links: 30, demosLinked: 30 });
+  },
   syncCancel: () => {
     if (!busy) return delay(false);
     for (const id of syncTimers) window.clearTimeout(id);

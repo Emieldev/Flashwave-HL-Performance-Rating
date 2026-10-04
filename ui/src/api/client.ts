@@ -306,6 +306,8 @@ const realApi = {
 
   /** Subscribe to sync events. Returns a function that unsubscribes all three. */
   syncCancel: () => invoke<boolean>("sync_cancel"),
+  getDemoFolders: () => invoke<string[]>("get_demo_folders"),
+  setDemoFolders: (folders: string[]) => invoke<DemoIndexSummary>("set_demo_folders", { folders }),
   onSync: async (h: SyncHandlers): Promise<UnlistenFn> => {
     const offs = await Promise.all([
       listen<Progress>("sync://progress", (e) => h.onProgress(e.payload)),

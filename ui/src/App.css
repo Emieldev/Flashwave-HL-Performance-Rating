@@ -1676,3 +1676,35 @@ th .sort.active {
 .delta.down {
   color: var(--bad);
 }
+
+/* Settings › Demos: your other demo folders. */
+.demo-folders {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.demo-folders h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.demo-folders ul {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.demo-folders li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.demo-folders code {
+  word-break: break-all;
+}

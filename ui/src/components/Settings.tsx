@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { LeagueSamplePanel } from "./LeagueSamplePanel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api, inTauri } from "../api/client";
 import { errorMessage, type AppStatus, type Cleaned, type DemoIndexSummary } from "../api/types";
 import { formatDate } from "../lib/format";
@@ -527,6 +528,7 @@ function DemosPanel() {
           </dd>
         </dl>
       )}
+      <DemoFolders onScanned={(result) => setScan({ busy: false, result, error: null })} />
       <div className="row" style={{ marginTop: 14 }}>
         <button onClick={() => void rescan()} disabled={scan.busy}>
           {scan.busy ? tr("Scanning…") : tr("Rescan demos")}
@@ -536,6 +538,64 @@ function DemosPanel() {
         )}
       </div>
       {scan.error && <p className="error" style={{ marginTop: 10 }}>{scan.error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Other folders with demos in them (Flashy): an archive on another drive,
+ * demoreviews folders. Scanned with their subfolders, and only ever read:
+ * the clean-up after a sync deletes demos the app downloaded, never these.
+ */
+function DemoFolders({ onScanned }: { onScanned: (s: DemoIndexSummary) => void }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["demo_folders"], queryFn: api.getDemoFolders });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const folders = q.data ?? [];
+
+  async function save(next: string[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.setDemoFolders(next);
+      onScanned(result);
+      for (const key of [["demo_folders"], ["demo_stats"], ["matches"], ["match"]]) void qc.invalidateQueries({ queryKey: key });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function add() {
+    const picked = inTauri ? await open({ directory: true, title: tr("Choose a folder with demos in it") }) : window.prompt(tr("Path to a folder with demos in it"));
+    if (typeof picked === "string" && picked.length > 0 && !folders.includes(picked)) await save([...folders, picked]);
+  }
+
+  return (
+    <div className="demo-folders">
+      <h3>{tr("Other demo folders")}</h3>
+      <p className="hint">{tr("An archive on another drive, demo review folders: every demo in them, subfolders included, is matched to its match like those in tf/demos. They are only read, never moved or deleted.")}</p>
+      {folders.length > 0 && (
+        <ul>
+          {folders.map((f) => (
+            <li key={f}>
+              <code>{f}</code>
+              <button className="linkish" onClick={() => void api.revealPath(f)}>
+                {tr("Show in Explorer")}
+              </button>
+              <button className="linkish" disabled={busy} onClick={() => void save(folders.filter((x) => x !== f))}>
+                {tr("Remove")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button onClick={() => void add()} disabled={busy}>
+        {busy ? tr("Scanning…") : tr("Add a folder")}
+      </button>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
