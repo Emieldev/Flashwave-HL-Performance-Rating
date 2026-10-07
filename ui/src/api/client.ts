@@ -63,6 +63,7 @@ import type {
   Backup,
   Backups,
   PathRow,
+  BuildingRow,
   PartScore,
   PlayedFilters,
   StvQueued,
@@ -149,6 +150,7 @@ const realApi = {
   fetchPart: (partId: number) => invoke<MatchDetail | null>("fetch_part", { partId }),
   /** Where you walked in one match, one route per life (PLAN §14). */
   getPaths: (logId: number) => invoke<PathRow[]>("get_paths", { logId }),
+  getBuildings: (logId: number) => invoke<BuildingRow[]>("get_buildings", { logId }),
   /** Whether a downloaded demo is deleted once it has been read (Q23). */
   autoDeleteDemos: () => invoke<boolean>("auto_delete_demos"),
   setAutoDeleteDemos: (on: boolean) => invoke<boolean>("set_auto_delete_demos", { on }),

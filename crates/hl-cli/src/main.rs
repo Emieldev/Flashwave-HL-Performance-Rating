@@ -1604,6 +1604,17 @@ async fn run() -> Result<()> {
             Ok(())
         }
 
+        ["buildings", log_id] => {
+            // Every building a match's demos saw (Emiel's ticket).
+            let db = Db::connect(&db_path).await?;
+            let b = hl_ingest::buildings::for_log(&db, log_id.parse()?).await?;
+            println!("{} buildings", b.len());
+            for x in &b {
+                println!("  {:<10} {:<9} team {:?} lvl {} {:<16} at ({}, {}) ticks {}-{}", x.kind, x.end.as_deref().unwrap_or("-"), x.team, x.level, x.builder_name.as_deref().unwrap_or("?"), x.x, x.y, x.from_tick, x.to_tick);
+            }
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;

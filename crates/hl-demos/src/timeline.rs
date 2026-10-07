@@ -726,6 +726,11 @@ fn round3(v: [f32; 3]) -> [i32; 3] {
 }
 
 fn building_row(t: u32, entity: u32, b: &Building) -> Option<ObjectRow> {
+    // A teleporter's end, for the map (Emiel): which way players went.
+    let what = match b {
+        Building::Teleporter(tp) => Some(Cow::Borrowed(if tp.is_entrance { "entrance" } else { "exit" })),
+        _ => None,
+    };
     let (kind, builder, pos, level, health, team, building, sapped) = match b {
         Building::Sentry(s) => ("sentry", s.builder, s.position, s.level, s.health, s.team, s.building, s.sapped),
         Building::Dispenser(d) => ("dispenser", d.builder, d.position, d.level, d.health, d.team, d.building, d.sapped),
@@ -745,7 +750,7 @@ fn building_row(t: u32, entity: u32, b: &Building) -> Option<ObjectRow> {
         building,
         sapped,
         by: None,
-        what: None,
+        what,
         vel: None,
     })
 }

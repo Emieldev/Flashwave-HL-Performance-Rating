@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { errorMessage, type Analysis, type KillView, type MapView, type Overview, type PathRow, type Vec3 } from "../../api/types";
+import { errorMessage, type Analysis, type KillView, type MapView, type Overview, type BuildingRow, type PathRow, type Vec3 } from "../../api/types";
 import { capitalize, splitMap, teamLabel } from "../../lib/format";
 import { DEATH, KILL, inSlice, jumpTo, playerMap, roundClock, themeColour, type Slice, classLabel } from "./common";
 import { LifeList } from "./LifeList";
@@ -143,6 +143,13 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
   const pathQ = useQuery({
     queryKey: ["paths", a.logId],
     queryFn: () => api.getPaths(a.logId),
+    enabled: layer === "paths",
+    staleTime: 5 * 60_000,
+  });
+  // The engineers' buildings, with the routes (Emiel).
+  const buildingQ = useQuery({
+    queryKey: ["buildings", a.logId],
+    queryFn: () => api.getBuildings(a.logId),
     enabled: layer === "paths",
     staleTime: 5 * 60_000,
   });
@@ -445,6 +452,7 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
             view={view}
             marks={layer === "dots" ? marks : []}
             paths={layer === "paths" ? routes : []}
+            buildings={layer === "paths" ? (buildingQ.data ?? []) : []}
             focus={focus}
             maxHeight={full ? Math.max(360, window.innerHeight - FULL_CHROME) : MAX_H}
             heat={heat}
@@ -492,7 +500,16 @@ export function KillMap({ a, player, slice, stv }: { a: Analysis; player: number
           </div>
           {layer === "paths" && (
             <div className="km-scale" aria-hidden>
-              {tx("{0} a life{1} one that ended in a death", { "0": <span className="km-key km-key-path" />, "1": <span className="km-key km-key-path-died" /> })}</div>
+              {tx("{0} a life{1} one that ended in a death", { "0": <span className="km-key km-key-path" />, "1": <span className="km-key km-key-path-died" /> })}
+              {(buildingQ.data?.length ?? 0) > 0 && (
+                <span className="km-buildings-key">
+                  <BuildingKey kind="sentry" label={tr("sentry")} />
+                  <BuildingKey kind="dispenser" label={tr("dispenser")} />
+                  <BuildingKey kind="entrance" label={tr("teleporter entrance")} />
+                  <BuildingKey kind="exit" label={tr("exit")} />
+                </span>
+              )}
+            </div>
           )}
           {layer === "heat" && (
             <div className="km-scale" aria-hidden>
@@ -564,6 +581,8 @@ function Canvas(props: {
   marks: Mark[];
   /** Routes to draw under the marks, one per life. */
   paths: PathRow[];
+  /** Engineer buildings, drawn over the routes. */
+  buildings: BuildingRow[];
   /** One route to pick out, with the rest faded. */
   focus: PathRow | null;
   /** How tall the map may be; the window's height in full screen. */
@@ -574,7 +593,7 @@ function Canvas(props: {
   onHover: (m: Mark | null) => void;
   a: Analysis;
 }) {
-  const { frame, display, image, view, marks, paths, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick, onEditZones, zoom, onZoom, onStage, zoneOpacity, zoneLabels } = props;
+  const { frame, display, image, view, marks, paths, buildings, focus, maxHeight, heat, heatColor, hover, onHover, a, zones, zoneCounts, drawing, selectedZone, onMapClick, onEditZones, zoom, onZoom, onStage, zoneOpacity, zoneLabels } = props;
   // The three colours the canvas draws with, resolved from the theme.
   const killColour = themeColour("--kill", "#5791c8");
   const deathColour = themeColour("--death", "#d6763a");
@@ -656,13 +675,34 @@ function Canvas(props: {
         : `rgba(134, 171, 201, ${dim ? 0.1 : picked ? 0.95 : 0.5})`;
       g.lineWidth = picked ? 2.5 : 1.5;
       g.lineJoin = "round";
+      // A jump no one can walk -- a teleporter, mostly -- breaks the line
+      // rather than drawing a straight stroke across the map (Emiel). It is
+      // still the same route: the picked one gets a faint dotted link.
+      const gaps: [number, number][] = [];
       g.beginPath();
       route.points.forEach(([, x, y], i) => {
         const [cx, cy] = px([x, y]);
-        if (i === 0) g.moveTo(cx, cy);
-        else g.lineTo(cx, cy);
+        if (i === 0 || jumped(route.points[i - 1], route.points[i])) {
+          if (i > 0) gaps.push([i - 1, i]);
+          g.moveTo(cx, cy);
+        } else g.lineTo(cx, cy);
       });
       g.stroke();
+      if (picked && gaps.length > 0) {
+        g.save();
+        g.setLineDash([3, 5]);
+        g.lineWidth = 1;
+        g.globalAlpha = 0.45;
+        g.beginPath();
+        for (const [from, to] of gaps) {
+          const [ax, ay] = px([route.points[from][1], route.points[from][2]]);
+          const [bx, by] = px([route.points[to][1], route.points[to][2]]);
+          g.moveTo(ax, ay);
+          g.lineTo(bx, by);
+        }
+        g.stroke();
+        g.restore();
+      }
       if (dim) continue;
       // Where it started and where it stopped: a ring for the spawn, a solid
       // dot for the end, so a route reads in one direction.
@@ -685,6 +725,15 @@ function Canvas(props: {
       g.fill();
     }
 
+    // Buildings over the routes. With a life picked, only what stood while
+    // it was walked; otherwise every one, faded.
+    const ends = teleEnds(buildings, paths);
+    for (const [i, b] of buildings.entries()) {
+      const live = focus === null || (b.demoId === focus.demoId && b.fromTick <= focus.toTick && b.toTick >= focus.fromTick);
+      if (focus !== null && !live) continue;
+      drawBuilding(g, px([b.x, b.y]), b.kind === "teleporter" ? (b.end ?? ends.get(i) ?? "teleporter") : b.kind, b.team, focus === null ? 0.7 : 1);
+    }
+
     // Heat: one hue, transparent to full, so more is brighter. No floor:
     // with a floor every cell anyone ever died in lights up and the hot spots
     // drown; below 6% a cell stays clear.
@@ -703,7 +752,7 @@ function Canvas(props: {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [img, view, heat, heatColor, heatResolved, killColour, deathColour, frame, display, W, H, scale, paths, focus, zoom]);
+  }, [img, view, heat, heatColor, heatResolved, killColour, deathColour, frame, display, W, H, scale, paths, buildings, focus, zoom]);
 
   const nearest = (e: React.MouseEvent<SVGSVGElement>): Mark | null => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -1173,4 +1222,121 @@ function storeNumber(key: string, v: number) {
   } catch {
     // Blocked storage only costs remembering the setting.
   }
+}
+
+// ---- Engineer buildings on the Paths layer (Emiel's ticket) ----------------
+
+/** Faster than anyone walks or jumps, in map units a second: a teleporter
+ *  (instant), or the demo losing the player for a moment. A rocket or
+ *  sticky jump peaks around 2,000. */
+const JUMP_SPEED = 3_500;
+const TICK_RATE = 66.67;
+
+function jumped(a: [number, number, number, number], b: [number, number, number, number]): boolean {
+  const dist = Math.hypot(b[1] - a[1], b[2] - a[2], b[3] - a[3]);
+  const secs = Math.max(1, b[0] - a[0]) / TICK_RATE;
+  return dist > 400 && dist / secs > JUMP_SPEED;
+}
+
+/** For teleporters read before their end was recorded: the one nearest
+ *  where a route's jump starts is an entrance, nearest where it lands an
+ *  exit. Keyed by the building's index. */
+function teleEnds(buildings: BuildingRow[], paths: PathRow[]): Map<number, "entrance" | "exit"> {
+  const out = new Map<number, "entrance" | "exit">();
+  const teles = buildings.map((b, i) => [b, i] as const).filter(([b]) => b.kind === "teleporter" && b.end === null);
+  if (teles.length === 0) return out;
+  const nearest = (demoId: number, tick: number, x: number, y: number) => {
+    let best: number | null = null;
+    let bestD = 300;
+    for (const [b, i] of teles) {
+      if (b.demoId !== demoId || tick < b.fromTick - 66 || tick > b.toTick + 66) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d < bestD) [best, bestD] = [i, d];
+    }
+    return best;
+  };
+  for (const route of paths) {
+    for (let i = 1; i < route.points.length; i++) {
+      const [from, to] = [route.points[i - 1], route.points[i]];
+      if (!jumped(from, to)) continue;
+      const entrance = nearest(route.demoId, from[0], from[1], from[2]);
+      const exit = nearest(route.demoId, to[0], to[1], to[2]);
+      if (entrance !== null && exit !== null && entrance !== exit) {
+        out.set(entrance, "entrance");
+        out.set(exit, "exit");
+      }
+    }
+  }
+  return out;
+}
+
+const RED = "214, 92, 84";
+const BLU = "99, 148, 196";
+
+/** One building's marker: a triangle for a sentry, a square for a
+ *  dispenser, a ring for a teleporter entrance and a filled disc for an
+ *  exit (a diamond when which end is not known), in its team's colour. */
+function drawBuilding(g: CanvasRenderingContext2D, [x, y]: [number, number], kind: string, team: number | null, alpha: number) {
+  const rgb = team === 2 ? RED : team === 3 ? BLU : "200, 190, 175";
+  g.save();
+  g.globalAlpha = alpha;
+  g.lineWidth = 2;
+  g.strokeStyle = "rgba(20, 16, 12, 0.85)";
+  g.fillStyle = `rgb(${rgb})`;
+  g.beginPath();
+  if (kind === "sentry") {
+    g.moveTo(x, y - 7);
+    g.lineTo(x + 6.5, y + 5);
+    g.lineTo(x - 6.5, y + 5);
+    g.closePath();
+    g.stroke();
+    g.fill();
+  } else if (kind === "dispenser") {
+    g.rect(x - 5, y - 5, 10, 10);
+    g.stroke();
+    g.fill();
+  } else if (kind === "entrance") {
+    g.arc(x, y, 5.5, 0, Math.PI * 2);
+    g.stroke();
+    g.strokeStyle = `rgb(${rgb})`;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.arc(x, y, 5.5, 0, Math.PI * 2);
+    g.stroke();
+  } else if (kind === "exit") {
+    g.arc(x, y, 6, 0, Math.PI * 2);
+    g.stroke();
+    g.fill();
+    g.fillStyle = "rgba(20, 16, 12, 0.85)";
+    g.beginPath();
+    g.arc(x, y, 2, 0, Math.PI * 2);
+    g.fill();
+  } else {
+    g.moveTo(x, y - 6);
+    g.lineTo(x + 6, y);
+    g.lineTo(x, y + 6);
+    g.lineTo(x - 6, y);
+    g.closePath();
+    g.stroke();
+    g.fill();
+  }
+  g.restore();
+}
+
+/** The legend's little copy of a marker. */
+function BuildingKey({ kind, label }: { kind: string; label: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    g.clearRect(0, 0, c.width, c.height);
+    drawBuilding(g, [8, 8], kind, 3, 1);
+  }, [kind]);
+  return (
+    <span className="km-building-key">
+      <canvas ref={ref} width={16} height={16} />
+      {label}
+    </span>
+  );
 }

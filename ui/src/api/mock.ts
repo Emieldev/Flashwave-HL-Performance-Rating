@@ -830,6 +830,23 @@ export const mockApi: Api = {
       400,
     ),
 
+  // The buildings beside the first life's teleport, as the routes are laid out.
+  getBuildings: async (logId: number) => {
+    const paths = await mockApi.getPaths(logId);
+    const life = paths[0];
+    const [, ax, ay] = life.points[19];
+    const [, bx, by] = life.points[20];
+    const b = (kind: BuildingRow["kind"], end: BuildingRow["end"], x: number, y: number, team: number): BuildingRow => ({
+      demoId: 1, kind, end, team, builder: 1, builderName: "engie", x, y, z: 0, fromTick: 4_000, toTick: 20_000, level: 3,
+    });
+    return [
+      b("teleporter", null, ax + 40, ay - 30, 3),
+      b("teleporter", null, bx - 40, by + 30, 3),
+      b("sentry", null, bx + 400, by + 250, 3),
+      b("dispenser", null, bx + 470, by + 180, 3),
+      b("sentry", null, ax - 900, ay - 300, 2),
+    ];
+  },
   getPaths: (logId: number) => {
     // A lap of a small loop, so the layer has something to draw in a browser.
     const r = rng(logId);
@@ -838,7 +855,9 @@ export const mockApi: Api = {
       const cy = -1_000 + r() * 2_000;
       const points = Array.from({ length: 40 }, (_, j) => {
         const t = (j / 39) * Math.PI * 2;
-        return [5_000 + i * 900 + j * 16, Math.round(cx + Math.cos(t) * 700), Math.round(cy + Math.sin(t) * 500), 0] as [
+        // The first life takes a teleporter half way: a jump across the map.
+        const tele = i === 0 && j >= 20 ? 2_600 : 0;
+        return [5_000 + i * 900 + j * 16, Math.round(cx + Math.cos(t) * 700) + tele, Math.round(cy + Math.sin(t) * 500), 0] as [
           number,
           number,
           number,

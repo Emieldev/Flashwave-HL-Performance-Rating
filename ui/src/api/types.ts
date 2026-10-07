@@ -1600,6 +1600,25 @@ export interface PathRow {
   caps: Array<[number, number]>;
 }
 
+/** An engineer building a match's demos saw (Emiel's ticket). */
+export interface BuildingRow {
+  demoId: number;
+  kind: "sentry" | "dispenser" | "teleporter";
+  /** A teleporter's end, when the demo was read with it recorded. */
+  end: "entrance" | "exit" | null;
+  /** 2 RED, 3 BLU. */
+  team: number | null;
+  builder: number | null;
+  builderName: string | null;
+  x: number;
+  y: number;
+  z: number;
+  /** Demo ticks, the routes' frame. */
+  fromTick: number;
+  toTick: number;
+  level: number;
+}
+
 /** One log a combined log was built from, with its own scoreboard. */
 export interface PartScore {
   logId: number;

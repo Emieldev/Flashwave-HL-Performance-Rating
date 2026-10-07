@@ -275,6 +275,7 @@ pub fn run() {
             sync_commands::get_parts,
             sync_commands::fetch_part,
             sync_commands::get_paths,
+            sync_commands::get_buildings,
             sync_commands::downloaded_demos,
             sync_commands::auto_delete_demos,
             sync_commands::set_auto_delete_demos,

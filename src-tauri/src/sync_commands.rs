@@ -782,6 +782,12 @@ pub async fn fetch_part(state: State<'_, AppState>, part_id: i64) -> CmdResult<O
 
 /// Where you walked in one match, one route per life (PLAN §14). Empty
 /// without a demo for it.
+/// Every sentry, dispenser and teleporter a match's demos saw (Emiel).
+#[tauri::command]
+pub async fn get_buildings(state: State<'_, AppState>, log_id: i64) -> CmdResult<Vec<hl_ingest::buildings::Building>> {
+    Ok(hl_ingest::buildings::for_log(&state.db, log_id).await?)
+}
+
 #[tauri::command]
 pub async fn get_paths(state: State<'_, AppState>, log_id: i64) -> CmdResult<Vec<hl_db::PathRow>> {
     Ok(state.db.paths_for_log(log_id).await?)
