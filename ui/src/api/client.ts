@@ -146,7 +146,7 @@ const realApi = {
   /** The classes and maps you have played, for the match list's filters. */
   /** Counted under the list's other filters (Q59); none gives every match. */
   playedFilters: (q?: PlayedFilterQuery) =>
-    invoke<PlayedFilters>("played_filters", { format: null, kind: null, from: null, to: null, class: null, map: null, ...q }),
+    invoke<PlayedFilters>("played_filters", { format: null, kind: null, from: null, to: null, class: null, map: null, stvOnly: false, ...q }),
   /** The scoreboards of the logs a combined log was built from. */
   getParts: (logId: number) => invoke<PartScore[]>("get_parts", { logId }),
   /** Fetch one part's log from logs.tf and score it. */

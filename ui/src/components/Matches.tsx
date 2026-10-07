@@ -39,12 +39,15 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
   const [cls, setCls] = useState<string | null>(null);
   const [map, setMap] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: string; ascending: boolean }>({ key: "date", ascending: false });
+  // Q56 (Emiel): straight to the matches with everyone's movement and aim.
+  const [stvOnly, setStvOnly] = useState(false);
+  const classSort = parseClassSort(sort.key);
 
   const kind = view === "official" || view === "scrim" || view === "pug" ? view : null;
   const period = usePeriod();
   // Q59 (Emiel): each class's and map's count is of what the other filters
   // show, not of every log.
-  const counted = { format: view === "all" ? null : "highlander", kind, ...bounds(period), class: cls, map };
+  const counted = { format: view === "all" ? null : "highlander", kind, ...bounds(period), class: cls, map, stvOnly };
   const filters = useQuery({
     queryKey: ["played_filters", counted],
     queryFn: () => api.playedFilters(counted),
@@ -61,6 +64,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
     ascending: sort.ascending,
     class: cls,
     map,
+    stvOnly,
   };
 
   const matches = useQuery({
@@ -178,6 +182,18 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
               <span className="cf-n">{n}</span>
             </button>
           ))}
+          <ClassSortPicker sort={sort} onSort={setSort} />
+          <button
+            className={stvOnly ? "km-chip on cf-stv" : "km-chip cf-stv"}
+            aria-pressed={stvOnly}
+            title={t("Only matches with their SourceTV demo on this machine: everyone's movement, aim and spychecks")}
+            onClick={() => {
+              setStvOnly((s) => !s);
+              setPages(1);
+            }}
+          >
+            {t("With STV")}
+          </button>
         </div>
       )}
       </div>
@@ -186,8 +202,17 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
 
       {!matches.isPending && items.length === 0 && !matches.isError && (
         <div className="empty">
-          <p>{t("No matches yet.")}</p>
-          <p className="hint">{t("Press Sync to pull your history from trends.tf and logs.tf.")}</p>
+          {stvOnly ? (
+            <>
+              <p>{t("No match here has its SourceTV demo on this machine.")}</p>
+              <p className="hint">{t("Download one from a match's Demo linking panel, or turn off With STV.")}</p>
+            </>
+          ) : (
+            <>
+              <p>{t("No matches yet.")}</p>
+              <p className="hint">{t("Press Sync to pull your history from trends.tf and logs.tf.")}</p>
+            </>
+          )}
         </div>
       )}
 
@@ -200,6 +225,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
                 <th>{t("Map")}</th>
                 <th>{t("Class")}</th>
                 <th>{t("Result")}</th>
+                {classSort && <SortHead col={{ key: sort.key, label: classSortLabel(classSort), num: true, title: classSortLabel(classSort) }} sort={sort} onSort={setSort} />}
                 {SORTS.slice(1).map((c) => (
                   <SortHead key={c.key} col={c} sort={sort} onSort={setSort} />
                 ))}
@@ -208,7 +234,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
             </thead>
             <tbody>
               {items.map((m) => (
-                <MatchRow key={m.logId} m={m} onOpen={onOpen} />
+                <MatchRow key={m.logId} m={m} onOpen={onOpen} classCol={!!classSort} />
               ))}
             </tbody>
           </table>
@@ -221,6 +247,45 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
         </button>
       )}
     </section>
+  );
+}
+
+/** The nine classes as the raw logs name them, in the scoreboard's order. */
+const NINE = ["scout", "soldier", "pyro", "demoman", "heavy", "engineer", "medic", "sniper", "spy"];
+
+/** Q61: a `killed:<class>` or `diedto:<class>` sort, read back. */
+type ClassSort = { how: "killed" | "diedto"; cls: string };
+
+function parseClassSort(key: string): ClassSort | null {
+  const m = /^(killed|diedto):(\w+)$/.exec(key);
+  return m ? { how: m[1] as ClassSort["how"], cls: m[2] } : null;
+}
+
+function classSortLabel(s: ClassSort): string {
+  return s.how === "killed" ? t("Kills on {0}", { "0": capitalize(s.cls) }) : t("Deaths to {0}", { "0": capitalize(s.cls) });
+}
+
+/**
+ * Q61 (Clark): sort by kills on one class or deaths to one -- "the log
+ * where I killed the most Soldiers", "where a Sniper killed me most".
+ */
+function ClassSortPicker({ sort, onSort }: { sort: { key: string; ascending: boolean }; onSort: (s: { key: string; ascending: boolean }) => void }) {
+  return (
+    <label className="cf-sort" title={t("Sort by your kills on one class, or your deaths to one, from the server logs")}>
+      <select value={parseClassSort(sort.key) ? sort.key : ""} onChange={(e) => onSort({ key: e.target.value || "date", ascending: false })}>
+        <option value="">{t("Sort by a class…")}</option>
+        <optgroup label={t("Most kills on")}>
+          {NINE.map((c) => (
+            <option key={c} value={`killed:${c}`}>{classSortLabel({ how: "killed", cls: c })}</option>
+          ))}
+        </optgroup>
+        <optgroup label={t("Most deaths to")}>
+          {NINE.map((c) => (
+            <option key={c} value={`diedto:${c}`}>{classSortLabel({ how: "diedto", cls: c })}</option>
+          ))}
+        </optgroup>
+      </select>
+    </label>
   );
 }
 
@@ -317,7 +382,7 @@ function ImportLog({ onOpen }: { onOpen: (logId: number) => void }) {
   );
 }
 
-function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => void }) {
+function MatchRow({ m, onOpen, classCol }: { m: MatchSummary; onOpen: (logId: number) => void; classCol: boolean }) {
   const me = m.me;
   const [rMine, rTheirs] =
     me?.team === "Blue" ? [m.blueScore, m.redScore] : [m.redScore, m.blueScore];
@@ -374,6 +439,11 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
           <span className="muted">{t("not in log")}</span>
         )}
       </td>
+      {classCol && (
+        <td className="num" title={m.classCount === null ? t("No server log for this match yet") : undefined}>
+          {m.classCount ?? <span className="muted">—</span>}
+        </td>
+      )}
       <td className="num nowrap">{me ? `${me.kills} / ${me.deaths} / ${me.assists}` : ""}</td>
       <td className="num">{me ? me.dmg.toLocaleString() : ""}</td>
       <td className="num">{dpm ?? ""}</td>

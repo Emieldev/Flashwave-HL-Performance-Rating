@@ -376,6 +376,7 @@ pub async fn list_matches(
     ascending: Option<bool>,
     class: Option<String>,
     map: Option<String>,
+    stv_only: Option<bool>,
 ) -> CmdResult<MatchPage> {
     let me = state.db.get_me().await?;
     let filter = MatchFilter {
@@ -386,6 +387,7 @@ pub async fn list_matches(
         sort,
         class,
         map,
+        stv_only: stv_only.unwrap_or(false),
         ascending: ascending.unwrap_or(false),
         model_version: hl_rating::MODEL_VERSION.to_string(),
         // Bound the page size so a bad argument cannot pull the whole table.
@@ -765,11 +767,12 @@ pub async fn played_filters(
     to: Option<i64>,
     class: Option<String>,
     map: Option<String>,
+    stv_only: Option<bool>,
 ) -> CmdResult<PlayedFilters> {
     let Some(me) = state.db.get_me().await? else {
         return Ok(PlayedFilters { classes: Vec::new(), maps: Vec::new() });
     };
-    let filter = MatchFilter { format, kind, from, to, class, map, ..Default::default() };
+    let filter = MatchFilter { format, kind, from, to, class, map, stv_only: stv_only.unwrap_or(false), ..Default::default() };
     let (classes, maps) = state.db.played_classes_and_maps(me.account_id(), &filter).await?;
     Ok(PlayedFilters { classes, maps })
 }

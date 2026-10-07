@@ -118,6 +118,9 @@ export interface MatchSummary {
   parts: number;
   /** Your rating in this match on your main class, where it has one. */
   rating: number | null;
+  /** Under a `killed:`/`diedto:` sort (Q61): your kills on that class, or
+   *  deaths to it. Null otherwise, or with no server log. */
+  classCount: number | null;
 }
 
 export interface MatchPage {
@@ -545,11 +548,13 @@ export interface MatchQuery {
   class: string | null;
   /** A map without its version: `upward` matches `pl_upward_f12`. */
   map: string | null;
+  /** Only matches with a SourceTV demo on this machine (Q56). */
+  stvOnly?: boolean;
 }
 
-/** What the match list's filters can offer, most played first. */
 /** The match list's filters, for counting what each class and map holds. */
 export interface PlayedFilterQuery {
+  stvOnly?: boolean;
   format?: string | null;
   kind?: string | null;
   from?: number | null;
@@ -558,6 +563,7 @@ export interface PlayedFilterQuery {
   map?: string | null;
 }
 
+/** What the match list's filters can offer, most played first. */
 export interface PlayedFilters {
   classes: Array<[string, number]>;
   maps: Array<[string, number]>;

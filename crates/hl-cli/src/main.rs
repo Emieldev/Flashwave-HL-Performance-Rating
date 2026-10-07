@@ -2220,6 +2220,7 @@ class       games  rating");
                 sort: rest.iter().position(|a| *a == "--sort").and_then(|i| rest.get(i + 1)).map(|s| s.to_string()),
                 ascending: false,
                 model_version: hl_rating::MODEL_VERSION.to_string(),
+                stv_only: rest.contains(&"--stv"),
             };
             let page = db.list_matches(me.map(|m| m.account_id()), &filter).await?;
             println!("{} match(es) total, showing {}\n", page.total, page.items.len());

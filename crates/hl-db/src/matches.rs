@@ -87,6 +87,9 @@ pub struct MatchFilter {
     /// A map, without its version: `koth_product` matches `koth_product_final`.
     /// A combined log counts when any of its maps match.
     pub map: Option<String>,
+    /// Only matches with a SourceTV demo on this machine (Q56, Emiel):
+    /// downloaded or found in a demo folder, and not deleted.
+    pub stv_only: bool,
     pub limit: i64,
     pub offset: i64,
     /// What to order by: one of [`SORTS`]; anything else falls back to `date`.
@@ -112,9 +115,31 @@ pub const SORTS: [(&str, &str); 8] = [
     ("rating", "r.score"),
 ];
 
+/// Q61 (Clark): `killed:<class>` sorts by the owner's kills on that class,
+/// `diedto:<class>` by their deaths to it, counted from the raw log's kills
+/// as logs.tf counts them (inside a round, no feigns). `None` for any other
+/// key, or a class that is not one; a match with no raw log counts as NULL
+/// and sinks, rather than as a misleading 0.
+fn class_count_sql(f: &MatchFilter) -> Option<String> {
+    let (how, class) = f.sort.as_deref()?.split_once(':')?;
+    let class = hl_core::TfClass::parse(class).ok()?.as_str();
+    let (mine, theirs) = match how {
+        "killed" => ("k.killer", "k.victim_class"),
+        "diedto" => ("k.victim", "k.killer_class"),
+        _ => return None,
+    };
+    Some(format!(
+        "CASE WHEN p.account_id IS NULL OR NOT EXISTS (SELECT 1 FROM kill_event kx WHERE kx.log_id = m.log_id) THEN NULL
+              ELSE (SELECT COUNT(*) FROM kill_event k
+                    WHERE k.log_id = m.log_id AND k.live = 1 AND COALESCE(k.custom, '') <> 'feign_death'
+                      AND k.killer <> k.victim AND {mine} = p.account_id AND {theirs} = '{class}') END"
+    ))
+}
+
 fn order_by(f: &MatchFilter) -> String {
     let key = f.sort.as_deref().unwrap_or("date");
-    let expr = SORTS.iter().find(|(k, _)| *k == key).map_or("m.played_at", |(_, e)| *e);
+    let by_class = class_count_sql(f);
+    let expr = by_class.as_deref().unwrap_or_else(|| SORTS.iter().find(|(k, _)| *k == key).map_or("m.played_at", |(_, e)| *e));
     let dir = if f.ascending { "ASC" } else { "DESC" };
     // NULLs last whichever way round it is: an unplayed match has no line.
     format!("ORDER BY ({expr}) IS NULL, ({expr}) {dir}, m.played_at DESC, m.log_id DESC")
@@ -138,6 +163,9 @@ pub struct MatchSummary {
     pub has_demo: bool,
     /// The owner's line, when they appear in the log.
     pub me: Option<MyLine>,
+    /// Under a `killed:` or `diedto:` sort (Q61): the owner's kills on that
+    /// class, or deaths to it. `None` otherwise, or with no raw log.
+    pub class_count: Option<i64>,
     /// Official, scrim or pug; `None` for matches outside the context pass
     /// (other formats, or ones the owner did not play).
     pub context: Option<MatchContext>,
@@ -186,6 +214,10 @@ pub struct MatchPage {
 
 /// SQL for the format a log is treated as. A manual override always wins.
 const EFFECTIVE_FORMAT: &str = "COALESCE(i.format_override, i.format)";
+
+/// A match `m` with a SourceTV demo on this machine (Q56).
+const STV_ONLY_SQL: &str = "AND EXISTS (SELECT 1 FROM demo_link dl JOIN demo d ON d.demo_id = dl.demo_id
+                                  WHERE dl.log_id = m.log_id AND d.kind = 'stv' AND d.deleted_at IS NULL)";
 
 /// How far back a sync reaches by default.
 ///
@@ -715,6 +747,7 @@ impl Db {
         // `fmt` is the first of four: format, kind, from, to.
         // The two queries bind a different number of values, so each says
         // where `class` and `map` sit in its own list.
+        let stv = if filter.stv_only { STV_ONLY_SQL } else { "" };
         let where_sql = |fmt: u8, class_p: u8, map_p: u8| {
             let (kind, from, to) = (fmt + 1, fmt + 2, fmt + 3);
             format!(
@@ -728,7 +761,7 @@ impl Db {
                                                         AND mp.main_class = ?{class_p}))
                    AND (?{map_p} IS NULL OR m.map LIKE ?{map_p} || '%'
                         OR EXISTS (SELECT 1 FROM log_segment s
-                                   WHERE s.log_id = m.log_id AND s.map LIKE ?{map_p} || '%'))"
+                                   WHERE s.log_id = m.log_id AND s.map LIKE ?{map_p} || '%')) {stv}"
             )
         };
 
@@ -749,8 +782,10 @@ impl Db {
 
         let where_sql = where_sql(2, 9, 10);
         let order = order_by(filter);
+        let class_count = class_count_sql(filter).unwrap_or_else(|| "NULL".into());
         let rows = sqlx::query(&format!(
             "SELECT m.log_id, m.played_at, m.map, m.title, m.duration_s,
+                    ({class_count}) AS class_count,
                     {EFFECTIVE_FORMAT} AS format, i.league, i.etf2l_match_id, i.demos_tf_id,
                     m.red_score, m.blue_score,
                     EXISTS (SELECT 1 FROM demo_link dl WHERE dl.log_id = m.log_id) AS has_demo,
@@ -829,6 +864,7 @@ impl Db {
                         .unwrap_or_default(),
                     parts: r.get("part_count"),
                     rating: r.get("my_rating"),
+                    class_count: r.get("class_count"),
                     me,
                 }
             })
@@ -853,7 +889,8 @@ impl Db {
                AND (?2 IS NULL OR {EFFECTIVE_FORMAT} = ?2)
                AND (?3 IS NULL OR c.kind = ?3)
                AND (?4 IS NULL OR m.played_at >= ?4)
-               AND (?5 IS NULL OR m.played_at <= ?5)"
+               AND (?5 IS NULL OR m.played_at <= ?5) {}",
+            if filter.stv_only { STV_ONLY_SQL } else { "" }
         );
         let by_map = "(?7 IS NULL OR m.map LIKE ?7 || '%'
                OR EXISTS (SELECT 1 FROM log_segment s2 WHERE s2.log_id = m.log_id AND s2.map LIKE ?7 || '%'))";
@@ -1006,6 +1043,7 @@ mod tests {
             model_version: "v5".to_string(),
             class: None,
             map: None,
+            stv_only: false,
         }
     }
 
@@ -1086,11 +1124,28 @@ mod tests {
             to: Some(i64::MAX),
             class: Some("sniper".into()),
             map: Some("pl_upward".into()),
+            stv_only: true,
             ..Default::default()
         };
         for f in [&all, &some] {
             let (classes, maps) = db.played_classes_and_maps(1, f).await.unwrap();
             assert!(classes.is_empty() && maps.is_empty());
         }
+        // And the list itself, with the STV filter (Q56) and a class sort (Q61).
+        let stv = MatchFilter { stv_only: true, ..filter(None, false) };
+        assert_eq!(db.list_matches(Some(1), &stv).await.unwrap().total, 0);
+        for key in ["killed:soldier", "diedto:heavyweapons"] {
+            db.list_matches(Some(1), &filter(Some(key), false)).await.unwrap();
+        }
+    }
+
+    #[test]
+    fn a_class_sort_names_a_real_class() {
+        assert!(class_count_sql(&filter(Some("killed:soldier"), false)).unwrap().contains("k.victim_class = 'soldier'"));
+        assert!(class_count_sql(&filter(Some("diedto:heavyweapons"), false)).unwrap().contains("k.killer_class = 'heavy'"));
+        // Nothing but a class goes into the SQL.
+        assert!(class_count_sql(&filter(Some("killed:x' OR 1=1 --"), false)).is_none());
+        assert!(class_count_sql(&filter(Some("hugged:spy"), false)).is_none());
+        assert!(class_count_sql(&filter(Some("kills"), false)).is_none());
     }
 }

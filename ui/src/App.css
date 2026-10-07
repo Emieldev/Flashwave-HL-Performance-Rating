@@ -1324,6 +1324,11 @@ th.num {
   gap: 6px;
   margin: -4px 0 12px;
 }
+/* Q56: the STV filter sits at the class row's far end. */
+.class-filter .cf-stv { align-self: center; }
+/* Q61: the class sort, pushing itself and the STV chip to the right. */
+.class-filter .cf-sort { margin-left: auto; align-self: center; }
+.class-filter .cf-sort select { max-width: 190px; }
 
 .cf {
   display: inline-flex;

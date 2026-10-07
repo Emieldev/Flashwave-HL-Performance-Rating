@@ -263,6 +263,7 @@ const FIXTURE_ROWS: MatchSummary[] = FIXTURES.map((d) => {
     demosTfId: d.demosTfId,
     parts: d.parts?.length ?? 0,
     rating: me?.rating?.score ?? null,
+    classCount: null,
     redScore: d.redScore,
     blueScore: d.blueScore,
     hasDemo: d.demos.length > 0,
@@ -379,6 +380,7 @@ const FAKE_MATCHES: MatchSummary[] = (() => {
       parts: 0,
       // A rating, not a percentile: a spread around 1.00 like the real one.
       rating: Math.round((0.6 + r() * 0.9) * 100) / 100,
+      classCount: null,
       format: "highlander",
       league: official ? "etf2l" : null,
       etf2lMatchId: official ? 92_883 - i : null,
@@ -605,9 +607,16 @@ export const mockApi: Api = {
         (q.format === null || m.format === q.format) &&
         (q.kind === null || m.context?.kind === q.kind) &&
         (q.from === null || (m.playedAt ?? 0) >= q.from) &&
-        (q.to === null || (m.playedAt ?? 0) <= q.to),
+        (q.to === null || (m.playedAt ?? 0) <= q.to) &&
+        (!q.stvOnly || m.hasDemo),
     );
-    return delay({ total: filtered.length, items: filtered.slice(q.offset, q.offset + q.limit) });
+    // A class sort (Q61): a made-up count per match, highest first.
+    const rows = /^(killed|diedto):/.test(q.sort ?? "")
+      ? filtered
+          .map((m) => ({ ...m, classCount: m.logId % 7 === 0 ? null : (m.logId * 31 + (q.sort ?? "").length) % 9 }))
+          .sort((a, b) => (a.classCount === null ? 1 : b.classCount === null ? -1 : q.ascending ? a.classCount - b.classCount : b.classCount - a.classCount))
+      : filtered;
+    return delay({ total: rows.length, items: rows.slice(q.offset, q.offset + q.limit) });
   },
 
   // Generated rows have no detail behind them; they open a real fixture,
