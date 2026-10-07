@@ -10,6 +10,7 @@ import { PlayerStatsCard, RankChip } from "./PlayerStats";
 import { MedalGlyph } from "./MedalGlyph";
 import { Country } from "../Country";
 import { BookmarkButton } from "../Bookmarks";
+import { LivesOnMapTab } from "./LivesOnMap";
 
 /**
  * A player's profile, HLTV-style (Q35, Flashy; PLAN §26): who they are,
@@ -20,7 +21,7 @@ import { BookmarkButton } from "../Bookmarks";
  * has no awards to fetch.
  */
 
-type Tab = "overview" | "teams" | "achievements" | "yours";
+type Tab = "overview" | "teams" | "achievements" | "yours" | "lives";
 
 const PLACE = ["gold", "silver", "bronze"] as const;
 
@@ -41,6 +42,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
               ["teams", t("Teams")],
               ["achievements", tx("Achievements ({0})", { "0": p.medals.length + (p.mvps?.length ?? 0) })],
               ["yours", t("In your matches")],
+              ["lives", t("Lives on a map")],
             ] as [Tab, React.ReactNode][]
           ).map(([id, label]) => (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "pp-tab on" : "pp-tab"} onClick={() => setTab(id)}>
@@ -57,6 +59,7 @@ export function PlayerProfile({ accountId, yours }: { accountId: number; yours: 
         )}
         {tab === "achievements" && <Achievements medals={p.medals} mvps={p.mvps ?? []} />}
         {tab === "yours" && yours}
+        {tab === "lives" && <LivesOnMapTab accountId={p.accountId} name={p.name} />}
       </div>
     </>
   );

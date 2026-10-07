@@ -36,7 +36,7 @@ pub use context::{
     ContextCounts, ContextGameRow, ContextRow, Etf2lMatchRow, MatchContext, MatchSides, MateRow, OfficialInfo,
     OfficialRow, OwnGameRow, SideTeam,
 };
-pub use aim::{AimFilter, AimRow, AimTotals, DeathRow, LifeTotals, PathRow};
+pub use aim::{AimFilter, AimRow, AimTotals, DeathRow, LifeIndexRow, LifeTotals, PathRow};
 pub use fights::{ClassGame, FightFilter, FightRow, FightTotals, FightsWrite, SeasonOfficial, FIGHT_COLUMNS};
 pub use demos::{ClockInput, ClockRow, DemoRow, DemoStats, DownloadedDemo, LinkedDemo};
 pub use rawlog::{ChatRow, KillRow, RawlogStats, StoredKill};

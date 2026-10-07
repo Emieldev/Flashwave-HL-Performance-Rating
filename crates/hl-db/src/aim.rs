@@ -120,6 +120,18 @@ pub struct PathRow {
     pub caps: Vec<(i64, i64)>,
 }
 
+/// One life in [`Db::lives_index`].
+#[derive(Debug, Clone)]
+pub struct LifeIndexRow {
+    pub log_id: i64,
+    pub demo_id: i64,
+    pub seq: i64,
+    pub map: Option<String>,
+    /// `stv` or `pov`.
+    pub kind: String,
+    pub played_at: Option<i64>,
+}
+
 /// How the living time was spent, over one match or all of them.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -299,6 +311,35 @@ impl Db {
                     .get::<Option<String>, _>("caps")
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    /// Every life a demo followed `account_id` through, without its points:
+    /// `(log_id, demo_id, seq, the life's map, demo kind, played_at)` (Q57).
+    /// The map is the life's round's, as resolved, else the log's own, so a
+    /// combined log's lives each fall on the map they were played on.
+    pub async fn lives_index(&self, account_id: u32) -> Result<Vec<LifeIndexRow>> {
+        let rows = sqlx::query(
+            "SELECT p.log_id, p.demo_id, p.seq, COALESCE(rm.map, m.map) AS map, d.kind, m.played_at
+             FROM demo_path p
+             JOIN demo d ON d.demo_id = p.demo_id
+             JOIN match m ON m.log_id = p.log_id
+             LEFT JOIN round_map rm ON rm.log_id = p.log_id AND rm.round_num = p.round_num
+             WHERE p.account_id = ?1",
+        )
+        .bind(i64::from(account_id))
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| LifeIndexRow {
+                log_id: r.get("log_id"),
+                demo_id: r.get("demo_id"),
+                seq: r.get("seq"),
+                map: r.get("map"),
+                kind: r.get("kind"),
+                played_at: r.get("played_at"),
             })
             .collect())
     }

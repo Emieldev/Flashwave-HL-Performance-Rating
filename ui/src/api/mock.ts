@@ -34,6 +34,9 @@ import team37805 from "./fixtures/team_37805.json";
 import type {
   Bookmark,
   BuildingRow,
+  LifeOnMap,
+  LivesOnMap as LivesOnMapView,
+  MapWithLives,
   DemoIndexSummary,
   ReRead,
   Fixture,
@@ -864,6 +867,28 @@ export const mockApi: Api = {
       b("dispenser", null, bx + 470, by + 180, 3),
       b("sentry", null, ax - 900, ay - 300, 2),
     ];
+  },
+  livesMaps: (_accountId: number) =>
+    delay<MapWithLives[]>([
+      { map: "product", name: "koth_product_final", matches: 10, lives: 143 },
+      { map: "upward", name: "pl_upward_f12", matches: 4, lives: 57 },
+    ]),
+  livesOnMap: (_accountId: number, map: string) => {
+    // Wandering routes from each side's half, so the view has a pattern.
+    const r = rng(map.length * 7);
+    const classes = ["sniper", "sniper", "engineer", "scout", "spy"];
+    const lives: LifeOnMap[] = Array.from({ length: 60 }, (_, i) => {
+      const team = i % 2 === 0 ? "Red" : "Blue";
+      let [x, y] = [team === "Red" ? -2_200 + r() * 600 : 1_600 + r() * 600, -800 + r() * 1_600];
+      const points: Array<[number, number]> = [];
+      for (let j = 0; j < 30 + Math.floor(r() * 60); j++) {
+        x += (team === "Red" ? 1 : -1) * r() * 90;
+        y += (r() - 0.5) * 120;
+        points.push([Math.round(x), Math.round(y)]);
+      }
+      return { logId: 4_100_000 + (i % 10), playedAt: 1_790_000_000 - (i % 10) * 86_400 * 9, demoId: i % 10, stv: i % 10 === 0, class: classes[i % classes.length], team, roundNum: 1 + (i % 5), died: r() < 0.7, seconds: points.length / 4, points };
+    });
+    return delay<LivesOnMapView>({ map, matches: 10, stvMatches: 1, lives }, 300);
   },
   getPaths: (logId: number) => {
     // A lap of a small loop, so the layer has something to draw in a browser.

@@ -552,6 +552,38 @@ export interface MatchQuery {
   stvOnly?: boolean;
 }
 
+/** Q57: a map a player has routes on. */
+export interface MapWithLives {
+  /** Without its version: `product`. */
+  map: string;
+  /** The newest version played, for the picture. */
+  name: string;
+  matches: number;
+  lives: number;
+}
+
+/** Q57: one life on the map. */
+export interface LifeOnMap {
+  logId: number;
+  playedAt: number | null;
+  demoId: number;
+  stv: boolean;
+  class: string | null;
+  team: "Red" | "Blue" | null;
+  roundNum: number | null;
+  died: boolean;
+  seconds: number;
+  /** `[x, y]` in map units, about four a second. */
+  points: Array<[number, number]>;
+}
+
+export interface LivesOnMap {
+  map: string;
+  matches: number;
+  stvMatches: number;
+  lives: LifeOnMap[];
+}
+
 /** Q60: a page kept to come back to. */
 export type BookmarkKind = "match" | "player" | "team" | "season";
 export interface Bookmark {

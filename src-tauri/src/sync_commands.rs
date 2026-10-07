@@ -1326,6 +1326,18 @@ pub async fn link_demostf(state: State<'_, AppState>, log_id: i64, link: String)
     }
 }
 
+/// Q57 (Emiel): the maps a player has lives on in the demos this machine has.
+#[tauri::command]
+pub async fn lives_maps(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::lives::MapWithLives>> {
+    Ok(hl_ingest::lives::maps(&state.db, account_id).await?)
+}
+
+/// Q57: every life of theirs on one map, with its class and side.
+#[tauri::command]
+pub async fn lives_on_map(state: State<'_, AppState>, account_id: u32, map: String) -> CmdResult<hl_ingest::lives::LivesOnMap> {
+    Ok(hl_ingest::lives::on_map(&state.db, account_id, &map).await?)
+}
+
 /// Q60 (Clark): a page kept to come back to. `kind` is `match`, `player`,
 /// `team` or `season`; `id` is the log, account, team or season number.
 /// `label` and `sub` are what the page was called when it was kept, so the

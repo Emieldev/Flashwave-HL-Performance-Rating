@@ -1639,6 +1639,34 @@ async fn run() -> Result<()> {
             Ok(())
         }
 
+        ["lives", account, rest @ ..] => {
+            // Q57: a player's lives on one map; with no map, the maps.
+            let db = Db::connect(&db_path).await?;
+            let account: u32 = match account.parse() {
+                Ok(a) => a,
+                Err(_) => SteamId::parse(account)?.account_id(),
+            };
+            match rest.first() {
+                None => {
+                    for m in hl_ingest::lives::maps(&db, account).await? {
+                        println!("  {:<14} {:>3} matches {:>5} lives  ({})", m.map, m.matches, m.lives, m.name);
+                    }
+                }
+                Some(map) => {
+                    let v = hl_ingest::lives::on_map(&db, account, map).await?;
+                    println!("{}: {} lives in {} matches ({} with an STV)", v.map, v.lives.len(), v.matches, v.stv_matches);
+                    let mut by: std::collections::BTreeMap<(String, String), usize> = std::collections::BTreeMap::new();
+                    for l in &v.lives {
+                        *by.entry((l.class.clone().unwrap_or("?".into()), l.team.clone().unwrap_or("?".into()))).or_default() += 1;
+                    }
+                    for ((c, t), n) in by {
+                        println!("  {c:<9} {t:<5} {n}");
+                    }
+                }
+            }
+            Ok(())
+        }
+
         ["rankings", class, rest @ ..] => {
             // Q36: one season's ranking of a class in a division.
             let db = Db::connect(&db_path).await?;
