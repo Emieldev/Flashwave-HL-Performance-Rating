@@ -108,6 +108,10 @@ pub async fn match_detail_from(
         detail.etf2l_match_id = info.etf2l_match_id;
         detail.demos_tf_id = info.demos_tf_id;
     }
+    // A combined log with no id of its own downloads its parts' (Q52).
+    if detail.demos_tf_id.is_none() {
+        detail.demos_tf_id = db.stv_ids(log_id).await?.first().copied();
+    }
     if detail.demos_tf_id.is_none() {
         detail.etf2l_demos = crate::etf2l_demos::listed(db, log_id).await.unwrap_or(0);
     }

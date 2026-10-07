@@ -153,6 +153,23 @@ async fn store(db: &Db, log_id: i64, log: RawLog) -> Result<usize> {
     Ok(kills.len())
 }
 
+/// Make sure one log's raw log is stored, fetching it now if not: for a
+/// demo being linked to an old match the sync has not reached yet (Q54),
+/// which has no kills to line the demo up with until it is. `false` when
+/// neither drops.tf nor logs.tf has one.
+pub async fn ensure_one(db: &Db, sources: &Sources, log_id: i64) -> Result<bool> {
+    if db.rawlog(log_id).await?.is_some() {
+        return Ok(true);
+    }
+    let Some(zip) = sources.rawlog_zip(log_id).await? else {
+        return Ok(false);
+    };
+    let text = rawlog::unzip(&zip)?;
+    db.store_rawlog(log_id, &zip).await?;
+    store(db, log_id, rawlog::parse(&text)).await?;
+    Ok(true)
+}
+
 /// Re-derive one stored raw log's kills and chat, for a log that did not
 /// come through the fetch (Q18: one built from a demo).
 pub async fn derive_log(db: &Db, log_id: i64) -> Result<usize> {

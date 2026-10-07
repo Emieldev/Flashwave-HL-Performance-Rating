@@ -108,6 +108,10 @@ pub struct DemoStats {
 impl Db {
     /// Kept Highlander logs with a map and a time but no demos.tf id:
     /// `(log_id, played_at, map)`. What `demostf::index` goes looking for.
+    ///
+    /// A combined log's parts too (Q52): each part is one recording, uploaded
+    /// seconds after its own log, where the combined log is stamped once and
+    /// can hold one id. The combined log's STV is its parts' demos.
     pub async fn logs_without_demo_id(&self) -> Result<Vec<(i64, i64, Vec<String>)>> {
         // Each log's maps as its rounds resolved them, falling back to the
         // map field. A combined log's own field is free text -- "upward +
@@ -117,7 +121,6 @@ impl Db {
                     (SELECT group_concat(DISTINCT rm.map) FROM round_map rm WHERE rm.log_id = i.log_id)
              FROM log_index i
              WHERE i.demos_tf_id IS NULL
-               AND i.superseded_by IS NULL
                AND i.played_at IS NOT NULL
                AND ( COALESCE(i.format_override, i.format) = 'highlander'
                   OR (COALESCE(i.format_override, i.format) IS NULL AND COALESCE(i.player_count, 0) >= 16) )
@@ -137,6 +140,23 @@ impl Db {
                 (log_id, at, maps)
             })
             .collect())
+    }
+
+    /// The demos.tf ids of a log's STV: its own, then its parts' in the
+    /// order they were played, each once.
+    pub async fn stv_ids(&self, log_id: i64) -> Result<Vec<i64>> {
+        let ids: Vec<i64> = sqlx::query_scalar(
+            "SELECT demos_tf_id FROM (
+                 SELECT demos_tf_id, 0 AS k, 0 AS at, log_id FROM log_index WHERE log_id = ?1
+                 UNION ALL
+                 SELECT demos_tf_id, 1, COALESCE(played_at, 0), log_id FROM log_index WHERE superseded_by = ?1
+             ) WHERE demos_tf_id IS NOT NULL ORDER BY k, at, log_id",
+        )
+        .bind(log_id)
+        .fetch_all(self.pool())
+        .await?;
+        let mut seen = std::collections::HashSet::new();
+        Ok(ids.into_iter().filter(|i| seen.insert(*i)).collect())
     }
 
     /// Record the demos.tf demo each log was matched to, and the map demos.tf
@@ -450,6 +470,13 @@ impl Db {
             .await?;
         }
         tx.commit().await?;
+        Ok(())
+    }
+
+    /// Note which demos.tf demo a file is (Q53: one added by its link), so
+    /// it can be fetched back after its file is deleted.
+    pub async fn set_demo_demos_tf_id(&self, demo_id: i64, demos_tf_id: i64) -> Result<()> {
+        sqlx::query("UPDATE demo SET demos_tf_id = ?2 WHERE demo_id = ?1").bind(demo_id).bind(demos_tf_id).execute(self.pool()).await?;
         Ok(())
     }
 

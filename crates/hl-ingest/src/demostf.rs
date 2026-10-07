@@ -32,8 +32,32 @@ const LATE_S: i64 = 3 * 3600;
 /// recording when the log went live, which another match's demo was not.
 const UNMAPPED_SLACK_S: i64 = 60;
 
-/// Pages to walk before giving up. 100 demos a page, so this is deep history.
+/// Pages to walk in one sync. demos.tf gives 50 demos a page, so this is
+/// 1,000 demos: a regular pugger plays that in a year, and Emiel's 2023
+/// official sat 39 pages down (Q52). The walk is resumed where it stopped
+/// (see [`Walk`]), so deep history is reached over a few syncs.
 const MAX_PAGES: usize = 20;
+
+/// Where the walk through this player's demos.tf list has got to, kept in
+/// the settings: `top` is the newest demo's time seen, `reached` the oldest,
+/// and every demo between the two has been offered to the logs once.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct Walk {
+    top: i64,
+    reached: i64,
+}
+
+const WALK_KEY: &str = "demostf_walk";
+
+impl Walk {
+    fn parse(s: &str) -> Option<Walk> {
+        let (a, b) = s.split_once(',')?;
+        Some(Walk { top: a.trim().parse().ok()?, reached: b.trim().parse().ok()? })
+    }
+    fn to_setting(self) -> String {
+        format!("{},{}", self.top, self.reached)
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,35 +127,70 @@ pub fn match_demos(logs: &[Unlinked], demos: &[DemosTfMeta]) -> Vec<(i64, i64, O
 }
 
 /// Ask demos.tf what it has for this player, and fill in the ids trends.tf
-/// never gave us. Stops as soon as a page is older than the oldest log that
-/// still needs one.
+/// never gave us.
+///
+/// First the demos uploaded since the last walk, down to its newest; then,
+/// with the pages left, on down from where the last walk stopped, until a
+/// page is older than the oldest log that still needs a demo. A demo is
+/// uploaded up to a few hours after its log, so the new pages reach a day
+/// past the old top.
 pub async fn index(db: &Db, sources: &Sources, me: SteamId) -> Result<Found> {
     let logs = db.logs_without_demo_id().await?;
     if logs.is_empty() {
         return Ok(Found::default());
     }
     let oldest = logs.iter().map(|(_, at, _)| *at).min().unwrap_or(0);
+    let was = db.get_setting(WALK_KEY).await?.as_deref().and_then(Walk::parse);
 
     let steamid64 = me.to_steamid64();
     let mut all: Vec<DemosTfMeta> = Vec::new();
-    let mut before = None;
-    for _ in 0..MAX_PAGES {
-        let page = sources.demostf_for_player(&steamid64, before).await?;
-        if page.is_empty() {
-            break;
+    let mut pages = 0;
+    let new_floor = was.map_or(oldest, |w| (w.top - 86_400).max(oldest));
+    let fresh = walk(sources, &steamid64, None, new_floor, &mut pages, &mut all).await?;
+    let top = all.iter().filter_map(|d| d.time).max().or(was.map(|w| w.top)).unwrap_or(0);
+    let mut reached = match (fresh, was) {
+        // Met the last walk: the two join up, down to where it had reached.
+        (Some(e), Some(w)) if e <= new_floor => w.reached.min(e),
+        (Some(e), _) => e,
+        (None, w) => w.map_or(top, |w| w.reached),
+    };
+    if reached > oldest && pages < MAX_PAGES {
+        if let Some(e) = walk(sources, &steamid64, Some(reached), oldest, &mut pages, &mut all).await? {
+            reached = reached.min(e);
         }
-        let earliest = page.iter().filter_map(|d| d.time).min().unwrap_or(0);
-        all.extend(page);
-        // Nothing older than the oldest log we care about is worth asking for.
-        if earliest <= oldest {
-            break;
-        }
-        before = Some(earliest);
     }
+    db.set_setting(WALK_KEY, &Walk { top, reached }.to_setting()).await?;
 
     let pairs = match_demos(&logs, &all);
     db.set_demos_tf_ids(&pairs).await?;
     Ok(Found { listed: all.len(), matched: pairs.len() })
+}
+
+/// Walk the list down from `before` until a page reaches `floor` or the
+/// pages run out: the oldest time seen, `i64::MIN` at the list's end.
+async fn walk(
+    sources: &Sources,
+    steamid64: &str,
+    mut before: Option<i64>,
+    floor: i64,
+    pages: &mut usize,
+    all: &mut Vec<DemosTfMeta>,
+) -> Result<Option<i64>> {
+    let mut earliest = None;
+    while *pages < MAX_PAGES {
+        *pages += 1;
+        let page = sources.demostf_for_player(steamid64, before).await?;
+        let Some(e) = page.iter().filter_map(|d| d.time).min() else {
+            return Ok(Some(i64::MIN));
+        };
+        all.extend(page);
+        earliest = Some(e);
+        if e <= floor {
+            break;
+        }
+        before = Some(e);
+    }
+    Ok(earliest)
 }
 
 #[cfg(test)]
@@ -228,6 +287,25 @@ mod tests {
         // Its own map field would read "upward + steel" and match nothing.
         let demos = vec![demo(100, "cp_steel_f12", 10 * hour - 480)];
         assert_eq!(ids(match_demos(&logs, &demos)), vec![(1, 100)]);
+    }
+
+    #[test]
+    fn a_combined_logs_parts_each_take_their_own_demo() {
+        // Emiel's S29 0FO vs Xenon (Q52): three parts uploaded seconds after
+        // demos.tf got each recording, and the combined log six minutes on.
+        let maps = || vec!["pl_vigil_rc10".to_string()];
+        let logs = vec![(3426234, 1685563743, maps()), (3426174, 1685561253, maps()), (3426198, 1685562225, maps()), (3426219, 1685563377, maps())];
+        let demos = vec![demo(990239, "pl_vigil_rc10", 1685561256), demo(990254, "pl_vigil_rc10", 1685562227), demo(990266, "pl_vigil_rc10", 1685563380)];
+        let mut got = ids(match_demos(&logs, &demos));
+        got.sort_unstable();
+        assert_eq!(got, vec![(3426174, 990239), (3426198, 990254), (3426219, 990266)]);
+    }
+
+    #[test]
+    fn the_walk_is_kept_as_two_times() {
+        let w = Walk { top: 1_790_000_000, reached: 1_685_000_000 };
+        assert_eq!(Walk::parse(&w.to_setting()), Some(w));
+        assert_eq!(Walk::parse("nonsense"), None);
     }
 
     #[test]

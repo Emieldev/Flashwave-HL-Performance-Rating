@@ -78,7 +78,7 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
               <p className="hint">
                 {fromEtf2l
                   ? t("demos.tf has none, but a player uploaded the SourceTV demo to the match's ETF2L page. Every demo there is downloaded and checked against this match's logs (map, players, kills), so each map's demo goes to its own log.")
-                  : t("All 18 players, not just your view. Stopwatch matches are usually split into one demo per half, and demos.tf links one of them, so this may cover only part of the match.")}
+                  : t("All 18 players, not just your view. A combined log brings every part's demo; a half demos.tf did not link can be added by its link below.")}
               </p>
               {download ? (
                 <div className="dl-progress">
@@ -101,10 +101,78 @@ export function DemoPanel({ d }: { d: MatchDetail }) {
             <p className="hint">{hasStv ? t("This match's SourceTV demo is on this machine.") : t("Neither demos.tf nor ETF2L has a SourceTV demo for this match.")}</p>
           )}
           {error && <p className="error">{error}</p>}
+          <ByLink d={d} />
         </div>
         <DropZone d={d} />
       </div>
     </section>
+  );
+}
+
+/**
+ * Q53 (Emiel): a demos.tf link pasted in, downloaded and checked like a
+ * dropped demo. For the STV the lookup missed, and for a match's other
+ * halves when demos.tf linked only one.
+ */
+function ByLink({ d }: { d: MatchDetail }) {
+  const qc = useQueryClient();
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [got, setGot] = useState<DemoLinked | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    if (!link.trim()) return;
+    setBusy(true);
+    setError(null);
+    setGot(null);
+    try {
+      const linked = await api.linkDemostf(d.logId, link.trim());
+      setGot(linked);
+      setLink("");
+      for (const key of [["match", d.logId], ["matches"], ["spychecks", d.logId], ["demostats", d.logId], ["cart", d.logId], ["positions", d.logId], ["aim"], ["paths", d.logId], ["analysis", d.logId]]) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="demo-by-link">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void add();
+        }}
+      >
+        <input
+          type="text"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="https://demos.tf/990239"
+          aria-label={t("demos.tf link")}
+          disabled={busy}
+        />
+        <button type="submit" disabled={busy || !link.trim()}>
+          {busy ? t("Downloading…") : t("Add by link")}
+        </button>
+      </form>
+      <span className="hint">{t("Have the demos.tf page of this match's STV? Paste its link: it is downloaded and checked against this match first.")}</span>
+      {got && (
+        <p className="demo-drop-ok">
+          {tx("Linked {0}: {1} of the log's {2} kills line up, {3} players in both.", {
+            "0": <code>{got.fileName}</code>,
+            "1": got.killsMatched,
+            "2": got.logKills,
+            "3": got.playersShared,
+          })}
+        </p>
+      )}
+      {error && <p className="error">{error}</p>}
+    </div>
   );
 }
 

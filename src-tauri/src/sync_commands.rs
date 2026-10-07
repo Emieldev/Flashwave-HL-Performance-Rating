@@ -1272,7 +1272,36 @@ pub async fn link_demo(state: State<'_, AppState>, log_id: i64, path: String) ->
         .tf_path
         .ok_or_else(|| CmdError::new("missing_config", "Set your TF2 folder in Settings first: the demo is kept in tf/demos."))?;
     let me = state.db.get_me().await?;
+    // An old match the sync has not reached has no kills to line the demo
+    // up with yet (Q54): fetch its server log first.
+    if let Err(e) = hl_ingest::kills::ensure_one(&state.db, &state.sources, log_id).await {
+        tracing::warn!(log_id, error = %format!("{e:#}"), "raw log not fetched before linking a demo");
+    }
     match hl_ingest::demo_import::link_to_log(&state.db, std::path::Path::new(&tf), std::path::Path::new(&path), log_id, me, |_| {}).await {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            if let Some(w) = e.downcast_ref::<hl_ingest::demo_import::WrongDemo>() {
+                return Err(CmdError::new("wrong_demo", w.to_string()));
+            }
+            Err(e.into())
+        }
+    }
+}
+
+/// Q53 (Emiel): a demo added by its demos.tf link, downloaded and linked to
+/// this match with the same checks as a dropped one.
+#[tauri::command]
+pub async fn link_demostf(state: State<'_, AppState>, log_id: i64, link: String) -> CmdResult<hl_ingest::demo_import::DemoLinked> {
+    let id = hl_ingest::demo_import::demostf_id(&link).ok_or_else(|| CmdError::new("wrong_demo", "That is not a demos.tf link: it looks like https://demos.tf/990239."))?;
+    let _guard = BusyGuard::acquire(&state.busy).ok_or_else(|| CmdError::new("busy", "A sync is running; add the demo when it has finished."))?;
+    let tf = state
+        .db
+        .get_config()
+        .await?
+        .tf_path
+        .ok_or_else(|| CmdError::new("missing_config", "Set your TF2 folder in Settings first: the demo is kept in tf/demos/stv."))?;
+    let me = state.db.get_me().await?;
+    match hl_ingest::demo_import::link_demostf(&state.db, &state.sources, std::path::Path::new(&tf), log_id, id, me, |_, _| {}).await {
         Ok(l) => Ok(l),
         Err(e) => {
             if let Some(w) = e.downcast_ref::<hl_ingest::demo_import::WrongDemo>() {

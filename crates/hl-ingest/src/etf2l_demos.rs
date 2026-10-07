@@ -175,6 +175,12 @@ pub async fn fetch(db: &Db, sources: &Sources, tf: &Path, log_id: i64, mut progr
             logs.push(l);
         }
     }
+    // Each log's kills are what a demo is lined up against (Q54).
+    for &l in &logs {
+        if let Err(e) = crate::kills::ensure_one(db, sources, l).await {
+            tracing::warn!(log_id = l, error = %format!("{e:#}"), "raw log not fetched before linking a demo");
+        }
+    }
     let dir = tf.join(hl_demos::scan::STV_DIR);
     std::fs::create_dir_all(&dir)?;
     let mut bytes = 0;

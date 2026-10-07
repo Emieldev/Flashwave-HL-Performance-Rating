@@ -1156,6 +1156,11 @@ export const mockApi: Api = {
       { demoId: 99, fileName: path.split(/[\\/]/).pop() ?? path, stv: true, killsMatched: 241, logKills: 262, playersShared: 18, path },
       1200,
     ),
+  linkDemostf: (_logId: number, link: string) =>
+    delay<DemoLinked>(
+      { demoId: 98, fileName: `match-from-${link.split("/").pop()}.dem`, stv: true, killsMatched: 88, logKills: 262, playersShared: 18, path: link },
+      1500,
+    ),
 
   getMatchAnalysis: (logId: number) =>
     delay(

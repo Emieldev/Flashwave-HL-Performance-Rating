@@ -1556,6 +1556,10 @@
 .demo-drop-icon { font-size: 1.6rem; color: var(--accent); line-height: 1; }
 .demo-drop .hint { max-width: 360px; margin: 0; }
 .demo-drop-ok { margin: 4px 0 0; font-size: 0.85rem; color: var(--ok); }
+/* Q53: a demo added by its demos.tf link. */
+.demo-by-link { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.demo-by-link form { display: flex; gap: 6px; width: 100%; }
+.demo-by-link input { flex: 1; min-width: 0; }
 
 /* Q12: momentum, the cart's progress through a round. */
 .momentum { margin: 6px 0 10px; }

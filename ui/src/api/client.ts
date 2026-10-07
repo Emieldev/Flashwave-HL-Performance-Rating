@@ -289,6 +289,7 @@ const realApi = {
   importDemo: (path: string) => invoke<DemoImported>("import_demo", { path }),
   /** A demo dropped on a match page, linked to that match once it checks out. */
   linkDemo: (logId: number, path: string) => invoke<DemoLinked>("link_demo", { logId, path }),
+  linkDemostf: (logId: number, link: string) => invoke<DemoLinked>("link_demostf", { logId, link }),
   rereadMatch: (logId: number) => invoke<ReRead>("reread_match", { logId }),
   /** Each step of a match being read again, as it starts. */
   onRereadStep: async (h: (s: { logId: number; step: string }) => void): Promise<UnlistenFn> =>

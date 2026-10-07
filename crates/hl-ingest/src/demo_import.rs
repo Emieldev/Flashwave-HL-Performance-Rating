@@ -243,6 +243,12 @@ impl std::fmt::Display for WrongDemo {
 
 impl std::error::Error for WrongDemo {}
 
+/// The maps a log's map field names: one, or a combined log's several
+/// ("product + proot", "pl_vigil_rc10, koth_proot_b5b").
+fn map_names(field: &str) -> Vec<String> {
+    field.split(['+', ',', '/', '&']).map(str::trim).filter(|m| !m.is_empty()).map(str::to_string).collect()
+}
+
 /// The shift from demo seconds to the log's own clock that lines up the
 /// most kills, by the same killer on the same victim: `(shift, matched)`.
 /// Each log kill counts once.
@@ -295,7 +301,13 @@ pub async fn link_to_log_by(
     drop(bytes);
     let json: serde_json::Value = serde_json::from_str(&db.raw_log(log_id).await?.context("this match is not stored")?)?;
     let log_map = json.pointer("/info/map").and_then(|m| m.as_str()).unwrap_or_default().to_string();
-    if !log_map.is_empty() && hl_demos::map_base(&header.map) != hl_demos::map_base(&log_map) {
+    // A combined log's map is its title, "product + proot" (Q51, ivg): the
+    // demo may be on any of its maps, as its rounds and parts name them.
+    let mut maps = map_names(&log_map);
+    maps.extend(db.segments(log_id).await?.into_iter().filter_map(|s| s.map));
+    maps.extend(db.parts_of(log_id).await?.into_iter().filter_map(|p| p.map));
+    let bases: std::collections::HashSet<String> = maps.iter().map(|m| hl_demos::map_base(m)).filter(|m| !m.is_empty()).collect();
+    if !bases.is_empty() && !bases.contains(&hl_demos::map_base(&header.map)) {
         return Err(WrongDemo(format!("{file_name} is on {}, and this match is on {log_map}.", header.map)).into());
     }
     let rate = header.tick_rate().unwrap_or(66.67);
@@ -334,6 +346,9 @@ pub async fn link_to_log_by(
         })
         .collect();
     let log_kills: Vec<(i64, u32, u32)> = db.kills_for_log(log_id).await?.iter().map(|k| (k.at_raw, k.killer, k.victim)).collect();
+    if log_kills.is_empty() {
+        return Err(WrongDemo("This match's server log is not downloaded, so there are no kills to line the demo up with: sync once more, then drop it again.".into()).into());
+    }
     let Some((shift, matched)) = best_shift(&demo_kills, &log_kills).filter(|(_, m)| *m >= 5) else {
         return Err(WrongDemo(format!("{file_name} has this match's players, but none of its kills line up with the log's: a different match between the same teams?")).into());
     };
@@ -390,6 +405,50 @@ pub async fn link_to_log_by(
         players_shared: shared,
         path: path.to_string_lossy().into_owned(),
     })
+}
+
+/// The demos.tf id in a link or a bare number: `https://demos.tf/990239`,
+/// `demos.tf/990239`, `990239`.
+pub fn demostf_id(text: &str) -> Option<i64> {
+    let t = text.trim().trim_end_matches('/');
+    let last = t.rsplit('/').next()?;
+    let id: i64 = last.split(['?', '#']).next()?.parse().ok()?;
+    let host_ok = !t.contains('/') || t.contains("demos.tf/");
+    (id > 0 && host_ok).then_some(id)
+}
+
+/// Add a demo by its demos.tf link (Q53, Emiel): downloaded into the STV
+/// folder, then checked and linked like a dropped one. The way round a
+/// lookup that missed it.
+pub async fn link_demostf(
+    db: &Db,
+    sources: &crate::Sources,
+    tf: &Path,
+    log_id: i64,
+    demos_tf_id: i64,
+    me: Option<SteamId>,
+    progress: impl FnMut(u64, Option<u64>),
+) -> Result<DemoLinked> {
+    let meta = sources.demostf_meta(demos_tf_id).await?;
+    if meta.url.is_empty() {
+        return Err(WrongDemo(format!("demos.tf has no file for demo {demos_tf_id} any more.")).into());
+    }
+    let safe: String = meta.name.chars().map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' }).collect();
+    let dir = tf.join(hl_demos::scan::STV_DIR);
+    std::fs::create_dir_all(&dir)?;
+    let dest = dir.join(&safe);
+    sources.download(&meta.url, &dest, progress).await?;
+    crate::kills::ensure_one(db, sources, log_id).await?;
+    let linked = match link_to_log_by(db, tf, &dest, log_id, me, "demos.tf", |_| {}).await {
+        Ok(l) => l,
+        Err(e) => {
+            // Not this match's: the download is not kept.
+            let _ = std::fs::remove_file(&dest);
+            return Err(e);
+        }
+    };
+    db.set_demo_demos_tf_id(linked.demo_id, demos_tf_id).await?;
+    Ok(linked)
 }
 
 /// What reading a match again did.
@@ -469,6 +528,24 @@ mod tests {
         let log = [(1010, 1, 2), (1041, 3, 4), (1095, 2, 1), (1500, 5, 6)];
         assert_eq!(best_shift(&demo, &log), Some((1000, 3)));
         assert_eq!(best_shift(&[], &log), None);
+    }
+
+    #[test]
+    fn a_demos_tf_link_gives_its_id() {
+        assert_eq!(demostf_id("https://demos.tf/990239"), Some(990239));
+        assert_eq!(demostf_id(" demos.tf/990239/ "), Some(990239));
+        assert_eq!(demostf_id("990239"), Some(990239));
+        assert_eq!(demostf_id("https://logs.tf/3426234"), None);
+        assert_eq!(demostf_id("vigil"), None);
+    }
+
+    #[test]
+    fn a_combined_log_names_each_of_its_maps() {
+        assert_eq!(map_names("product + proot"), ["product", "proot"]);
+        assert_eq!(map_names("koth_product_final"), ["koth_product_final"]);
+        assert!(map_names("").is_empty());
+        let demo = hl_demos::map_base("koth_product_final");
+        assert!(map_names("product + proot").iter().any(|m| hl_demos::map_base(m) == demo));
     }
 
     #[test]

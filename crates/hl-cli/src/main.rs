@@ -1172,6 +1172,7 @@ async fn run() -> Result<()> {
             let db = Db::connect(&db_path).await?;
             let tf = db.get_config().await?.tf_path.context("set the TF2 folder first")?;
             let me = db.get_me().await?;
+            hl_ingest::kills::ensure_one(&db, &Sources::new()?, log_id.parse()?).await?;
             let got = hl_ingest::demo_import::link_to_log(&db, std::path::Path::new(&tf), std::path::Path::new(path), log_id.parse()?, me, |s| eprintln!("  {s}")).await?;
             println!("linked {} (demo {}): {} of {} log kills line up, {} players in both", got.file_name, got.demo_id, got.kills_matched, got.log_kills, got.players_shared);
             Ok(())

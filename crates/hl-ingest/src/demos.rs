@@ -264,18 +264,40 @@ pub async fn fetch_stv(
     sources: &crate::Sources,
     tf: &Path,
     log_id: i64,
-    progress: impl FnMut(u64, Option<u64>),
+    mut progress: impl FnMut(u64, Option<u64>),
 ) -> Result<StvFetched> {
     use anyhow::Context;
 
     // demos.tf first; ETF2L's own demos for the matches it has none of (Q48).
-    let Some(demos_tf_id) = db.index_info(log_id).await?.and_then(|i| i.demos_tf_id) else {
+    // A combined log's STV is one demo per part (Q52): all of them.
+    let ids = db.stv_ids(log_id).await?;
+    if ids.is_empty() {
         // Boxed: reading and linking a demo is a large future, and nested
         // here it overflowed the CLI's main-thread stack.
         return Box::pin(crate::etf2l_demos::fetch(db, sources, tf, log_id, progress))
             .await
             .context("demos.tf has no demo for this match, and ETF2L's could not be used");
-    };
+    }
+    let mut out: Option<StvFetched> = None;
+    for id in ids {
+        let got = fetch_demostf(db, sources, tf, log_id, id, &mut progress).await?;
+        out = Some(match out {
+            None => got,
+            Some(o) => StvFetched { bytes: o.bytes + got.bytes, log_share: ((o.log_share + got.log_share) * 100.0).round().min(100.0) / 100.0, ..o },
+        });
+    }
+    Ok(out.expect("at least one id"))
+}
+
+/// One demos.tf demo, downloaded, indexed and linked to `log_id`.
+async fn fetch_demostf(
+    db: &Db,
+    sources: &crate::Sources,
+    tf: &Path,
+    log_id: i64,
+    demos_tf_id: i64,
+    progress: impl FnMut(u64, Option<u64>),
+) -> Result<StvFetched> {
     let meta = sources.demostf_meta(demos_tf_id).await?;
 
     // demos.tf names are already filesystem-safe; guard anyway.
