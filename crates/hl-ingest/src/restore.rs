@@ -92,16 +92,40 @@ pub async fn offer(db: &hl_db::Db, db_path: &Path) -> Result<Option<RestoreOffer
 pub fn set_aside(db_path: &Path) -> Result<PathBuf> {
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let to = db_path.with_extension(format!("unreadable-{stamp}.sqlite3"));
-    std::fs::rename(db_path, &to)
-        .with_context(|| format!("moving {} aside", db_path.display()))?;
+    rename_when_free(db_path, &to).with_context(|| format!("moving {} aside", db_path.display()))?;
     for ext in ["sqlite3-wal", "sqlite3-shm"] {
         let from = db_path.with_extension(ext);
         if from.exists() {
-            let _ = std::fs::rename(&from, to.with_extension(format!("{ext}.old")));
+            let _ = rename_when_free(&from, &to.with_extension(format!("{ext}.old")));
         }
     }
     tracing::error!(from = %db_path.display(), to = %to.display(), "database would not open; moved aside");
     Ok(to)
+}
+
+/// Rename, waiting while Windows says the file is in use (error 32). The
+/// failed open that sends a database here closes its connection on a
+/// background thread, so for a moment the file is still held: on 7 Oct 2026
+/// a damaged database was not moved aside for exactly that, and the app
+/// crashed instead of offering a backup. A virus scanner or the search
+/// indexer holding the file looks the same. About four seconds, then give up.
+fn rename_when_free(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::rename(from, to) {
+            Err(e) if in_use(&e) && tries < 20 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            other => return other,
+        }
+    }
+}
+
+/// "The process cannot access the file because it is being used by another
+/// process" (Windows error 32), or a lock (33).
+fn in_use(e: &std::io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(32) | Some(33))
 }
 
 /// Note that this backup should be put back on the next start.
