@@ -54,10 +54,11 @@ pub async fn fetch(
     let mut unreachable_run = 0usize;
     for (i, log_id) in queue.into_iter().enumerate() {
         progress(Progress::RawLogs { done: i, total });
-        match sources.logstf_rawlog(log_id).await {
+        // drops.tf's copy first, logs.tf's zip behind it.
+        match sources.rawlog_zip(log_id).await {
             Ok(None) => {
                 unreachable_run = 0;
-                db.mark_rawlog_missing(log_id, "logs.tf has no raw log").await?;
+                db.mark_rawlog_missing(log_id, "neither drops.tf nor logs.tf has a raw log").await?;
                 s.missing += 1;
             }
             // A zip that does not open is not stored: it would only fail again

@@ -88,8 +88,8 @@ pub async fn fetch_parts(db: &Db, sources: &Sources, mut progress: impl FnMut(Pr
     let mut failing = 0;
     for (i, id) in todo.iter().enumerate() {
         progress(Progress::Parts { done: i, total: todo.len() });
-        match sources.logstf_log(*id).await {
-            Ok(json) => {
+        match sources.log_json(*id).await {
+            Ok((json, _)) => {
                 db.store_part_raw(*id, &json).await?;
                 s.fetched += 1;
                 failing = 0;

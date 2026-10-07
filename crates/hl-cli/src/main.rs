@@ -1589,6 +1589,29 @@ async fn run() -> Result<()> {
             Ok(())
         }
 
+        ["drops-check", ids @ ..] => {
+            // The same logs from drops.tf and logs.tf, through the app's own
+            // code: JSON and raw server log, compared.
+            let sources = Sources::new()?;
+            for id in ids {
+                let id: i64 = id.parse()?;
+                let drops: Option<serde_json::Value> = sources.drops_log(id).await?.map(|b| serde_json::from_str(&b)).transpose()?;
+                let logstf: serde_json::Value = serde_json::from_str(&sources.logstf_log(id).await?)?;
+                let raw_d = sources.drops_rawlog(id).await?.map(|z| hl_ingest::rawlog::unzip(&z)).transpose()?;
+                let raw_l = sources.logstf_rawlog(id).await?.map(|z| hl_ingest::rawlog::unzip(&z)).transpose()?;
+                println!(
+                    "  log {id}: json {} | raw log {}",
+                    match &drops { None => "not on drops.tf".to_string(), Some(d) => (if same_json(d, &logstf) { "identical" } else { "DIFFERENT" }).to_string() },
+                    match (&raw_d, &raw_l) {
+                        (None, _) => "not on drops.tf".to_string(),
+                        (Some(a), Some(b)) => format!("{} ({} bytes)", if a == b { "identical" } else { "DIFFERENT" }, a.len()),
+                        (Some(a), None) => format!("only on drops.tf ({} bytes)", a.len()),
+                    }
+                );
+            }
+            Ok(())
+        }
+
         ["league-search", rest @ ..] => {
             // Look on logs.tf for officials trends.tf linked no log to.
             let n: i64 = rest.first().map(|n| n.parse()).transpose()?.unwrap_or(10);
@@ -2394,6 +2417,22 @@ fn print_stats(s: &hl_db::IndexStats) {
     println!("normalized    {:>6}", s.normalized);
     println!("pending       {:>6}", s.pending);
     println!("failed        {:>6}", s.failed);
+}
+
+/// Two logs' JSON alike, numbers to one part in a billion: drops.tf
+/// writes a few averages back with the last digit rounded differently
+/// (9.533333333333331 for 9.533333333333333), nothing else.
+fn same_json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => {
+            let (x, y) = (x.as_f64().unwrap_or(f64::NAN), y.as_f64().unwrap_or(f64::NAN));
+            x == y || (x - y).abs() <= 1e-9 * x.abs().max(y.abs()).max(1.0)
+        }
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same_json(p, q)),
+        (Value::Object(x), Value::Object(y)) => x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same_json(v, w))),
+        _ => a == b,
+    }
 }
 
 fn fmt_date(unix: i64) -> String {

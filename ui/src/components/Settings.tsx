@@ -83,7 +83,14 @@ export function Settings({
         { id: "backups", title: t("Backups"), icon: "archive" },
       ],
     },
-    { id: "about", title: t("About"), sections: [{ id: "changelog", title: tr("Changelog"), icon: "scroll" }] },
+    {
+      id: "about",
+      title: t("About"),
+      sections: [
+        { id: "sources", title: t("Data sources"), icon: "globe" },
+        { id: "changelog", title: tr("Changelog"), icon: "scroll" },
+      ],
+    },
     ...(import.meta.env.DEV ? [{ id: "dev", title: t("Developer"), sections: [{ id: "league", title: t("League sample"), icon: "network" as IconName }] }] : []),
   ];
   const nothing = query.trim() !== "" && Object.values(matched).every((m) => !m);
@@ -252,6 +259,10 @@ export function Settings({
             </SettingsSection>
 
             {shows("about") && <h2 className="settings-group">{t("About")}</h2>}
+            <SettingsSection id="sources" icon="globe" title={t("Data sources")} keywords="sources credits drops.tf logs.tf trends.tf etf2l demos.tf more.tf icewind"
+              summary={t("Where every match, log and demo comes from")}>
+              <SourcesPanel />
+            </SettingsSection>
             <SettingsSection id="changelog" icon="scroll" title={tr("Changelog")} keywords="changelog release notes version"
               summary={t("What changed in each release")} hideIntro
               info={t("Newest first. The notes are in English.")}>
@@ -273,6 +284,40 @@ export function Settings({
         </div>
       </div>
     </SettingsContext.Provider>
+  );
+}
+
+/**
+ * Where the data comes from, and who made it possible: the sites this app
+ * reads, credited by name where a person runs them (Flashy: drops.tf is
+ * Icewind's).
+ */
+function SourcesPanel() {
+  const rows: [string, string, string][] = [
+    ["drops.tf", "https://drops.tf/about", t("By Icewind. logs.tf's logs and raw server logs, asked first: fast and with no rate limit, about an hour behind logs.tf.")],
+    ["logs.tf", "https://logs.tf", t("Every log, and the raw server log behind it, for what drops.tf has not got yet: a game just played, or a log it lost.")],
+    ["trends.tf", "https://trends.tf", t("Which matches you played, which logs belong together, and each player's ETF2L career.")],
+    ["ETF2L", "https://etf2l.org", t("Officials, divisions, rosters, transfers, seasons and fixtures.")],
+    ["demos.tf", "https://demos.tf", t("SourceTV demos, downloaded only when you ask.")],
+    ["more.tf", "https://more.tf", t("The top-down map images under the kill map, shipped with their permission, and logs while logs.tf is resting.")],
+  ];
+  return (
+    <div className="panel">
+      <h2>{t("Data sources")}</h2>
+      <dl className="kv sources-list">
+        {rows.map(([name, href, what]) => (
+          <Fragment key={name}>
+            <dt>
+              <button className="linkish" onClick={() => void api.openExternal(href)}>
+                {name} ↗
+              </button>
+            </dt>
+            <dd>{what}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <p className="hint" style={{ marginTop: 10 }}>{t("Your own demos are read on your PC and never uploaded.")}</p>
+    </div>
   );
 }
 

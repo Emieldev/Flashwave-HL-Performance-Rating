@@ -21,7 +21,7 @@ export function LeagueSamplePanel() {
   };
 
   const totals = s?.tiers.reduce(
-    (a, x) => ({ logs: a.logs + x.logs, json: a.json + x.jsonLogstf + x.jsonMoretf, raw: a.raw + x.raw + x.rawMissing, matches: a.matches + x.matches, rosters: a.rosters + x.rosters }),
+    (a, x) => ({ logs: a.logs + x.logs, json: a.json + x.jsonLogstf + x.jsonDropstf + x.jsonMoretf, raw: a.raw + x.raw + x.rawMissing, matches: a.matches + x.matches, rosters: a.rosters + x.rosters }),
     { logs: 0, json: 0, raw: 0, matches: 0, rosters: 0 },
   );
   const phase = !s
@@ -75,7 +75,8 @@ export function LeagueSamplePanel() {
                       <th scope="row">{x.division}</th>
                       <td>{x.matches}</td>
                       <td>
-                        <Bar done={x.jsonLogstf + x.jsonMoretf} of={x.logs} />
+                        <Bar done={x.jsonLogstf + x.jsonDropstf + x.jsonMoretf} of={x.logs} />
+                        {x.jsonDropstf > 0 && <span className="muted" title={t("logs.tf's own logs, from drops.tf by Icewind")}> ({x.jsonDropstf} drops.tf)</span>}
                         {x.jsonMoretf > 0 && <span className="muted" title={t("From more.tf while logs.tf was resting; asked of logs.tf again later")}> ({x.jsonMoretf} more.tf)</span>}
                       </td>
                       <td>

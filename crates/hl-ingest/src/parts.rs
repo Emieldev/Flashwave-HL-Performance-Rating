@@ -74,10 +74,10 @@ async fn parent_rounds(db: &Db, part_id: i64, parent: &[(i64, i64, i64)]) -> Res
 /// but score it when it is already stored.
 pub async fn fetch(db: &Db, sources: &crate::Sources, part_id: i64, me: Option<SteamId>, w: &Weights) -> Result<Option<MatchView>> {
     if db.part_raw(part_id).await?.is_none() {
-        let json = sources
-            .logstf_log(part_id)
+        let (json, _) = sources
+            .log_json(part_id)
             .await
-            .with_context(|| format!("fetching log {part_id} from logs.tf"))?;
+            .with_context(|| format!("fetching log {part_id} from drops.tf and logs.tf"))?;
         db.store_part_raw(part_id, &json).await?;
     }
     detail_of(db, part_id, me, w).await

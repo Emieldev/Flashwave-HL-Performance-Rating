@@ -151,7 +151,8 @@ has the whole of it, including what to do if one does break.
 
 | Source | Used for |
 |---|---|
-| [logs.tf](https://logs.tf) | Match stats, and the raw server log behind each match: every kill with positions, every hit, heal and uber |
+| [drops.tf](https://drops.tf/about) by Icewind | Match stats and the raw server logs, asked first: logs.tf's own data, fast and with no rate limit, about an hour behind |
+| [logs.tf](https://logs.tf) | Match stats and the raw server log behind each match (every kill with positions, every hit, heal and uber) for what drops.tf has not got yet: a game just played, or a log it lost |
 | [trends.tf](https://trends.tf) | Which matches you played, which logs were combined from which |
 | [ETF2L](https://etf2l.org) | Officials, divisions, rosters and seasons |
 | [demos.tf](https://demos.tf) | STV demos, downloaded only when you ask |

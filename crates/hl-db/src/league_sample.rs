@@ -62,6 +62,8 @@ pub struct TierProgress {
     pub logs: i64,
     /// Logs with their JSON, from logs.tf and from more.tf.
     pub json_logstf: i64,
+    /// From drops.tf: logs.tf's own JSON, Icewind's copy.
+    pub json_dropstf: i64,
     pub json_moretf: i64,
     /// Logs with their raw server log, and those logs.tf has none for.
     pub raw: i64,
@@ -299,6 +301,7 @@ impl Db {
                     COUNT(DISTINCT p.etf2l_match_id) AS matches,
                     COUNT(*) AS logs,
                     SUM(p.json_source = 'logs.tf') AS json_logstf,
+                    SUM(p.json_source = 'drops.tf') AS json_dropstf,
                     SUM(p.json_source = 'more.tf') AS json_moretf,
                     SUM(p.raw_state = 'ok') AS raw,
                     SUM(p.raw_state = 'missing') AS raw_missing,
@@ -318,6 +321,7 @@ impl Db {
                 matches: r.get("matches"),
                 logs: r.get("logs"),
                 json_logstf: r.get::<Option<i64>, _>("json_logstf").unwrap_or(0),
+                json_dropstf: r.get::<Option<i64>, _>("json_dropstf").unwrap_or(0),
                 json_moretf: r.get::<Option<i64>, _>("json_moretf").unwrap_or(0),
                 raw: r.get::<Option<i64>, _>("raw").unwrap_or(0),
                 raw_missing: r.get::<Option<i64>, _>("raw_missing").unwrap_or(0),

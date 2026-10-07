@@ -337,7 +337,7 @@ function mockProfile(accountId: number): PlayerProfile {
 }
 
 const tier = (tier: number, division: string, matches: number, logs: number, json: number, maps: number) => ({
-  tier, division, matches, logs, jsonLogstf: json, jsonMoretf: Math.round(json / 10), raw: Math.round(json / 3), rawMissing: 2, maps, rosters: Math.round(matches / 2), oldest: 1_724_000_000, newest: 1_790_538_131,
+  tier, division, matches, logs, jsonLogstf: Math.round(json / 4), jsonDropstf: json - Math.round(json / 4), jsonMoretf: Math.round(json / 10), raw: Math.round(json / 3), rawMissing: 2, maps, rosters: Math.round(matches / 2), oldest: 1_724_000_000, newest: 1_790_538_131,
 });
 let leagueSample: LeagueSample = {
   enabled: true,

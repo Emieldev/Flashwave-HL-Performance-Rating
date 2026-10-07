@@ -209,7 +209,8 @@ pub async fn sync(
     for (i, log_id) in queue.iter().copied().enumerate() {
         progress(Progress::Fetching { done: i, total, log_id });
         let result = async {
-            let json = sources.logstf_log(log_id).await?;
+            // drops.tf first, logs.tf for what it does not have yet.
+            let (json, _) = sources.log_json(log_id).await?;
             db.store_raw_log(log_id, &json).await?;
             process_raw(db, log_id, &json).await
         }
@@ -481,10 +482,10 @@ pub async fn import_log(
     w: &hl_rating::Weights,
     log_id: i64,
 ) -> Result<Imported> {
-    let json = sources
-        .logstf_log(log_id)
+    let (json, _) = sources
+        .log_json(log_id)
         .await
-        .with_context(|| format!("logs.tf could not give us log {log_id}"))?;
+        .with_context(|| format!("neither drops.tf nor logs.tf could give us log {log_id}"))?;
     store_log_json(db, w, log_id, &json).await
 }
 

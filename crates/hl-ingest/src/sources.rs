@@ -46,6 +46,10 @@ pub const ETF2L_PAGE: &str = "100";
 
 pub struct Sources {
     trends: Throttled,
+    /// drops.tf, by Icewind: logs.tf's logs, the JSON and the raw server
+    /// logs, served about an hour after upload and without logs.tf's limits.
+    /// Asked first for both (Flashy, October 2026).
+    drops: Throttled,
     logstf: Throttled,
     /// When logs.tf last turned us away, if it did within [`LOGSTF_REST`].
     logstf_refused_at: Mutex<Option<Instant>>,
@@ -76,6 +80,9 @@ impl Sources {
     pub fn new() -> Result<Self> {
         Ok(Sources {
             trends: Throttled::new(Duration::from_millis(1000))?,
+            // No published limit; a request a second is still a guest's pace
+            // on one person's server.
+            drops: Throttled::new(Duration::from_millis(1000))?,
             // logs.tf stopped answering twice after a few hundred requests at
             // one a second (~750 raw logs, then ~300 part logs from a second
             // address), so it gets a slower pace; bulk jobs are also capped
@@ -182,6 +189,49 @@ impl Sources {
             anyhow::bail!("log {log_id}: response has no players");
         }
         Ok(body)
+    }
+
+    /// One log's JSON, from drops.tf first and logs.tf when drops.tf does
+    /// not have it -- a log less than about an hour old, or one it lost.
+    /// Says which answered: `"drops.tf"` or `"logs.tf"`. drops.tf serves
+    /// logs.tf's JSON as it is (checked field by field, October 2026), so
+    /// both are stored alike.
+    pub async fn log_json(&self, log_id: i64) -> Result<(String, &'static str)> {
+        match self.drops_log(log_id).await {
+            Ok(Some(body)) => return Ok((body, DROPS)),
+            Ok(None) => {}
+            Err(e) => tracing::info!(log_id, error = %format!("{e:#}"), "drops.tf would not give the log; asking logs.tf"),
+        }
+        Ok((self.logstf_log(log_id).await?, "logs.tf"))
+    }
+
+    /// One log's JSON from drops.tf; `None` when it does not have it.
+    pub async fn drops_log(&self, log_id: i64) -> Result<Option<String>> {
+        let Some(body) = self.drops.get_text_opt(&format!("https://drops.tf/api/log/{log_id}")).await? else { return Ok(None) };
+        // Like logs.tf's: a cut-off or error body is not a log.
+        let v: Value = serde_json::from_str(&body).with_context(|| format!("drops.tf log {log_id}: response is not JSON"))?;
+        Ok(v.get("players").is_some().then_some(body))
+    }
+
+    /// The raw server log behind a log, zipped the way logs.tf serves it:
+    /// drops.tf's plain copy first (byte for byte logs.tf's, October 2026),
+    /// then logs.tf's zip. `None` when neither has one.
+    pub async fn rawlog_zip(&self, log_id: i64) -> Result<Option<Vec<u8>>> {
+        match self.drops_rawlog(log_id).await {
+            Ok(Some(zip)) => return Ok(Some(zip)),
+            Ok(None) => {}
+            Err(e) => tracing::info!(log_id, error = %format!("{e:#}"), "drops.tf would not give the raw log; asking logs.tf"),
+        }
+        self.logstf_rawlog(log_id).await
+    }
+
+    /// The raw server log from drops.tf only, zipped like logs.tf's; `None`
+    /// when it does not have it.
+    pub async fn drops_rawlog(&self, log_id: i64) -> Result<Option<Vec<u8>>> {
+        match self.drops.get_bytes_opt(&drops_rawlog_url(log_id)).await? {
+            Some(text) if !text.is_empty() => Ok(Some(zip_log(log_id, &text)?)),
+            _ => Ok(None),
+        }
     }
 
     /// The newest log this player is in: one small request, for "is the game
@@ -325,7 +375,11 @@ impl Sources {
     }
 
     pub async fn etf2l_get(&self, path: &str) -> Result<Option<String>> {
-        self.etf2l.get_text_opt(&format!("https://api-v2.etf2l.org{path}")).await
+        let [first, second] = etf2l_hosts(unix_now());
+        match self.etf2l.get_text_opt(&format!("{first}{path}")).await {
+            Ok(Some(body)) => Ok(Some(body)),
+            first_try => etf2l_fallback(first_try, self.etf2l.get_text_opt(&format!("{second}{path}")).await),
+        }
     }
 
     /// One page of a paged ETF2L list, [`ETF2L_PAGE`] rows at a time rather
@@ -333,13 +387,21 @@ impl Sources {
     pub async fn etf2l_page(&self, path: &str, page: i64) -> Result<Option<String>> {
         let page = page.to_string();
         let query = [("page", page.as_str()), ("limit", ETF2L_PAGE)];
-        self.etf2l.get_text_opt(&url(&format!("https://api-v2.etf2l.org{path}"), query)).await
+        let [first, second] = etf2l_hosts(unix_now());
+        match self.etf2l.get_text_opt(&url(&format!("{first}{path}"), query)).await {
+            Ok(Some(body)) => Ok(Some(body)),
+            first_try => etf2l_fallback(first_try, self.etf2l.get_text_opt(&url(&format!("{second}{path}"), query)).await),
+        }
     }
 
     /// As [`etf2l_get`](Self::etf2l_get), for a screen waiting on it: no
     /// retries when the connection cannot be made.
     pub async fn etf2l_get_interactive(&self, path: &str) -> Result<Option<String>> {
-        self.etf2l.get_text_opt_interactive(&format!("https://api-v2.etf2l.org{path}")).await
+        let [first, second] = etf2l_hosts(unix_now());
+        match self.etf2l.get_text_opt_interactive(&format!("{first}{path}")).await {
+            Ok(Some(body)) => Ok(Some(body)),
+            first_try => etf2l_fallback(first_try, self.etf2l.get_text_opt_interactive(&format!("{second}{path}")).await),
+        }
     }
 
     /// Every SourceTV demo demos.tf holds for one player, newest first.
@@ -381,9 +443,96 @@ impl Sources {
     }
 }
 
+/// drops.tf's name, as a log's source is stored and shown.
+pub const DROPS: &str = "drops.tf";
+
+/// Where drops.tf keeps a raw server log: by million, then by thousand,
+/// each seven digits -- `4000000/4118000/log_4118933.log`.
+pub fn drops_rawlog_url(log_id: i64) -> String {
+    format!("https://drops.tf/logs/logs/{:07}/{:07}/log_{log_id}.log", log_id / 1_000_000 * 1_000_000, log_id / 1000 * 1000)
+}
+
+/// A raw log zipped the way logs.tf serves it, so it is stored and read
+/// like logs.tf's.
+fn zip_log(log_id: i64, text: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut z = zip::ZipWriter::new(&mut buf);
+        z.start_file(format!("log_{log_id}.log"), zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated))?;
+        z.write_all(text)?;
+        z.finish()?;
+    }
+    Ok(buf.into_inner())
+}
+
+/// When ETF2L's API moves (its announcement, October 2026): v2 is served at
+/// `api.etf2l.org` from 1 November 2026, after the 10:00-14:00 CET switch,
+/// and `api-v2.etf2l.org` answers until the end of the year.
+const ETF2L_MOVE: i64 = 1_793_538_000; // 2026-11-01 13:00 UTC
+const ETF2L_NEW: &str = "https://api.etf2l.org";
+const ETF2L_OLD: &str = "https://api-v2.etf2l.org";
+
+/// The ETF2L API's addresses in the order to ask them: the old one until
+/// the move, the new one after, each the other's fallback.
+pub fn etf2l_hosts(now: i64) -> [&'static str; 2] {
+    if now >= ETF2L_MOVE {
+        [ETF2L_NEW, ETF2L_OLD]
+    } else {
+        [ETF2L_OLD, ETF2L_NEW]
+    }
+}
+
+/// The first address's answer unless it failed or had nothing, then the
+/// second's; when both fail, the first's error.
+fn etf2l_fallback(first: Result<Option<String>>, second: Result<Option<String>>) -> Result<Option<String>> {
+    match (first, second) {
+        (_, Ok(Some(body))) => Ok(Some(body)),
+        (Ok(None), _) => Ok(None),
+        (Err(e), Ok(None)) => Err(e),
+        (Err(e), Err(_)) => Err(e),
+        (Ok(Some(body)), _) => Ok(Some(body)),
+    }
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_raw_log_is_found_by_million_then_thousand() {
+        assert_eq!(drops_rawlog_url(4118933), "https://drops.tf/logs/logs/4000000/4118000/log_4118933.log");
+        assert_eq!(drops_rawlog_url(3000000), "https://drops.tf/logs/logs/3000000/3000000/log_3000000.log");
+        assert_eq!(drops_rawlog_url(700123), "https://drops.tf/logs/logs/0000000/0700000/log_700123.log");
+    }
+
+    #[test]
+    fn a_raw_log_from_drops_tf_is_zipped_like_logs_tf() {
+        let text = b"L 09/11/2026 - 19:05:35: \"a<3><[U:1:1]><Blue>\" changed role to \"soldier\"\n";
+        let zip = zip_log(4118933, text).unwrap();
+        assert_eq!(crate::rawlog::unzip(&zip).unwrap().as_bytes(), text);
+    }
+
+    #[test]
+    fn etf2l_moves_to_its_new_address_on_1_november() {
+        assert_eq!(etf2l_hosts(ETF2L_MOVE - 1), [ETF2L_OLD, ETF2L_NEW]);
+        assert_eq!(etf2l_hosts(ETF2L_MOVE), [ETF2L_NEW, ETF2L_OLD]);
+        // 1 November 2026, 13:00 UTC is 14:00 CET: the end of ETF2L's downtime.
+        assert_eq!(chrono::DateTime::from_timestamp(ETF2L_MOVE, 0).unwrap().to_rfc3339(), "2026-11-01T13:00:00+00:00");
+    }
+
+    #[test]
+    fn the_other_etf2l_address_answers_when_the_first_cannot() {
+        let body = |s: &str| Ok(Some(s.to_string()));
+        assert_eq!(etf2l_fallback(Err(anyhow::anyhow!("down")), body("b")).unwrap().as_deref(), Some("b"));
+        assert_eq!(etf2l_fallback(Ok(None), body("b")).unwrap().as_deref(), Some("b"), "missing on one, there on the other");
+        assert_eq!(etf2l_fallback(Ok(None), Ok(None)).unwrap(), None, "missing on both: missing");
+        assert!(etf2l_fallback(Err(anyhow::anyhow!("down")), Err(anyhow::anyhow!("down too"))).is_err());
+    }
 
     /// The real response for the S36 official against TWS.
     #[test]

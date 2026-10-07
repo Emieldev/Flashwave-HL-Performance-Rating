@@ -212,6 +212,8 @@ export interface LeagueTier {
   matches: number;
   logs: number;
   jsonLogstf: number;
+  /** From drops.tf (by Icewind): logs.tf's own JSON. */
+  jsonDropstf: number;
   jsonMoretf: number;
   raw: number;
   rawMissing: number;

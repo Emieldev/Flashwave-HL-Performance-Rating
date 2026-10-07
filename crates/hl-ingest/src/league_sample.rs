@@ -300,6 +300,61 @@ fn matching_logs(logs: &[(i64, String, String, i64, i64)], time: i64) -> Vec<(i6
     out
 }
 
+/// One log downloaded, its JSON first and then its raw log, from drops.tf
+/// and, unless logs.tf is `resting`, from logs.tf for what drops.tf has
+/// not got. `None` when there is nothing it can do now.
+async fn log_step(db: &Db, sources: &Sources, resting: bool, doing: &mut (impl FnMut(&str) + Send)) -> Result<Option<Step>> {
+    // A more.tf stand-in is asked for again: drops.tf or logs.tf has the real one.
+    if let Some(log_id) = db.league_json_todo(1, true, MAX_JSON_ATTEMPTS).await?.first().copied() {
+        doing(&format!("Downloading log {log_id} from drops.tf"));
+        match sources.drops_log(log_id).await {
+            Ok(Some(body)) => {
+                db.put_league_json(log_id, &body, crate::sources::DROPS).await?;
+                return Ok(Some(Step::Json { log_id, source: crate::sources::DROPS }));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::info!(log_id, error = %format!("{e:#}"), "drops.tf would not give the log"),
+        }
+        if !resting {
+            doing(&format!("Downloading log {log_id} from logs.tf"));
+            return Ok(Some(match sources.logstf_log(log_id).await {
+                Ok(body) => {
+                    db.put_league_json(log_id, &body, "logs.tf").await?;
+                    Step::Json { log_id, source: "logs.tf" }
+                }
+                Err(e) if crate::http::unreachable(&e) => Step::Failed { what: format!("logs.tf: {e:#}") },
+                Err(e) => {
+                    db.league_json_failed(log_id).await?;
+                    Step::Failed { what: format!("log {log_id}: {e:#}") }
+                }
+            }));
+        }
+    }
+    if let Some(log_id) = db.league_raw_todo(1).await?.first().copied() {
+        doing(&format!("Downloading the server log of {log_id} from drops.tf"));
+        match sources.drops_rawlog(log_id).await {
+            Ok(Some(zip)) => {
+                db.put_league_raw(log_id, Some(&zip)).await?;
+                return Ok(Some(Step::Raw { log_id, found: true }));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::info!(log_id, error = %format!("{e:#}"), "drops.tf would not give the raw log"),
+        }
+        if !resting {
+            doing(&format!("Downloading the server log of {log_id} from logs.tf"));
+            return Ok(Some(match sources.logstf_rawlog(log_id).await {
+                Ok(zip) => {
+                    let found = zip.is_some();
+                    db.put_league_raw(log_id, zip.as_deref()).await?;
+                    Step::Raw { log_id, found }
+                }
+                Err(e) => Step::Failed { what: format!("logs.tf raw log {log_id}: {e:#}") },
+            }));
+        }
+    }
+    Ok(None)
+}
+
 /// Do one unit of work. The caller waits between calls: this is the pace.
 /// `doing` is told what each request is before it is made, so a window can
 /// say what the job is doing rather than only what it has done.
@@ -334,35 +389,16 @@ pub async fn step(db: &Db, sources: &Sources, mut doing: impl FnMut(&str) + Send
                 Err(e) => Step::Failed { what: format!("logs.tf search for match {match_id}: {e:#}") },
             });
         }
-        // logs.tf: JSON first, then more.tf's stand-ins again, then raw logs.
-        let json = db.league_json_todo(1, true, MAX_JSON_ATTEMPTS).await?.first().copied();
-        if let Some(log_id) = json {
-            doing(&format!("Downloading log {log_id} from logs.tf"));
-            return Ok(match sources.logstf_log(log_id).await {
-                Ok(body) => {
-                    db.put_league_json(log_id, &body, "logs.tf").await?;
-                    Step::Json { log_id, source: "logs.tf" }
-                }
-                Err(e) if crate::http::unreachable(&e) => Step::Failed { what: format!("logs.tf: {e:#}") },
-                Err(e) => {
-                    db.league_json_failed(log_id).await?;
-                    Step::Failed { what: format!("log {log_id}: {e:#}") }
-                }
-            });
+        // The log's JSON, then its raw log: drops.tf first for both (its copy
+        // of logs.tf's, by Icewind), logs.tf for what drops.tf has not got.
+        if let Some(step) = log_step(db, sources, false, &mut doing).await? {
+            return Ok(step);
         }
-        if let Some(log_id) = db.league_raw_todo(1).await?.first().copied() {
-            doing(&format!("Downloading the server log of {log_id} from logs.tf"));
-            return Ok(match sources.logstf_rawlog(log_id).await {
-                Ok(zip) => {
-                    let found = zip.is_some();
-                    db.put_league_raw(log_id, zip.as_deref()).await?;
-                    Step::Raw { log_id, found }
-                }
-                Err(e) => Step::Failed { what: format!("logs.tf raw log {log_id}: {e:#}") },
-            });
-        }
+    } else if let Some(step) = log_step(db, sources, true, &mut doing).await? {
+        // Resting from logs.tf: drops.tf still answers.
+        return Ok(step);
     } else if let Some(log_id) = db.league_json_todo(1, false, MAX_JSON_ATTEMPTS).await?.first().copied() {
-        // Resting from logs.tf: more.tf's copy of the JSON meanwhile.
+        // Resting from logs.tf, and drops.tf has not got it: more.tf's copy meanwhile.
         doing(&format!("logs.tf is resting: downloading log {log_id} from more.tf"));
         return Ok(match sources.moretf_log(log_id).await {
             Ok(Some(body)) => {
@@ -427,6 +463,7 @@ fn progress_by_ladder(rows: Vec<hl_db::TierProgress>) -> Vec<hl_db::TierProgress
                 e.matches += r.matches;
                 e.logs += r.logs;
                 e.json_logstf += r.json_logstf;
+                e.json_dropstf += r.json_dropstf;
                 e.json_moretf += r.json_moretf;
                 e.raw += r.raw;
                 e.raw_missing += r.raw_missing;

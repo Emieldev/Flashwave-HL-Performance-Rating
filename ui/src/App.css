@@ -1714,6 +1714,9 @@ th .sort.active {
 .km-building-key { display: inline-flex; align-items: center; gap: 4px; }
 .km-building-key canvas { width: 16px; height: 16px; }
 
+/* Settings › Data sources: the name column wide enough for "trends.tf ↗". */
+.sources-list { grid-template-columns: 7.5em minmax(0, 1fr); row-gap: 8px; }
+
 /* ---- Settings: search, side menu, folding sections (Flashy's UX pass) ---- */
 .settings-page { max-width: 1440px; }
 .settings-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
