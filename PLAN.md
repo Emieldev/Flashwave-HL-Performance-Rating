@@ -1484,6 +1484,7 @@ from testers (function, boSe, Taiga) is marked with who asked.
 | Q59 | **Class counts follow the filters** (Emiel) | small | The class chips' counts (Pyro 370, Soldier 265...) are always the total over every log. They should count what the chosen filter shows: Officials, Scrims, Pugs, the format and the period. |
 | Q60 | **Bookmarks** (Clark) | medium | A bookmark button on player, season, team and match pages, and a bookmarks list (a folder) to open them from. |
 | Q61 | **Sort matches by classes killed or died to** (Clark) | medium | On the Matches list: sort by kills on a given class or deaths to one ("the log where I killed the most Soldiers", "where a Sniper killed me most"). The raw logs have every kill's victim and killer class, so it is a per-class count per log. |
+| Q62 | **demos.tf only goes back so far: say so, and stop looking before it** (a tester's DM) | small | demos.tf's oldest downloadable STV is thought to be [312627](https://demos.tf/312627). **Ask Icewind to confirm first.** Once he does: no demos.tf lookup for a match older than that demo's date (a hard limit, so old matches stop costing a request each), and an info line where the STV lookup sits ("demos.tf's STV demos go back to <date>; this match is older") instead of "demos.tf has no STV demo for this match". Mention the limit in Settings › Data sources and in the README's demos.tf row too. |
 
 ### Reported by testers, and fixed
 
