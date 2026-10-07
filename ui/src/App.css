@@ -749,6 +749,32 @@ th.num {
   color: var(--muted);
 }
 
+/* Q63: a match's kind, set by hand from its badge. */
+.kind-pick { position: relative; display: inline-flex; vertical-align: middle; }
+.kind-pick-btn {
+  background: none; border: none; padding: 0; margin: 0; box-shadow: none;
+  cursor: pointer; display: inline-flex; border-radius: 4px;
+}
+.kind-pick-btn:hover:not(:disabled) { background: none; filter: brightness(1.25); }
+.kind-pick-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.badge-hand { opacity: 0.8; }
+.kind-pick-menu {
+  position: fixed; z-index: 60;
+  display: flex; flex-direction: column; width: 200px; padding: 6px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  text-transform: none; letter-spacing: normal; font-weight: normal;
+}
+.kind-pick-head { padding: 4px 8px 6px; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.kind-pick-menu button {
+  background: none; border: none; box-shadow: none; text-align: left;
+  padding: 6px 8px; border-radius: 5px; color: var(--text); font-size: 0.88rem; white-space: nowrap;
+}
+.kind-pick-menu button:hover:not(:disabled) { background: var(--panel-2); }
+.kind-pick-menu button.on { color: var(--accent); }
+.kind-pick-menu .kind-pick-auto { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 5px 5px; color: var(--muted); }
+.kind-pick-menu .error { padding: 4px 8px; font-size: 0.8rem; }
+
 .badge-sub {
   font-weight: 500;
   opacity: 0.85;

@@ -868,6 +868,13 @@ export const mockApi: Api = {
       b("sentry", null, ax - 900, ay - 300, 2),
     ];
   },
+  setMatchKind: (logId: number, kind: ContextKind | null) => {
+    const m = FAKE_MATCHES.find((x) => x.logId === logId);
+    if (!m?.context) return delay(false);
+    if (kind === null) m.context = { ...m.context, linkMethod: null };
+    else m.context = { ...m.context, kind, linkMethod: "manual" };
+    return delay(true, 100);
+  },
   livesMaps: (_accountId: number) =>
     delay<MapWithLives[]>([
       { map: "product", name: "koth_product_final", matches: 10, lives: 143 },

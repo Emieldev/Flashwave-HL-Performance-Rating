@@ -1326,6 +1326,13 @@ pub async fn link_demostf(state: State<'_, AppState>, log_id: i64, link: String)
     }
 }
 
+/// Q63 (Flashy): set a match's kind by hand -- `official`, `scrim` or
+/// `pug` -- or give it back to the app with `None`. Kept through syncs.
+#[tauri::command]
+pub async fn set_match_kind(state: State<'_, AppState>, log_id: i64, kind: Option<String>) -> CmdResult<bool> {
+    Ok(state.db.set_match_kind(log_id, kind.as_deref()).await?)
+}
+
 /// Q57 (Emiel): the maps a player has lives on in the demos this machine has.
 #[tauri::command]
 pub async fn lives_maps(state: State<'_, AppState>, account_id: u32) -> CmdResult<Vec<hl_ingest::lives::MapWithLives>> {

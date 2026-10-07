@@ -1168,8 +1168,9 @@ export interface SideTeam {
 export interface MatchContext {
   kind: ContextKind;
   etf2lMatchId: number | null;
-  /** How an official was recognised: tagged by trends.tf, or found by roster. */
-  linkMethod: "trends" | "roster" | null;
+  /** How an official was recognised: tagged by trends.tf, or found by
+   *  roster; `manual` when the kind was set by hand (Q63). */
+  linkMethod: "trends" | "roster" | "manual" | null;
   teamName: string | null;
   oppName: string | null;
   /** Teammates who played with you regularly around then. */

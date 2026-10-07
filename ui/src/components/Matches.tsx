@@ -5,7 +5,7 @@ import { errorMessage, type ContextKind, type MatchSummary } from "../api/types"
 import { capitalize, formatDate, rating, splitMap } from "../lib/format";
 import { startSync, useSyncStatus } from "../lib/sync";
 import { bounds, usePeriod } from "../lib/period";
-import { ContextBadge } from "./ContextBadge";
+import { KindPicker } from "./ContextBadge";
 import { ClassIcon } from "./ClassIcon";
 import { PeriodPicker } from "./PeriodPicker";
 import { t, k } from "../lib/i18n";
@@ -452,7 +452,7 @@ function MatchRow({ m, onOpen, classCol }: { m: MatchSummary; onOpen: (logId: nu
       </td>
       <td className="title-cell">
         {m.context ? (
-          <ContextBadge c={m.context} />
+          <KindPicker logId={m.logId} c={m.context} />
         ) : (
           m.league && <span className="badge badge-league">{m.league.toUpperCase()}</span>
         )}

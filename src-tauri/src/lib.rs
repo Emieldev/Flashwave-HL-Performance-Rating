@@ -299,6 +299,7 @@ pub fn run() {
             sync_commands::import_demo,
             sync_commands::link_demo,
             sync_commands::link_demostf,
+            sync_commands::set_match_kind,
             sync_commands::lives_maps,
             sync_commands::lives_on_map,
             sync_commands::get_bookmarks,

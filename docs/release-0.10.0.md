@@ -23,8 +23,8 @@ The hashes are at the bottom. Updating keeps everything.
 
 Logs now come from **drops.tf**, so a sync is several times faster and no
 longer stalls on logs.tf's limits. Demos link properly on combined logs, a
-player's lives on a map can be drawn across every match, and you can
-bookmark pages. Ratings are unchanged (model v11).
+player's lives on a map can be drawn across every match, a match's kind can
+be set by hand, and you can bookmark pages. Ratings are unchanged (model v11).
 
 ## Logs from drops.tf
 
@@ -69,6 +69,10 @@ bookmark pages. Ratings are unchanged (model v11).
 
 ## Matches
 
+- **Change what kind of match it is**: click the Official / Scrim / Pug
+  badge, on the list or the match page, and pick the right one when the app
+  got it wrong. It stays through every sync, shows a ✎, and *Automatic*
+  gives it back to the app.
 - **Officials show ETF2L's result** as the score, with the logs' rounds
   beneath when they differ (Clark).
 - **Import** beside Refresh: add a log by its id or logs.tf link without

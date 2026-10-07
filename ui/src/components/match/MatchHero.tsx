@@ -4,7 +4,7 @@ import type { MatchContext, MatchDetail, MatchSides, SideTeam, TeamSeason } from
 import { capitalize, formatDate, minutes, splitMap, teamLabel } from "../../lib/format";
 import { openTeam } from "../../lib/goto";
 import { t, tx } from "../../lib/i18n";
-import { ContextBadge, kindReason } from "../ContextBadge";
+import { KindPicker, kindReason } from "../ContextBadge";
 import { BookmarkButton } from "../Bookmarks";
 import { Country } from "../Country";
 import { MedalGlyph } from "../players/MedalGlyph";
@@ -50,7 +50,14 @@ export function MatchHero({ d }: { d: MatchDetail }) {
 
       <div className="mx-top">
         <div className="mx-eyebrow">
-          {official?.division ? <DivisionBadge d={{ name: official.division, tier: official.tier ?? 4 }} /> : c && <ContextBadge c={c} />}
+          {c &&
+            (official?.division ? (
+              <KindPicker logId={d.logId} c={c}>
+                <DivisionBadge d={{ name: official.division, tier: official.tier ?? 4 }} />
+              </KindPicker>
+            ) : (
+              <KindPicker logId={d.logId} c={c} />
+            ))}
           <span className="ts-eyebrow">{eyebrow(c, sides)}</span>
         </div>
         <div className="mx-badges">

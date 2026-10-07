@@ -463,8 +463,79 @@ impl Db {
             .execute(&mut *tx)
             .await?;
         }
+        // Kinds set by hand (Q63) win over the pass's, which is kept as
+        // what "Automatic" goes back to.
+        sqlx::query(
+            "UPDATE match_kind_override SET
+                 was_kind = (SELECT c.kind FROM match_context c WHERE c.log_id = match_kind_override.log_id),
+                 was_method = (SELECT c.link_method FROM match_context c WHERE c.log_id = match_kind_override.log_id)
+             WHERE log_id IN (SELECT log_id FROM match_context)",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE match_context SET
+                 kind = (SELECT o.kind FROM match_kind_override o WHERE o.log_id = match_context.log_id),
+                 link_method = 'manual'
+             WHERE log_id IN (SELECT log_id FROM match_kind_override)",
+        )
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Set a match's kind by hand (Q63), or with `None` give it back to the
+    /// context pass. `false` when the match has no context to set: one the
+    /// owner did not play, or not Highlander.
+    pub async fn set_match_kind(&self, log_id: i64, kind: Option<&str>) -> Result<bool> {
+        let mut tx = self.pool().begin().await?;
+        let current: Option<(String, Option<String>)> = sqlx::query_as("SELECT kind, link_method FROM match_context WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+        let Some((now_kind, now_method)) = current else { return Ok(false) };
+        let held: Option<(String, Option<String>)> = sqlx::query_as("SELECT was_kind, was_method FROM match_kind_override WHERE log_id = ?1")
+            .bind(log_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+        match kind {
+            Some(kind) => {
+                anyhow::ensure!(matches!(kind, "official" | "scrim" | "pug"), "not a kind of match: {kind}");
+                // What the pass decided: kept from the first time it was overridden.
+                let (was_kind, was_method) = held.unwrap_or((now_kind, now_method));
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                sqlx::query(
+                    "INSERT INTO match_kind_override (log_id, kind, was_kind, was_method, set_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(log_id) DO UPDATE SET kind = excluded.kind, set_at = excluded.set_at",
+                )
+                .bind(log_id)
+                .bind(kind)
+                .bind(&was_kind)
+                .bind(&was_method)
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+                sqlx::query("UPDATE match_context SET kind = ?2, link_method = 'manual' WHERE log_id = ?1")
+                    .bind(log_id)
+                    .bind(kind)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            None => {
+                if let Some((was_kind, was_method)) = held {
+                    sqlx::query("UPDATE match_context SET kind = ?2, link_method = ?3 WHERE log_id = ?1")
+                        .bind(log_id)
+                        .bind(was_kind)
+                        .bind(was_method)
+                        .execute(&mut *tx)
+                        .await?;
+                    sqlx::query("DELETE FROM match_kind_override WHERE log_id = ?1").bind(log_id).execute(&mut *tx).await?;
+                }
+            }
+        }
+        tx.commit().await?;
+        Ok(true)
     }
 
     // ---- reads -------------------------------------------------------------
@@ -586,5 +657,44 @@ impl Db {
                 time_s: r.get("time_s"),
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod kind_override_tests {
+    use crate::Db;
+
+    use super::ContextRow;
+
+    fn pug(log_id: i64) -> ContextRow {
+        ContextRow { log_id, kind: "pug", etf2l_match_id: None, link_method: None, team: None, opponent: None, regulars: 1 }
+    }
+
+    async fn kind_of(db: &Db, log_id: i64) -> (String, Option<String>) {
+        sqlx::query_as("SELECT kind, link_method FROM match_context WHERE log_id = ?1").bind(log_id).fetch_one(db.pool()).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_kind_set_by_hand_outlasts_the_pass_and_automatic_undoes_it() {
+        let db = Db::connect_in_memory().await.unwrap();
+        db.replace_match_context(&[pug(1), pug(2)]).await.unwrap();
+
+        assert!(db.set_match_kind(1, Some("scrim")).await.unwrap());
+        assert_eq!(kind_of(&db, 1).await, ("scrim".into(), Some("manual".into())));
+
+        // The pass runs again, still calling it a pug: the hand's kind stays.
+        db.replace_match_context(&[pug(1), pug(2)]).await.unwrap();
+        assert_eq!(kind_of(&db, 1).await.0, "scrim");
+        assert_eq!(kind_of(&db, 2).await.0, "pug", "the others are the pass's");
+
+        // Automatic: back to what the pass said.
+        assert!(db.set_match_kind(1, None).await.unwrap());
+        assert_eq!(kind_of(&db, 1).await, ("pug".into(), None));
+        db.replace_match_context(&[pug(1)]).await.unwrap();
+        assert_eq!(kind_of(&db, 1).await.0, "pug");
+
+        // No context, nothing to set; and only the three kinds.
+        assert!(!db.set_match_kind(99, Some("scrim")).await.unwrap());
+        assert!(db.set_match_kind(1, Some("lobby")).await.is_err());
     }
 }

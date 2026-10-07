@@ -389,6 +389,7 @@ mod frozen_migrations {
         ("0035_league_rating.sql", 0xd109c7e71d4b431f),
         ("0036_trends_career.sql", 0xc71d916bad5afbbd),
         ("0037_etf2l_transfers.sql", 0x0aea2736b8e226a0),
+        ("0038_kind_override.sql", 0xc57e09ed6dc2a9e5),
     ];
 
     fn fnv1a(bytes: &[u8]) -> u64 {
