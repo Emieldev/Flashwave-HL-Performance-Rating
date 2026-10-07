@@ -548,6 +548,16 @@ export interface MatchQuery {
 }
 
 /** What the match list's filters can offer, most played first. */
+/** The match list's filters, for counting what each class and map holds. */
+export interface PlayedFilterQuery {
+  format?: string | null;
+  kind?: string | null;
+  from?: number | null;
+  to?: number | null;
+  class?: string | null;
+  map?: string | null;
+}
+
 export interface PlayedFilters {
   classes: Array<[string, number]>;
   maps: Array<[string, number]>;

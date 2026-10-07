@@ -754,12 +754,23 @@ pub struct PlayedFilters {
     pub maps: Vec<(String, i64)>,
 }
 
+/// Counted under the list's own filters (Q59): the same query the list
+/// sends, its paging and sort unused.
 #[tauri::command]
-pub async fn played_filters(state: State<'_, AppState>) -> CmdResult<PlayedFilters> {
+pub async fn played_filters(
+    state: State<'_, AppState>,
+    format: Option<String>,
+    kind: Option<String>,
+    from: Option<i64>,
+    to: Option<i64>,
+    class: Option<String>,
+    map: Option<String>,
+) -> CmdResult<PlayedFilters> {
     let Some(me) = state.db.get_me().await? else {
         return Ok(PlayedFilters { classes: Vec::new(), maps: Vec::new() });
     };
-    let (classes, maps) = state.db.played_classes_and_maps(me.account_id()).await?;
+    let filter = MatchFilter { format, kind, from, to, class, map, ..Default::default() };
+    let (classes, maps) = state.db.played_classes_and_maps(me.account_id(), &filter).await?;
     Ok(PlayedFilters { classes, maps })
 }
 

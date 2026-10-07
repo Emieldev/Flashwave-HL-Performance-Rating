@@ -757,24 +757,28 @@ export const mockApi: Api = {
     );
   },
 
-  playedFilters: () =>
-    delay({
-      classes: [
+  playedFilters: (q?: { kind?: string | null; class?: string | null; map?: string | null }) => {
+    // Narrower filters, smaller counts: enough to see them follow.
+    const share = (q?.kind ? 0.3 : 1) * (q?.map ? 0.2 : 1);
+    const scale = (rows: Array<[string, number]>, by: number) => rows.map(([n, c]) => [n, Math.max(1, Math.round(c * by))] as [string, number]);
+    return delay({
+      classes: scale([
         ["sniper", 646],
         ["engineer", 58],
         ["scout", 21],
         ["spy", 14],
         ["medic", 9],
-      ] as Array<[string, number]>,
-      maps: [
+      ], share),
+      maps: scale([
         ["product", 143],
         ["upward", 119],
         ["vigil", 98],
         ["swiftwater", 74],
         ["steel", 41],
         ["proot", 22],
-      ] as Array<[string, number]>,
-    }),
+      ], (q?.kind ? 0.3 : 1) * (q?.class ? 0.5 : 1)),
+    });
+  },
 
   getParts: (logId: number) => {
     // The combined fixture's three logs, two of them already "fetched": the

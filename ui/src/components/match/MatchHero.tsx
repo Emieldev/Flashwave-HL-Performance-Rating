@@ -29,9 +29,15 @@ export function MatchHero({ d }: { d: MatchDetail }) {
   const mine = d.myTeam;
   const left: "Red" | "Blue" = mine ?? "Red";
   const right: "Red" | "Blue" = left === "Red" ? "Blue" : "Red";
-  const score = (side: "Red" | "Blue") => (side === "Red" ? d.redScore : d.blueScore);
+  const rounds = (side: "Red" | "Blue") => (side === "Red" ? d.redScore : d.blueScore);
   const c = d.context;
   const official = c?.kind === "official" ? c.official : null;
+  // Q55 (Clark): an official's headline is ETF2L's result, your side first;
+  // the logs' rounds, which in stopwatch are not the same, go beneath.
+  const etf2l = official?.score && mine ? official.score : null;
+  const score = (side: "Red" | "Blue") => (etf2l ? (side === left ? etf2l[0] : etf2l[1]) : rounds(side));
+  const result = etf2l ? (etf2l[0] > etf2l[1] ? "W" : etf2l[0] < etf2l[1] ? "L" : "T") : d.result;
+  const roundsDiffer =!!etf2l && (etf2l[0] !== rounds(left) || etf2l[1] !== rounds(right));
 
   // Your side carries your team; the other side the opponent, once known.
   const leftTeam: SideTeam | null = mine ? sides?.team ?? null : null;
@@ -58,16 +64,20 @@ export function MatchHero({ d }: { d: MatchDetail }) {
         <Side side={left} team={leftTeam} you={!!mine} played={!!mine} season={sides?.season ?? null} align="left" />
 
         <div className="mx-center">
-          {d.result && mine && <span className={`mx-result mx-result-${d.result}`}>{d.result === "W" ? t("Victory") : d.result === "L" ? t("Defeat") : t("Draw")}</span>}
-          <div className="mx-score" aria-label={t("{0} to {1}", { "0": score(left), "1": score(right) })}>
+          {result && mine && <span className={`mx-result mx-result-${result}`}>{result === "W" ? t("Victory") : result === "L" ? t("Defeat") : t("Draw")}</span>}
+          <div
+            className="mx-score"
+            aria-label={t("{0} to {1}", { "0": score(left), "1": score(right) })}
+            title={etf2l ? t("ETF2L's result for the match") : undefined}
+          >
             <span className={`mx-n team-${left.toLowerCase()}`}>{score(left)}</span>
             <span className="mx-colon">:</span>
             <span className={`mx-n team-${right.toLowerCase()}`}>{score(right)}</span>
           </div>
           <MapLine d={d} maps={maps} single={single} left={left} />
-          {official?.score && (official.score[0] !== score(left) || official.score[1] !== score(right)) && mine && (
-            <span className="hint" title={t("ETF2L's score for the match. In stopwatch this is not the same as rounds won.")}>
-              {tx("ETF2L result {0}", { "0": <strong>{official.score[0]}–{official.score[1]}</strong> })}
+          {roundsDiffer && (
+            <span className="hint" title={t("Rounds won in the logs. In stopwatch this is not the same as ETF2L's result.")}>
+              {tx("Rounds in the logs {0}", { "0": <strong>{rounds(left)}–{rounds(right)}</strong> })}
             </span>
           )}
           {official?.defaultWin && <span className="warn-text">{t("default win")}</span>}

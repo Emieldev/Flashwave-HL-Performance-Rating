@@ -840,28 +840,62 @@ impl Db {
     /// The owner's own matches by class and by map, most played first: what
     /// the match list's filters offer. Maps lose their version, so
     /// `koth_product_final` and `koth_product_rc8` are one entry.
-    pub async fn played_classes_and_maps(&self, me: u32) -> Result<(Vec<(String, i64)>, Vec<(String, i64)>)> {
-        let classes: Vec<(String, i64)> = sqlx::query_as(
+    /// The classes and maps the match list can filter to, each with how many
+    /// matches it holds under the list's other filters (Q59, Emiel): the
+    /// class counts follow the format, the kind, the period and the map, and
+    /// the map counts follow those and the class. `filter`'s paging and sort
+    /// are not used.
+    pub async fn played_classes_and_maps(&self, me: u32, filter: &MatchFilter) -> Result<(Vec<(String, i64)>, Vec<(String, i64)>)> {
+        // ?1 me, ?2 format, ?3 kind, ?4 from, ?5 to, ?6 class, ?7 map; the
+        // class counts leave out the class, and the map counts the map.
+        let shared = format!(
+            "i.superseded_by IS NULL
+               AND (?2 IS NULL OR {EFFECTIVE_FORMAT} = ?2)
+               AND (?3 IS NULL OR c.kind = ?3)
+               AND (?4 IS NULL OR m.played_at >= ?4)
+               AND (?5 IS NULL OR m.played_at <= ?5)"
+        );
+        let by_map = "(?7 IS NULL OR m.map LIKE ?7 || '%'
+               OR EXISTS (SELECT 1 FROM log_segment s2 WHERE s2.log_id = m.log_id AND s2.map LIKE ?7 || '%'))";
+        let classes: Vec<(String, i64)> = sqlx::query_as(&format!(
             "SELECT mp.main_class, COUNT(*) FROM match_player mp
              JOIN log_index i ON i.log_id = mp.log_id
-             WHERE mp.account_id = ?1 AND mp.main_class IS NOT NULL AND i.superseded_by IS NULL
-             GROUP BY mp.main_class ORDER BY COUNT(*) DESC",
-        )
+             JOIN match m ON m.log_id = mp.log_id
+             LEFT JOIN match_context c ON c.log_id = mp.log_id
+             WHERE mp.account_id = ?1 AND mp.main_class IS NOT NULL AND {shared} AND {by_map}
+               AND (?6 IS NULL OR 1)
+             GROUP BY mp.main_class ORDER BY COUNT(*) DESC"
+        ))
         .bind(me)
+        .bind(&filter.format)
+        .bind(&filter.kind)
+        .bind(filter.from)
+        .bind(filter.to)
+        .bind(&filter.class)
+        .bind(&filter.map)
         .fetch_all(self.pool())
         .await?;
 
         // A combined log counts once per map it holds, which is what a player
         // means by "my upward games".
-        let rows: Vec<(i64, String)> = sqlx::query_as(
+        let rows: Vec<(i64, String)> = sqlx::query_as(&format!(
             "SELECT DISTINCT mp.log_id, COALESCE(s.map, m.map) AS map
              FROM match_player mp
              JOIN log_index i ON i.log_id = mp.log_id
              JOIN match m ON m.log_id = mp.log_id
+             LEFT JOIN match_context c ON c.log_id = mp.log_id
              LEFT JOIN log_segment s ON s.log_id = mp.log_id
-             WHERE mp.account_id = ?1 AND i.superseded_by IS NULL AND COALESCE(s.map, m.map) IS NOT NULL",
-        )
+             WHERE mp.account_id = ?1 AND {shared} AND COALESCE(s.map, m.map) IS NOT NULL
+               AND (?6 IS NULL OR mp.main_class = ?6)
+               AND (?7 IS NULL OR 1)"
+        ))
         .bind(me)
+        .bind(&filter.format)
+        .bind(&filter.kind)
+        .bind(filter.from)
+        .bind(filter.to)
+        .bind(&filter.class)
+        .bind(&filter.map)
         .fetch_all(self.pool())
         .await?;
         let mut by_map: HashMap<String, i64> = HashMap::new();
@@ -1038,5 +1072,25 @@ mod tests {
         queue.sort_unstable();
         assert_eq!(queue, vec![1, 2, 3, 4]);
         assert_eq!(db.index_stats().await.unwrap().outside_window, 0, "and nothing is on offer");
+    }
+
+    #[tokio::test]
+    async fn the_filter_counts_take_every_filter() {
+        // The SQL holds together with every filter set and with none (Q59).
+        let db = Db::connect_in_memory().await.unwrap();
+        let all = MatchFilter::default();
+        let some = MatchFilter {
+            format: Some("highlander".into()),
+            kind: Some("official".into()),
+            from: Some(0),
+            to: Some(i64::MAX),
+            class: Some("sniper".into()),
+            map: Some("pl_upward".into()),
+            ..Default::default()
+        };
+        for f in [&all, &some] {
+            let (classes, maps) = db.played_classes_and_maps(1, f).await.unwrap();
+            assert!(classes.is_empty() && maps.is_empty());
+        }
     }
 }

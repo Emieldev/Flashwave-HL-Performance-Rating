@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { errorMessage, type ContextKind, type MatchSummary } from "../api/types";
 import { capitalize, formatDate, rating, splitMap } from "../lib/format";
@@ -38,11 +38,19 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
   // rows already on screen.
   const [cls, setCls] = useState<string | null>(null);
   const [map, setMap] = useState<string | null>(null);
-  const filters = useQuery({ queryKey: ["played_filters"], queryFn: api.playedFilters, staleTime: 5 * 60_000 });
   const [sort, setSort] = useState<{ key: string; ascending: boolean }>({ key: "date", ascending: false });
 
   const kind = view === "official" || view === "scrim" || view === "pug" ? view : null;
   const period = usePeriod();
+  // Q59 (Emiel): each class's and map's count is of what the other filters
+  // show, not of every log.
+  const counted = { format: view === "all" ? null : "highlander", kind, ...bounds(period), class: cls, map };
+  const filters = useQuery({
+    queryKey: ["played_filters", counted],
+    queryFn: () => api.playedFilters(counted),
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
   const query = {
     format: view === "all" ? null : "highlander",
     kind,
@@ -70,6 +78,13 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
   const refresh = async () => {
     if (!(await api.syncBusy())) await startSync(false);
   };
+
+  // What is picked stays on offer when the other filters leave it at none,
+  // so it can still be seen and unpicked.
+  const keep = (rows: Array<[string, number]> | undefined, picked: string | null) =>
+    !rows ? rows : picked && !rows.some(([n]) => n === picked) ? [...rows, [picked, 0] as [string, number]] : rows;
+  const mapRows = keep(filters.data?.maps, map) ?? [];
+  const classRows = keep(filters.data?.classes, cls) ?? [];
 
   const items = matches.data?.items ?? [];
   const total = matches.data?.total ?? 0;
@@ -100,7 +115,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
           ))}
         </div>
         <PeriodPicker />
-        {(filters.data?.maps.length ?? 0) > 0 && (
+        {mapRows.length > 0 && (
           <label className="an-field fi-map">
             <span className="an-label">{t("Map")}</span>
             <select
@@ -111,7 +126,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
               }}
             >
               <option value="">{t("Every map")}</option>
-              {filters.data!.maps.map(([name, n]) => (
+              {mapRows.map(([name, n]) => (
                 <option key={name} value={name}>
                   {capitalize(name)} ({n})
                 </option>
@@ -122,6 +137,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
         <span className="fi-count">
           {matches.isPending ? t("Loading…") : t("{0} match{1}", { "0": total.toLocaleString(), "1": total === 1 ? "" : "es" })}
         </span>
+        <div className="fi-actions">
         <button
           className={syncing ? "km-chip fi-refresh busy" : "km-chip fi-refresh"}
           onClick={() => void refresh()}
@@ -131,9 +147,11 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
           <span className="fi-refresh-icon" aria-hidden>↻</span>
           {syncing ? t("Syncing…") : t("Refresh")}
         </button>
+        <ImportLog onOpen={onOpen} />
+        </div>
         </div>
 
-      {(filters.data?.classes.length ?? 0) > 0 && (
+      {classRows.length > 0 && (
         <div className="class-filter" role="tablist" aria-label={t("Class")}>
           <button
             role="tab"
@@ -144,7 +162,7 @@ export function Matches({ onOpen }: { onOpen: (logId: number) => void }) {
               setPages(1);
             }}
           >{t("All classes")}</button>
-          {filters.data!.classes.map(([name, n]) => (
+          {classRows.map(([name, n]) => (
             <button
               key={name}
               role="tab"
@@ -227,10 +245,87 @@ function SortHead(props: {
   );
 }
 
+/**
+ * Q58 (Flashy): import a log from here, not only from Settings. A log id
+ * or logs.tf link, fetched now; a log you are in opens straight away.
+ */
+function ImportLog({ onOpen }: { onOpen: (logId: number) => void }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  // Opens toward the room it has: leftward from the row's right end, or
+  // rightward when a narrow window has wrapped the button to the left.
+  const [toRight, setToRight] = useState(false);
+
+  async function add() {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const got = await api.importLog(text.trim());
+      setText("");
+      void qc.invalidateQueries({ queryKey: ["matches"] });
+      void qc.invalidateQueries({ queryKey: ["index_stats"] });
+      void qc.invalidateQueries({ queryKey: ["failed_logs"] });
+      if (got.yours) {
+        setOpen(false);
+        onOpen(got.logId);
+      } else {
+        setNote(t("Added. You are not in this one, so it joins the pool everyone is rated against rather than your match list."));
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fi-import">
+      <button
+        className={open ? "km-chip on" : "km-chip"}
+        onClick={(e) => {
+          setToRight(e.currentTarget.getBoundingClientRect().right < 420);
+          setOpen((o) => !o);
+        }}
+        aria-expanded={open}
+        title={t("Add a log by its id or logs.tf link")}
+      >
+        <span aria-hidden>＋</span> {t("Import")}
+      </button>
+      {open && (
+        <div className={toRight ? "fi-import-pop to-right" : "fi-import-pop"} role="dialog" aria-label={t("Import a log")}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void add();
+            }}
+          >
+            <input autoFocus value={text} placeholder="https://logs.tf/4042136" onChange={(e) => setText(e.target.value)} disabled={busy} onKeyDown={(e) => e.key === "Escape" && setOpen(false)} />
+            <button type="submit" className="primary" disabled={busy || !text.trim()}>{busy ? t("Fetching…") : t("Add it")}</button>
+          </form>
+          <span className="hint">{t("A log id or logs.tf link. Fetched now, not at the next sync.")}</span>
+          {note && <span className="hint">{note}</span>}
+          {error && <span className="error">{error}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => void }) {
   const me = m.me;
-  const [mine, theirs] =
+  const [rMine, rTheirs] =
     me?.team === "Blue" ? [m.blueScore, m.redScore] : [m.redScore, m.blueScore];
+  // Q55 (Clark): an official shows ETF2L's result; the logs' rounds, which
+  // in stopwatch are not the same, are in its tooltip.
+  const etf2l = m.context?.kind === "official" ? m.context.official?.score ?? null : null;
+  const [mine, theirs] = etf2l ?? [rMine, rTheirs];
+  const result = etf2l ? (etf2l[0] > etf2l[1] ? "W" : etf2l[0] < etf2l[1] ? "L" : "T") : me?.result;
   const dpm = me && me.timeS > 0 ? Math.round(me.dmg / (me.timeS / 60)) : null;
   // A combined log's own map field is free text; its resolved maps are not.
   const maps = [...new Set(m.maps)];
@@ -269,8 +364,11 @@ function MatchRow({ m, onOpen }: { m: MatchSummary; onOpen: (logId: number) => v
       </td>
       <td className="nowrap">
         {me ? (
-          <span className={`result result-${me.result}`}>
-            {me.result} <span className="score">{mine ?? "?"}–{theirs ?? "?"}</span>
+          <span className={`result result-${result}`}>
+            {result}{" "}
+            <span className="score" title={etf2l ? t("ETF2L's result; rounds in the logs {0}–{1}", { "0": rMine ?? "?", "1": rTheirs ?? "?" }) : undefined}>
+              {mine ?? "?"}–{theirs ?? "?"}
+            </span>
           </span>
         ) : (
           <span className="muted">{t("not in log")}</span>
