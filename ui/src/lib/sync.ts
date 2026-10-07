@@ -29,8 +29,19 @@ export type SyncState =
  *  refresh per log would re-render the list for an hour straight. */
 const REFRESH_EVERY_MS = 1000;
 
-/** Rough seconds per log: logs.tf's throttle plus its response time. */
-const SECONDS_PER_LOG = 2.5;
+/** Seconds per log until this sync has timed a few of its own: drops.tf's
+ *  pace (a request a second) plus storing and rating. */
+const SECONDS_PER_LOG = 1.5;
+
+/** When this sync's downloads started, and how many were done then: the
+ *  estimate follows the pace actually seen, whichever site is answering. */
+let pace: { at: number; done: number } | null = null;
+
+/** Seconds a log is taking in this sync, once there is enough to tell. */
+function secondsPerLog(done: number): number {
+  if (!pace || done - pace.done < 3) return SECONDS_PER_LOG;
+  return (Date.now() - pace.at) / 1000 / (done - pace.done);
+}
 
 let status: SyncState = { state: "idle" };
 let listeners: Array<() => void> = [];
@@ -268,7 +279,7 @@ export function phaseOf(p: Progress | null): { step: number; of: number; title: 
     case "fetching":
     case "fetchFailed":
     case "gaveUp":
-      return at(3, t("Downloading new matches"), t("Each new log from logs.tf, rated as it lands."));
+      return at(3, t("Downloading new matches"), t("Each new log from drops.tf, or logs.tf for the last hour's, rated as it lands."));
     case "standIns":
       return at(3, t("Downloading new matches"), t("logs.tf is refusing requests, so new logs come from more.tf's copy of them."));
     case "parts":
@@ -311,9 +322,10 @@ export function labelOf(p: Progress | null): string {
       return t("Indexed. {superseded} per-round logs folded into their match.", { superseded: p.superseded });
     case "fetching":
       if (p.total === 0) return t("Nothing new to fetch.");
+      if (p.done === 0 || !pace) pace = { at: Date.now(), done: p.done };
       return (
         t("Matches {done} of {total}", { done: n(p.done), total: n(p.total) }) +
-        (p.done < p.total ? t(" — about {0} left", { "0": eta(p.total - p.done) }) : "")
+        (p.done < p.total ? t(" — about {0} left", { "0": eta(p.total - p.done, p.done) }) : "")
       );
     case "fetchFailed":
       return t("Log {logId} failed; continuing.", { logId: p.logId });
@@ -350,7 +362,7 @@ export function labelOf(p: Progress | null): string {
   }
 }
 
-export function eta(logs: number): string {
-  const mins = Math.ceil((logs * SECONDS_PER_LOG) / 60);
+export function eta(logs: number, done?: number): string {
+  const mins = Math.ceil((logs * (done === undefined ? SECONDS_PER_LOG : secondsPerLog(done))) / 60);
   return mins <= 1 ? t("1 min") : t("{mins} min", { mins: mins });
 }

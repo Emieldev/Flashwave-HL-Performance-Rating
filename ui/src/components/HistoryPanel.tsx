@@ -109,7 +109,7 @@ function Dialog({
       <div className="modal">
         <h3>{t("Download the full history?")}</h3>
         <p>
-          {tx("{0} older {1} indexed but not downloaded — scrims and pugs from before the last {KEEP_YEARS} years. Fetching them means about {3} requests to logs.tf, plus the raw server log behind each one: roughly {4}.", { "0": held.toLocaleString(), "1": held === 1 ? t("match is") : t("matches are"), "3": held.toLocaleString(), "4": <strong>{eta(held)}</strong>, KEEP_YEARS: KEEP_YEARS })}</p>
+          {tx("{0} older {1} indexed but not downloaded — scrims and pugs from before the last {KEEP_YEARS} years. Fetching them means about {3} requests to drops.tf, plus the raw server log behind each one: roughly {4}.", { "0": held.toLocaleString(), "1": held === 1 ? t("match is") : t("matches are"), "3": held.toLocaleString(), "4": <strong>{eta(held)}</strong>, KEEP_YEARS: KEEP_YEARS })}</p>
         <p className="muted">{t("logs.tf is a community server and this app waits between requests on purpose. Nothing downloads now — the next sync just has more to do, and you can keep using the app while it runs.")}</p>
         <div className="modal-actions">
           <button className="primary" onClick={onConfirm} disabled={busy}>
