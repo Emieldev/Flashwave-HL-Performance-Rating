@@ -53,6 +53,8 @@ Everything runs on your PC: no account, no server, nothing uploaded.
   drawn as a compass — plus how close your nearest teammate was, and whether
   you were scoped.
 - How much of your living time you spend **scoped**.
+- **Lives on a map**: any player's routes on one map across every match a
+  demo followed them through, by class and by side.
 - Reading a demo takes about four seconds and happens after a sync.
 
 **Your history**
@@ -60,8 +62,10 @@ Everything runs on your PC: no account, no server, nothing uploaded.
 - **Profile**: form, trend, strengths and weaknesses, and the aim figures,
   each against your usual, split by officials, scrims and pugs, and **by
   season**.
-- **Match list** sortable by kills, damage, DPM or your rating, with a rating
-  column, and filterable by season or date range.
+- **Match list** sortable by kills, damage, DPM, your rating or your kills on
+  (and deaths to) one class, and filterable by season, date range, map, class
+  and whether the SourceTV demo is on your PC.
+- **Bookmarks** for matches, players, teams and seasons.
 - **Officials, scrims and pugs** are told apart automatically from ETF2L
   rosters and your regular teammates.
 - **Demos** are found in your TF2 folder and matched to your matches; any kill
@@ -145,7 +149,7 @@ has the whole of it, including what to do if one does break.
 
 1. **Your SteamID.** Any format works: SteamID64, `[U:1:…]`, `STEAM_0:…` or a link to your Steam profile.
 2. **Your TF2 folder (optional).** Only needed for demo jumps. Auto-detect finds most installs; you can skip it and set it later in Settings.
-3. **Start the first sync.** It finds every match you played, then fetches the ones worth keeping from logs.tf **one every 2 seconds** to go easy on their servers: the **last two years, plus every official at any age**. Older scrims and pugs stay indexed but not downloaded — Settings, *How far back*, will fetch them too. The detailed kill data comes **100 matches per sync**, so a long history takes a few syncs: press **Sync** again later for the rest. The app is usable while it runs.
+3. **Start the first sync.** It finds every match you played, then fetches the ones worth keeping from drops.tf (logs.tf for a game from the last hour): the **last two years, plus every official at any age**. Older scrims and pugs stay indexed but not downloaded — Settings, *How far back*, will fetch them too. The detailed kill data comes **300 matches per sync**, so a long history may take a few syncs: press **Sync** again later for the rest. The app is usable while it runs.
 
 ## Where the data comes from
 
