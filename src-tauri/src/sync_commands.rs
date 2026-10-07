@@ -1326,6 +1326,49 @@ pub async fn link_demostf(state: State<'_, AppState>, log_id: i64, link: String)
     }
 }
 
+/// Q60 (Clark): a page kept to come back to. `kind` is `match`, `player`,
+/// `team` or `season`; `id` is the log, account, team or season number.
+/// `label` and `sub` are what the page was called when it was kept, so the
+/// list reads without asking anything again.
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bookmark {
+    pub kind: String,
+    pub id: i64,
+    pub label: String,
+    #[serde(default)]
+    pub sub: Option<String>,
+    #[serde(default)]
+    pub added: i64,
+}
+
+const BOOKMARKS_KEY: &str = "bookmarks";
+
+async fn read_bookmarks(db: &hl_db::Db) -> CmdResult<Vec<Bookmark>> {
+    // A list that does not parse is treated as empty rather than breaking
+    // every page that shows a bookmark button.
+    Ok(db.get_setting(BOOKMARKS_KEY).await?.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn get_bookmarks(state: State<'_, AppState>) -> CmdResult<Vec<Bookmark>> {
+    read_bookmarks(&state.db).await
+}
+
+/// Keep `bookmark` (`on`) or let it go; the list as it now stands, newest first.
+#[tauri::command]
+pub async fn set_bookmark(state: State<'_, AppState>, bookmark: Bookmark, on: bool) -> CmdResult<Vec<Bookmark>> {
+    let mut all = read_bookmarks(&state.db).await?;
+    all.retain(|b| !(b.kind == bookmark.kind && b.id == bookmark.id));
+    if on {
+        let added = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        all.insert(0, Bookmark { added, ..bookmark });
+    }
+    let json = serde_json::to_string(&all).map_err(|e| CmdError::new("internal", e.to_string()))?;
+    state.db.set_setting(BOOKMARKS_KEY, &json).await?;
+    Ok(all)
+}
+
 /// Read one match again with this version: its demos from their files, then
 /// aim and fights. Holds the sync's turn, as linking a demo does.
 #[tauri::command]

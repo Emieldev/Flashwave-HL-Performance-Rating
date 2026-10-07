@@ -552,6 +552,19 @@ export interface MatchQuery {
   stvOnly?: boolean;
 }
 
+/** Q60: a page kept to come back to. */
+export type BookmarkKind = "match" | "player" | "team" | "season";
+export interface Bookmark {
+  kind: BookmarkKind;
+  /** The log, account, team or season number. */
+  id: number;
+  /** What the page was called when it was kept. */
+  label: string;
+  sub?: string | null;
+  /** Unix seconds. */
+  added?: number;
+}
+
 /** The match list's filters, for counting what each class and map holds. */
 export interface PlayedFilterQuery {
   stvOnly?: boolean;

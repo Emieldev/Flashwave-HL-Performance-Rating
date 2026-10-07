@@ -9,6 +9,7 @@ import { locale, t, tx } from "../../lib/i18n";
 import { PlayerStatsCard, RankChip } from "./PlayerStats";
 import { MedalGlyph } from "./MedalGlyph";
 import { Country } from "../Country";
+import { BookmarkButton } from "../Bookmarks";
 
 /**
  * A player's profile, HLTV-style (Q35, Flashy; PLAN §26): who they are,
@@ -86,6 +87,7 @@ export function PlayerHeader({ p, aside, own }: { p: Profile; aside?: React.Reac
         <div className="pp-who">
           <div className="pp-name-row">
             <h2 className="pp-name">{p.name}</h2>
+            <BookmarkButton b={{ kind: "player", id: p.accountId, label: p.name, sub: p.highest?.name ?? null }} />
             {p.highest && <DivisionBadge d={p.highest} />}
             {p.etf2lTitle && p.etf2lTitle !== "Player" && <span className="pp-role">{p.etf2lTitle}</span>}
             {banned && (

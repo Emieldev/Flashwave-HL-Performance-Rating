@@ -5,6 +5,7 @@ import { capitalize, formatDate, minutes, splitMap, teamLabel } from "../../lib/
 import { openTeam } from "../../lib/goto";
 import { t, tx } from "../../lib/i18n";
 import { ContextBadge, kindReason } from "../ContextBadge";
+import { BookmarkButton } from "../Bookmarks";
 import { Country } from "../Country";
 import { MedalGlyph } from "../players/MedalGlyph";
 import { DivisionBadge, seasonLong, seasonShort } from "../players/PlayerProfile";
@@ -53,6 +54,14 @@ export function MatchHero({ d }: { d: MatchDetail }) {
           <span className="ts-eyebrow">{eyebrow(c, sides)}</span>
         </div>
         <div className="mx-badges">
+          <BookmarkButton
+            b={{
+              kind: "match",
+              id: d.logId,
+              label: [maps.length > 0 ? maps.map((m) => splitMap(m).name ?? m).join(" + ") : splitMap(d.map ?? "").name ?? t("Match"), formatDate(d.playedAt)].join(" · "),
+              sub: rightTeam?.name ? t("vs {0}", { "0": rightTeam.name }) : d.title,
+            }}
+          />
           {!c && d.league && <span className="badge badge-league">{d.league.toUpperCase()}</span>}
           {d.demos.some((x) => x.kind === "pov") && <span className="badge badge-pov">{t("POV demo")}</span>}
           {d.demosTfId && <span className="badge badge-demo">{t("STV demo")}</span>}

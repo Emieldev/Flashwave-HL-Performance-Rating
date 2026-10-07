@@ -259,7 +259,7 @@ See [PLAN.md](PLAN.md) for the full design and milestone history.
 
 ```
 cargo test --workspace
-cd ui && npx tsc --noEmit
+cd ui && npx tsc -b
 ```
 
 ---

@@ -3,7 +3,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errorMessage, type Fixture, type LeagueRecord, type Podium, type SeasonTile, type Stay, type TeamEtf2l, type TeamHonours, type TeamInfo, type TeamTransfers, type TeamView } from "../../api/types";
 import { formatDate, formatMonth, formatStay, rating } from "../../lib/format";
-import { onOpenTeam, openPlayer, takePendingTeam } from "../../lib/goto";
+import { onOpenSeason, onOpenTeam, openPlayer, takePendingSeason, takePendingTeam } from "../../lib/goto";
+import { BookmarkButton } from "../Bookmarks";
 import { locale, t, tx } from "../../lib/i18n";
 import { ClassIcon } from "../ClassIcon";
 import { Country } from "../Country";
@@ -29,10 +30,14 @@ export function TeamsPage() {
   // A team asked for from elsewhere (a match header) opens straight on it.
   const [view, setView] = useState<View>(() => {
     const pending = takePendingTeam();
-    return pending === null ? { kind: "seasons" } : { kind: "team", teamId: pending, from: { kind: "seasons" } };
+    if (pending !== null) return { kind: "team", teamId: pending, from: { kind: "seasons" } };
+    // Or a season, from a bookmark (Q60).
+    const season = takePendingSeason();
+    return season === null ? { kind: "seasons" } : { kind: "season", season };
   });
   const openTeam = (teamId: number) => setView((from) => ({ kind: "team", teamId, from: from.kind === "team" ? from.from : from }));
   useEffect(() => onOpenTeam((teamId) => setView({ kind: "team", teamId, from: { kind: "seasons" } })), []);
+  useEffect(() => onOpenSeason((season) => setView({ kind: "season", season })), []);
   let body;
   if (view.kind === "team") {
     body = <TeamScreen teamId={view.teamId} onBack={() => setView(view.from)} onTeam={openTeam} backLabel={view.from.kind === "season" ? t("Season") : t("All seasons")} />;
@@ -236,7 +241,10 @@ function SeasonScreen({ season, onBack, onTeam }: { season: number; onBack: () =
       <section className={`ts-hero ${banner ? "" : teamTint(season)}`} style={banner ? { backgroundImage: `url("${banner}")` } : undefined}>
         <div className="ts-hero-text">
           <span className="ts-eyebrow">{t("ETF2L Highlander")}</span>
-          <h1>{tile ? seasonTitle(tile) : t("Season {0}", { "0": season })}</h1>
+          <h1>
+            {tile ? seasonTitle(tile) : t("Season {0}", { "0": season })}{" "}
+            <BookmarkButton b={{ kind: "season", id: season, label: tile ? seasonTitle(tile) : t("Season {0}", { "0": season }), sub: t("ETF2L Highlander") }} />
+          </h1>
           {tile && (
             <p className="ts-meta">
               {formatDate(tile.from)} – {formatDate(tile.to)}
@@ -436,6 +444,7 @@ function TeamHeader({ v, honours, info }: { v: TeamView; honours: TeamHonours | 
           <div className="pp-name-row">
             <h2 className="pp-name">{v.name}</h2>
             {info?.tag && <span className="ts-tag">{info.tag}</span>}
+            <BookmarkButton b={{ kind: "team", id: v.teamId, label: v.name, sub: latest ? `${seasonShort(latest.season)} · ${latest.division}` : null }} />
             {latest && latest.tier !== null && <DivisionBadge d={{ name: latest.division, tier: latest.tier }} />}
           </div>
           <dl className="pp-facts">

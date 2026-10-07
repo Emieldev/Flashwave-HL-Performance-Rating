@@ -299,6 +299,8 @@ pub fn run() {
             sync_commands::import_demo,
             sync_commands::link_demo,
             sync_commands::link_demostf,
+            sync_commands::get_bookmarks,
+            sync_commands::set_bookmark,
             sync_commands::reread_match,
             sync_commands::get_leagues,
             sync_commands::get_team,

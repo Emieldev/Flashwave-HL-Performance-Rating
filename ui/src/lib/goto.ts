@@ -61,6 +61,33 @@ export function onOpenTeam(open: (teamId: number) => void): () => void {
   return () => window.removeEventListener(TEAM_EVENT, handler);
 }
 
+const SEASON_EVENT = "hl:season";
+let pendingSeason: number | null = null;
+
+/** The Teams tab, on one season's page (Q60: from a bookmark). */
+export function openSeason(season: number) {
+  pendingSeason = season;
+  goTo("teams");
+  window.dispatchEvent(new CustomEvent<number>(SEASON_EVENT, { detail: season }));
+}
+
+/** For the Teams tab: the season asked for before it was first shown. */
+export function takePendingSeason(): number | null {
+  const s = pendingSeason;
+  pendingSeason = null;
+  return s;
+}
+
+/** For the Teams tab: a season asked for while it is mounted. */
+export function onOpenSeason(open: (season: number) => void): () => void {
+  const handler = (e: Event) => {
+    pendingSeason = null;
+    open((e as CustomEvent<number>).detail);
+  };
+  window.addEventListener(SEASON_EVENT, handler);
+  return () => window.removeEventListener(SEASON_EVENT, handler);
+}
+
 export function goTo(page: Destination) {
   window.dispatchEvent(new CustomEvent<Destination>(EVENT, { detail: page }));
 }

@@ -32,6 +32,8 @@ import fightsSniper from "./fixtures/fights_sniper.json";
 import leagues from "./fixtures/leagues.json";
 import team37805 from "./fixtures/team_37805.json";
 import type {
+  Bookmark,
+  BuildingRow,
   DemoIndexSummary,
   ReRead,
   Fixture,
@@ -352,6 +354,9 @@ let leagueSample: LeagueSample = {
   logstfResting: false,
   targetPerTier: 300,
 };
+
+/** Q60: the browser build's bookmarks, for the page's life. */
+let mockBookmarks: Bookmark[] = [{ kind: "season", id: 46, label: "Season 46", added: 0 }];
 
 const FAKE_MATCHES: MatchSummary[] = (() => {
   const r = rng(42);
@@ -1169,6 +1174,12 @@ export const mockApi: Api = {
       { demoId: 99, fileName: path.split(/[\\/]/).pop() ?? path, stv: true, killsMatched: 241, logKills: 262, playersShared: 18, path },
       1200,
     ),
+  getBookmarks: () => delay([...mockBookmarks], 50),
+  setBookmark: (b: Bookmark, on: boolean) => {
+    mockBookmarks = mockBookmarks.filter((x) => !(x.kind === b.kind && x.id === b.id));
+    if (on) mockBookmarks.unshift({ ...b, added: Math.floor(Date.now() / 1000) });
+    return delay([...mockBookmarks], 50);
+  },
   linkDemostf: (_logId: number, link: string) =>
     delay<DemoLinked>(
       { demoId: 98, fileName: `match-from-${link.split("/").pop()}.dem`, stv: true, killsMatched: 88, logKills: 262, playersShared: 18, path: link },

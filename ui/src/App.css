@@ -414,6 +414,45 @@
   color: var(--muted);
 }
 
+/* Q60: bookmarks. The star on a page, and the list in the top bar. */
+.bm-star {
+  background: none; border: none; padding: 0 4px; margin: 0;
+  font-size: 1.15rem; line-height: 1; color: var(--muted); cursor: pointer;
+  vertical-align: middle; box-shadow: none;
+}
+.bm-star:hover:not(:disabled) { color: var(--text); background: none; }
+.bm-star.on { color: var(--accent); }
+.bm-menu { position: relative; }
+.bm-open {
+  position: relative; display: grid; place-items: center;
+  width: 32px; height: 32px; padding: 0; font-size: 1.05rem; color: var(--muted);
+}
+.bm-open:hover:not(:disabled), .bm-open.on { color: var(--accent); }
+.bm-count {
+  position: absolute; top: -3px; right: -5px; min-width: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: var(--bg);
+  font-size: 0.62rem; font-weight: 700; line-height: 15px; text-align: center;
+}
+.bm-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 50;
+  width: min(340px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto;
+  padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.bm-pop h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.bm-pop h4 { margin: 10px 0 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.bm-pop ul { list-style: none; margin: 0; padding: 0; }
+.bm-pop li { display: flex; align-items: center; gap: 4px; }
+.bm-go {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start;
+  padding: 6px 8px; background: none; border: none; text-align: left; box-shadow: none;
+}
+.bm-go:hover { background: var(--panel-2); }
+.bm-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.bm-sub { font-size: 0.78rem; }
+.bm-x { background: none; border: none; padding: 2px 8px; color: var(--muted); box-shadow: none; }
+.bm-x:hover { color: var(--text); background: none; }
+
 .cog:hover:not(:disabled) {
   color: var(--text);
 }

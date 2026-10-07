@@ -25,6 +25,7 @@ import { onGoTo } from "./lib/goto";
 import { RatingGuidePage } from "./components/rating/RatingGuide";
 import { OwnerBadge } from "./components/OwnerBadge";
 import { RestoreBanner } from "./components/RestoreBanner";
+import { BookmarksMenu } from "./components/Bookmarks";
 import "./App.css";
 import "./components/match/match.css";
 
@@ -166,6 +167,7 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <SyncSummary />
+          <BookmarksMenu onOpenMatch={setOpenLog} />
           <OwnerBadge steamid={data.config.steamid} />
           <button
             className={tab === "settings" ? "cog active" : "cog"}
