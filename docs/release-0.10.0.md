@@ -96,7 +96,8 @@ behind most of this release.
 **SHA-256**
 
 ```
-HASHES
+852407FB40899CAE0554D8EF59F581295BEB5713B3CEB97A01E7B0E11CE66C33  Flashwave.tf_0.10.0_x64-setup.exe
+6CFC8AA10687493204C11C436B2CED9BC4CA1C61C88F38B3088518CE110DAADA  Flashwave.tf_0.10.0_x64_en-US.msi
 ```
 
 The Linux files are built on GitHub; their hashes are on the release page
