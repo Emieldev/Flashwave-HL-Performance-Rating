@@ -80,9 +80,11 @@ impl Sources {
     pub fn new() -> Result<Self> {
         Ok(Sources {
             trends: Throttled::new(Duration::from_millis(1000))?,
-            // No published limit; a request a second is still a guest's pace
-            // on one person's server.
-            drops: Throttled::new(Duration::from_millis(1000))?,
+            // No published limit. Measured (7 Oct 2026): 0.14 s a log, 0.2 s
+            // a raw log, and 4 at once no slower and never refused. Four a
+            // second, one at a time, is still a light guest on one person's
+            // server.
+            drops: Throttled::new(Duration::from_millis(250))?,
             // logs.tf stopped answering twice after a few hundred requests at
             // one a second (~750 raw logs, then ~300 part logs from a second
             // address), so it gets a slower pace; bulk jobs are also capped

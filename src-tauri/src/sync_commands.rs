@@ -101,7 +101,7 @@ pub async fn sync_start(app: AppHandle, state: State<'_, AppState>, full: bool) 
             }
             // Raw logs: every kill with time, classes and positions. Newest
             // first; the first sync fetches the whole history (~15 min).
-            let raw = hl_ingest::kills::fetch(&db, &sources, Some(hl_ingest::BULK_PER_SYNC), |p: Progress| {
+            let raw = hl_ingest::kills::fetch(&db, &sources, Some(hl_ingest::RAW_PER_SYNC), |p: Progress| {
                 let _ = emitter.emit(EV_PROGRESS, p);
             })
             .await?;

@@ -234,7 +234,7 @@ pub async fn select(db: &Db) -> Result<(usize, usize)> {
 pub enum Step {
     Discovered(Discovered),
     Json { log_id: i64, source: &'static str },
-    Raw { log_id: i64, found: bool },
+    Raw { log_id: i64, found: bool, source: &'static str },
     Roster { match_id: i64 },
     /// A played official trends.tf linked no log to, searched for on logs.tf.
     Searched { match_id: i64, found: usize },
@@ -335,7 +335,7 @@ async fn log_step(db: &Db, sources: &Sources, resting: bool, doing: &mut (impl F
         match sources.drops_rawlog(log_id).await {
             Ok(Some(zip)) => {
                 db.put_league_raw(log_id, Some(&zip)).await?;
-                return Ok(Some(Step::Raw { log_id, found: true }));
+                return Ok(Some(Step::Raw { log_id, found: true, source: crate::sources::DROPS }));
             }
             Ok(None) => {}
             Err(e) => tracing::info!(log_id, error = %format!("{e:#}"), "drops.tf would not give the raw log"),
@@ -346,7 +346,7 @@ async fn log_step(db: &Db, sources: &Sources, resting: bool, doing: &mut (impl F
                 Ok(zip) => {
                     let found = zip.is_some();
                     db.put_league_raw(log_id, zip.as_deref()).await?;
-                    Step::Raw { log_id, found }
+                    Step::Raw { log_id, found, source: "logs.tf" }
                 }
                 Err(e) => Step::Failed { what: format!("logs.tf raw log {log_id}: {e:#}") },
             }));

@@ -34,6 +34,11 @@ pub mod kills;
 /// still earned a 403 (Flashy, September 2026), so it is 30: the newest
 /// matches first, the backlog over a few more syncs.
 pub const BULK_PER_SYNC: usize = 30;
+
+/// Raw server logs fetched per sync. drops.tf serves them (logs.tf only
+/// for what it has not got), at about 0.45 s each: 300 is a couple of
+/// minutes, where logs.tf's pace held a sync to [`BULK_PER_SYNC`].
+pub const RAW_PER_SYNC: usize = 300;
 pub mod aim;
 pub mod backup;
 pub mod lock;

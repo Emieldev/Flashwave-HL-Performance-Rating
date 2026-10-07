@@ -22,6 +22,9 @@ use std::time::Duration;
 /// Between two requests to logs.tf: with its own 2 s throttle, one about
 /// every 6 s, ~600 an hour.
 const STEP_GAP: Duration = Duration::from_secs(4);
+/// After a log drops.tf gave: it has no limit to stay under, and answers
+/// in a fraction of a second (its own 0.25 s throttle still applies).
+const DROPS_GAP: Duration = Duration::from_secs(1);
 /// Nothing to do but wait for logs.tf's rest to end.
 const WAITING_GAP: Duration = Duration::from_secs(60);
 /// A request that failed: back off before the next.
@@ -194,11 +197,11 @@ pub fn spawn(db: Db, sources: Arc<Sources>, busy: Arc<AtomicBool>, activity: Sha
                         tauri::async_runtime::spawn(async move {
                             let _ = hl_ingest::catalogue::index_league_players(&db, 5).await;
                         });
-                        ("waiting", STEP_GAP)
+                        ("waiting", if source == hl_ingest::sources::DROPS { DROPS_GAP } else { STEP_GAP })
                     }
-                    Ok(Step::Raw { log_id, found }) => {
-                        a.log(if found { format!("Server log of {log_id}") } else { format!("logs.tf has no server log for {log_id}") }, found);
-                        ("waiting", STEP_GAP)
+                    Ok(Step::Raw { log_id, found, source }) => {
+                        a.log(if found { format!("Server log of {log_id} from {source}") } else { format!("No server log for {log_id}") }, found);
+                        ("waiting", if source == hl_ingest::sources::DROPS { DROPS_GAP } else { STEP_GAP })
                     }
                     Ok(Step::Roster { match_id }) => {
                         a.log(format!("Who played ETF2L match {match_id}"), true);

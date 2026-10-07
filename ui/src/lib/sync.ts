@@ -30,8 +30,8 @@ export type SyncState =
 const REFRESH_EVERY_MS = 1000;
 
 /** Seconds per log until this sync has timed a few of its own: drops.tf's
- *  pace (a request a second) plus storing and rating. */
-const SECONDS_PER_LOG = 1.5;
+ *  pace (four requests a second) plus storing and rating. */
+const SECONDS_PER_LOG = 0.75;
 
 /** When this sync's downloads started, and how many were done then: the
  *  estimate follows the pace actually seen, whichever site is answering. */
