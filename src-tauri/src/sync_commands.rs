@@ -877,7 +877,7 @@ pub async fn set_demo_folders(app: AppHandle, state: State<'_, AppState>, folder
     let mut keep: Vec<String> = Vec::new();
     for f in folders.into_iter().map(|f| f.trim().to_string()).filter(|f| !f.is_empty()) {
         if !std::path::Path::new(&f).is_dir() {
-            return Err(CmdError::new("not_found", &format!("{f} is not a folder.")));
+            return Err(CmdError::new("not_found", format!("{f} is not a folder.")));
         }
         if !keep.contains(&f) {
             keep.push(f);

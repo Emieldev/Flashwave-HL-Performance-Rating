@@ -141,7 +141,7 @@ pub async fn team_info(db: &Db, sources: &Sources, team: i64) -> Result<TeamInfo
     let held = db.etf2l_raw_one("team", team).await?;
     let active = db.team_last_official(team).await?.is_some_and(|t| now() - t < ACTIVE);
     let due = held.as_ref().is_none_or(|(at, _)| now() - at > if active { DAY } else { 30 * DAY });
-    let mut body = held.map(|(at, json)| (at, json));
+    let mut body = held;
     if due {
         match sources.etf2l_get(&format!("/team/{team}")).await {
             Ok(Some(fresh)) if fresh.trim_start().starts_with('{') => {
